@@ -109,6 +109,57 @@ sudo ln -s /etc/nginx/sites-available/aiapp /etc/nginx/sites-enabled/
 sudo certbot --nginx -d 도메인.example.com
 ```
 
+---
+
+## 무료로 운영하기
+
+완전 무료 옵션은 세 가지이며, 각각 감수할 점이 다릅니다.
+
+### A. Oracle Cloud Always Free — 진짜 무료 + 데이터 보존 (운영용으로도 가능)
+
+평생 무료 VM(Ampere ARM 4코어/24GB 또는 AMD 1GB)을 제공합니다. 가입 시 카드 인증이 필요하지만 무료 한도 내에서는 과금되지 않습니다.
+
+1. https://cloud.oracle.com 가입 (Always Free)
+2. Ubuntu VM 인스턴스 생성 → 네트워크 보안 목록에서 80/443 포트 개방
+3. 위 **방법 4(VPS)** 절차를 그대로 실행
+
+무료 옵션 중 유일하게 "잠들지 않고 + 데이터가 보존되는" 방식이라 실제 수업 운영까지 가능합니다.
+
+### B. Render 무료 플랜 — 5분 만에 올라가지만 시연용
+
+무료 웹 서비스로 배포는 되지만 두 가지 제약이 있습니다.
+
+- 15분간 접속이 없으면 잠들고, 다음 접속 시 깨어나는 데 30초~1분 걸림
+- **영구 디스크가 없어 재배포/재시작 시 DB(계정·자료·로그)가 초기화됨**
+
+→ 데모·시연·단기 테스트용으로는 충분하고, 실제 수업 운영에는 부적합합니다.
+사용하려면 `render.yaml`의 `plan: starter`를 `plan: free`로 바꾸고 `disk:` 블록 3줄을 삭제한 뒤 배포하세요.
+
+### C. 항상 켜진 PC + Cloudflare Tunnel — 기존 장비 활용
+
+학교나 집에 항상 켜져 있는 PC가 있다면 추가 비용 없이 외부 공개가 가능합니다.
+
+```bash
+# PC에서 앱 실행
+npm start
+
+# Cloudflare 빠른 터널로 공개 HTTPS 주소 발급 (무료, 계정 불필요)
+# https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/ 에서 cloudflared 설치 후:
+cloudflared tunnel --url http://localhost:3000
+```
+
+실행하면 `https://무작위이름.trycloudflare.com` 주소가 발급됩니다.
+빠른 터널은 재시작할 때마다 주소가 바뀌므로, 고정 주소가 필요하면 무료 Cloudflare 계정 + 보유 도메인으로 이름 있는 터널을 만들면 됩니다.
+
+| | 비용 | 데이터 보존 | 잠들지 않음 | 난이도 |
+|---|---|---|---|---|
+| Oracle Always Free | 무료 | ✅ | ✅ | 중 (VPS 설정) |
+| Render 무료 | 무료 | ❌ | ❌ | 하 |
+| PC + Cloudflare Tunnel | 무료 | ✅ (PC에 저장) | PC가 켜져 있는 동안 | 하 |
+| Render Starter | 월 $7 | ✅ | ✅ | 하 |
+
+---
+
 ## 배포 후 확인 사항
 
 1. 발급된 주소로 접속 → `superadmin` + 설정한 비밀번호로 로그인 (첫 로그인 시 변경 강제)
