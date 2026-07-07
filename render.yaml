@@ -1,24 +1,19 @@
-# Render.com 블루프린트 — 저장소 연결 시 자동 인식됩니다.
-# 주의: 영구 디스크는 유료 플랜(Starter, 월 $7)부터 지원됩니다.
-#       무료 플랜은 재배포/재시작 시 데이터가 초기화되므로 운영용으로는 Starter 이상을 권장합니다.
+# Render.com 블루프린트 — DB가 외부(Supabase)에 있으므로 무료 플랜으로도 데이터가 보존됩니다.
+# (무료 플랜은 15분 미사용 시 잠들었다 깨어나는 지연만 감수하면 됩니다)
 services:
   - type: web
     name: career-edu-webapp
     runtime: node
-    plan: starter
-    buildCommand: 'echo "no build step"'
+    plan: free
+    buildCommand: npm install --omit=dev
     startCommand: node --no-warnings server.js
     healthCheckPath: /
     envVars:
-      - key: DATA_DIR
-        value: /var/data
+      - key: DATABASE_URL
+        sync: false # Supabase 연결 문자열(Transaction pooler URI) 입력
       - key: TRUST_PROXY
         value: '1'
       - key: COOKIE_SECURE
         value: '1'
       - key: SUPERADMIN_PASSWORD
-        sync: false # 대시보드에서 직접 입력 (초기 슈퍼관리자 비밀번호)
-    disk:
-      name: appdata
-      mountPath: /var/data
-      sizeGB: 1
+        sync: false # 초기 슈퍼관리자 비밀번호

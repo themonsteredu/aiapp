@@ -1,4 +1,5 @@
-# Fly.io 설정 — 도쿄(nrt) 리전 기준. `fly launch` 시 자동 인식됩니다.
+# Fly.io 설정 — DB는 외부(Supabase) 사용, 볼륨 불필요.
+# 배포 전: fly secrets set DATABASE_URL='...' SUPERADMIN_PASSWORD='...'
 app = "career-edu-webapp"
 primary_region = "nrt"
 
@@ -6,13 +7,8 @@ primary_region = "nrt"
   # Dockerfile 사용
 
 [env]
-  DATA_DIR = "/data"
   TRUST_PROXY = "1"
   COOKIE_SECURE = "1"
-
-[[mounts]]
-  source = "appdata"
-  destination = "/data"
 
 [http_service]
   internal_port = 3000

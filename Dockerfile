@@ -1,17 +1,17 @@
-# 진로교육 PPT 웹앱 — 프로덕션 이미지 (외부 패키지 없음, 빌드 단계 불필요)
+# 진로교육 PPT 웹앱 — 프로덕션 이미지 (DB는 외부 Postgres/Supabase 사용)
 FROM node:22-alpine
 
 WORKDIR /app
-COPY package.json server.js ./
+COPY package.json ./
+RUN npm install --omit=dev --no-fund --no-audit
+
+COPY server.js ./
 COPY lib ./lib
 COPY public ./public
 
 ENV NODE_ENV=production \
-    PORT=3000 \
-    DATA_DIR=/data
+    PORT=3000
 
-# SQLite 데이터 영구 저장 위치 — 반드시 볼륨으로 마운트할 것
-VOLUME /data
+# 실행 시 -e DATABASE_URL=... 필수 (Supabase 연결 문자열)
 EXPOSE 3000
-
 CMD ["node", "--no-warnings", "server.js"]

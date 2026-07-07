@@ -63,7 +63,7 @@ const server = http.createServer(async (req, res) => {
   try {
     if (pathname.startsWith('/api/')) {
       const body = ['POST', 'PATCH', 'PUT'].includes(req.method) ? await readBody(req) : null;
-      return handleApi(req, res, pathname, body);
+      return await handleApi(req, res, pathname, body);
     }
     if (req.method !== 'GET') {
       res.writeHead(405).end();

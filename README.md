@@ -2,21 +2,22 @@
 
 PPT 수업자료를 **인터랙티브 웹앱**으로 만들어 관리·발표하고, **요일·시간 기반으로 학생 접근을 통제**하며, **복제·캡처를 억제**하는 SaaS형 진로교육 관리 플랫폼입니다.
 
-외부 패키지 없이 Node.js 내장 모듈만 사용하므로 설치 과정이 없고, 외부 CDN 의존이 없어 기관 내부망에서도 동일하게 동작합니다.
+데이터는 **Supabase(Postgres)** 에 저장되며, 앱은 Vercel(서버리스)·Render·VPS 어디에나 배포할 수 있습니다.
+배포 절차는 [DEPLOY.md](DEPLOY.md) 참고 — Vercel + Supabase 조합이면 무료로 운영됩니다.
 
 ## 실행 방법
 
 ```bash
 # Node.js 22.13 이상 필요
-npm start        # 또는: node --no-warnings server.js
+npm install
+DATABASE_URL='postgresql://...' npm start   # Supabase 연결 문자열 (DEPLOY.md 0단계 참고)
 ```
 
-브라우저에서 `http://localhost:3000` 접속.
+브라우저에서 `http://localhost:3000` 접속. 첫 실행 시 스키마·초기 계정이 자동 생성됩니다.
 
-- 포트 변경: `PORT=8080 npm start`
-- 데이터 저장 위치: `./data/app.db` (SQLite, 자동 생성) — `DATA_DIR` 환경변수로 변경 가능
+- 포트 변경: `PORT=8080`
 - 기준 시간대: `Asia/Seoul` — `APP_TIMEZONE` 환경변수로 변경 가능
-- 리버스 프록시 뒤 운영 시: `TRUST_PROXY=1` 설정 시 X-Forwarded-For의 IP를 사용
+- 리버스 프록시 뒤 운영 시 `TRUST_PROXY=1`, HTTPS 환경이면 `COOKIE_SECURE=1` (Vercel은 둘 다 자동)
 
 ### 최초 로그인
 
@@ -82,8 +83,10 @@ npm start        # 또는: node --no-warnings server.js
 ## 프로젝트 구조
 
 ```
-server.js          # HTTP 서버 (정적 파일 + API 라우팅)
-lib/db.js          # SQLite 스키마·시드·마이그레이션·감사로그
+server.js          # 상시 실행 서버 (로컬/VPS/Render용 — 정적 파일 + API)
+api/index.js       # Vercel 서버리스 함수 진입점
+vercel.json        # Vercel 라우팅·리전 설정
+lib/db.js          # Postgres(Supabase) 연결·스키마·시드·감사로그
 lib/auth.js        # 세션·역할 서열
 lib/password.js    # scrypt 비밀번호 해시
 lib/totp.js        # RFC 6238 TOTP (2단계 인증)
@@ -94,5 +97,5 @@ public/            # SPA (index.html, app.js, style.css)
 
 ## 운영 참고
 
-- 실서비스 배포 시 HTTPS(리버스 프록시) 사용을 권장합니다. HTTPS 환경이라면 `lib/api.js`의 세션 쿠키에 `Secure` 속성을 추가하세요.
-- `data/` 디렉터리만 백업하면 전체 데이터가 보존됩니다.
+- 배포 방법(무료 포함)은 [DEPLOY.md](DEPLOY.md)에 정리되어 있습니다.
+- 백업은 Supabase 대시보드의 Database → Backups에서 관리됩니다 (무료 플랜 7일 자동 백업).
