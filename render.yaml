@@ -1,0 +1,24 @@
+# Render.com 블루프린트 — 저장소 연결 시 자동 인식됩니다.
+# 주의: 영구 디스크는 유료 플랜(Starter, 월 $7)부터 지원됩니다.
+#       무료 플랜은 재배포/재시작 시 데이터가 초기화되므로 운영용으로는 Starter 이상을 권장합니다.
+services:
+  - type: web
+    name: career-edu-webapp
+    runtime: node
+    plan: starter
+    buildCommand: 'echo "no build step"'
+    startCommand: node --no-warnings server.js
+    healthCheckPath: /
+    envVars:
+      - key: DATA_DIR
+        value: /var/data
+      - key: TRUST_PROXY
+        value: '1'
+      - key: COOKIE_SECURE
+        value: '1'
+      - key: SUPERADMIN_PASSWORD
+        sync: false # 대시보드에서 직접 입력 (초기 슈퍼관리자 비밀번호)
+    disk:
+      name: appdata
+      mountPath: /var/data
+      sizeGB: 1
