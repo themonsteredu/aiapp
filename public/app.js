@@ -272,6 +272,39 @@ const Protect = {
 };
 Protect.init();
 
+/* ---------------- 라이브 발표 따라가기 (게스트 학생) ----------------
+ * 3초 간격 폴링: 강사가 라이브를 시작하면 자동으로 라이브 화면에 진입하고,
+ * 슬라이드가 넘어가면 함께 넘어가며, 종료되면 자료 목록으로 돌아온다. */
+const Live = {
+  timer: null,
+  last: null,
+  start() {
+    if (this.timer || !state.me || !state.me.isGuest || !state.classSession) return;
+    this.timer = setInterval(() => this.tick(), 3000);
+    this.tick();
+  },
+  stop() {
+    if (this.timer) clearInterval(this.timer);
+    this.timer = null;
+    this.last = null;
+  },
+  async tick() {
+    if (!state.me || !state.me.isGuest) { this.stop(); return; }
+    try {
+      const d = await api('GET', `/api/class-sessions/${state.classSession.id}/live`);
+      this.last = d.live;
+      const onLive = location.hash === '#/live';
+      if (d.live && !onLive) { location.hash = '#/live'; return; }
+      if (!d.live && onLive) {
+        toast('라이브 발표가 종료되었습니다.');
+        location.hash = '#/decks';
+        return;
+      }
+      if (d.live && onLive && window.__liveUpdate) window.__liveUpdate(d.live);
+    } catch {}
+  },
+};
+
 /* ---------------- 라우터 ---------------- */
 const routes = [];
 function route(pattern, fn) { routes.push({ pattern, fn }); }
@@ -280,6 +313,7 @@ let presentExit = null; // 발표 모드 정리 함수 (라우팅 이동 시 잔
 
 async function navigate() {
   if (presentExit) presentExit();
+  window.__liveUpdate = null;
   const hash = location.hash || '#/';
   if (!state.me && hash !== '#/login') { location.hash = '#/login'; return; }
   if (state.me && state.me.mustChangePassword && hash !== '#/password' && hash !== '#/login') {
@@ -332,6 +366,7 @@ const LOG_LABELS = {
   settings_updated: ['보안 설정 변경', 'amber'],
   guest_joined: ['수업 입장 (코드)', 'green'], join_failed: ['입장 코드 오류', 'amber'],
   session_created: ['수업 코드 생성', 'blue'], session_ended: ['수업 종료', 'gray'], session_deleted: ['수업 삭제', 'gray'],
+  live_started: ['라이브 발표 시작', 'blue'], live_ended: ['라이브 발표 종료', 'gray'],
 };
 function browserOf(ua) {
   if (!ua) return '-';
@@ -461,6 +496,7 @@ function shell(title, contentHtml) {
     await api('POST', '/api/logout').catch(() => {});
     state.me = null;
     state.dash = null;
+    Live.stop();
     location.hash = '#/login';
   };
   const shellEl = document.getElementById('shell');
@@ -583,6 +619,8 @@ route(/^#\/login$/, () => {
     state.settings = data.settings;
     state.classSession = data.classSession || null;
     state.dash = null;
+    Live.stop();
+    Live.start(); // 게스트일 때만 내부에서 동작
     location.hash = data.user.mustChangePassword ? '#/password' : (level(data.user.role) >= 1 ? '#/' : '#/decks');
   };
   async function onSubmit(e) {
@@ -945,7 +983,9 @@ route(/^#\/sessions$/, async () => {
                 <td data-label="상태"><span class="badge ${color}">${label}</span></td>
                 <td data-label="남은 시간">${s.status === 'live' ? `${Math.floor(s.remainingMinutes / 60)}시간 ${s.remainingMinutes % 60}분` : '-'}</td>
                 <td><div class="row-actions">
-                  ${s.status === 'live' ? `<button class="btn btn-ghost btn-sm" data-end="${s.id}">수업 종료</button>` : ''}
+                  ${s.status === 'live' ? `
+                    <button class="btn btn-primary btn-sm" data-golive="${s.id}">🔴 라이브 발표</button>
+                    <button class="btn btn-ghost btn-sm" data-end="${s.id}">수업 종료</button>` : ''}
                   <button class="btn btn-danger btn-sm" data-csdel="${s.id}">${icon('trash')}</button>
                 </div></td>
               </tr>`;
@@ -977,6 +1017,35 @@ route(/^#\/sessions$/, async () => {
   document.querySelectorAll('[data-big]').forEach((b) => {
     const row = data.sessions.find((s) => s.code === b.dataset.big);
     b.onclick = () => showBigCode(b.dataset.big, row ? row.title : '');
+  });
+  const launchLive = async (sessionId, deckId) => {
+    const dd = await api('GET', `/api/decks/${deckId}`);
+    if (dd.deck.kind === 'link') return toast('라이브 발표는 슬라이드형 웹앱만 가능합니다.', true);
+    present(dd.slides, dd.deck.title, { sessionId, deckId });
+  };
+  document.querySelectorAll('[data-golive]').forEach((b) => {
+    b.onclick = async () => {
+      const s = data.sessions.find((x) => x.id === Number(b.dataset.golive));
+      if (!s) return;
+      if (s.deck_id) return launchLive(s.id, s.deck_id);
+      // 수업에 지정 웹앱이 없으면 슬라이드형 덱 중에서 선택
+      const slideDecks = decksData.decks.filter((d) => d.kind !== 'link');
+      if (!slideDecks.length) return toast('발표할 슬라이드 웹앱이 없습니다.', true);
+      const back = openModal(`
+        <h3>라이브로 발표할 웹앱 선택</h3>
+        <div class="m-sub">강사가 슬라이드를 넘기면 이 수업 학생들의 화면이 함께 넘어갑니다.</div>
+        <select class="input" id="lv-deck">${slideDecks.map((d) => `<option value="${d.id}">${esc(d.title)}</option>`).join('')}</select>
+        <div class="m-actions">
+          <button class="btn btn-ghost" id="lv-cancel">취소</button>
+          <button class="btn btn-primary" id="lv-start">🔴 라이브 시작</button>
+        </div>`);
+      back.querySelector('#lv-cancel').onclick = () => back.remove();
+      back.querySelector('#lv-start').onclick = () => {
+        const deckId = Number(back.querySelector('#lv-deck').value);
+        back.remove();
+        launchLive(s.id, deckId);
+      };
+    };
   });
   document.querySelectorAll('[data-end]').forEach((b) => {
     b.onclick = async () => {
@@ -1144,6 +1213,44 @@ route(/^#\/decks$/, async () => {
   });
 });
 
+/* ---------------- 라이브 따라가기 화면 (게스트) ---------------- */
+route(/^#\/live$/, async () => {
+  if (!state.me || !state.me.isGuest) { location.hash = '#/'; return; }
+  let live = Live.last;
+  if (!live) {
+    try { live = (await api('GET', `/api/class-sessions/${state.classSession.id}/live`)).live; } catch {}
+  }
+  if (!live) { location.hash = '#/decks'; return; }
+
+  const wm = state.settings && state.settings.watermark;
+  let deckId = live.deckId;
+  let slides = [];
+  try { slides = (await api('GET', `/api/decks/${deckId}`)).slides; } catch { location.hash = '#/decks'; return; }
+  let idx = Math.min(live.slide, Math.max(0, slides.length - 1));
+
+  shell('라이브 수업', `
+    <div class="page-head">
+      <div><div class="ph-t">🔴 라이브 수업 진행 중</div>
+        <div class="desc">선생님이 화면을 넘기면 이 화면도 함께 넘어갑니다.</div></div>
+      <span class="badge red">LIVE</span>
+    </div>
+    <div style="max-width:1000px">
+      <div id="live-slide">${slides.length ? slideHtml(slides[idx], { watermark: wm }) : '<p class="empty-note">슬라이드 준비 중…</p>'}</div>
+      <p class="small muted mt" id="live-counter">${idx + 1} / ${slides.length} · 선생님이 진행 중</p>
+    </div>`);
+
+  window.__liveUpdate = async (lv) => {
+    if (lv.deckId !== deckId) { navigate(); return; } // 발표 자료가 바뀌면 다시 로드
+    if (lv.slide === idx) return;
+    idx = Math.min(lv.slide, Math.max(0, slides.length - 1));
+    const el = document.getElementById('live-slide');
+    if (el && slides.length) {
+      el.innerHTML = slideHtml(slides[idx], { watermark: wm });
+      document.getElementById('live-counter').textContent = `${idx + 1} / ${slides.length} · 선생님이 진행 중`;
+    }
+  };
+});
+
 /* ---------------- 외부 웹앱 링크 설정 (유출 방지 게이트 안내 포함) ---------------- */
 function gateSnippet() {
   return `<script>
@@ -1259,7 +1366,8 @@ route(/^#\/view\/(\d+)$/, async (id) => {
   document.getElementById('btn-present').onclick = () => present(data.slides, data.deck.title);
 });
 
-function present(slides, title) {
+function present(slides, title, live = null) {
+  // live = { sessionId, deckId } — 슬라이드 이동을 서버에 기록해 학생 화면이 따라오게 함
   if (!slides.length) return toast('슬라이드가 없습니다.', true);
   Protect.presenting = true;
   Protect.apply();
@@ -1267,21 +1375,25 @@ function present(slides, title) {
   const wm = state.settings && state.settings.watermark;
   const overlay = document.createElement('div');
   overlay.className = 'present-overlay no-select';
+  const syncLive = () => {
+    if (!live) return;
+    api('PATCH', `/api/class-sessions/${live.sessionId}/live`, { deck_id: live.deckId, slide: idx }).catch(() => {});
+  };
   const render = () => {
     overlay.innerHTML = `
       <div class="stage">${slideHtml(slides[idx], { watermark: wm })}</div>
       <div class="progress"><div class="fill" style="width:${((idx + 1) / slides.length) * 100}%"></div></div>
       <div class="present-bar">
-        <span>${esc(title)}</span>
+        <span>${live ? '🔴 라이브 — 학생 화면이 함께 넘어갑니다 · ' : ''}${esc(title)}</span>
         <span>${idx + 1} / ${slides.length} — 방향키·클릭으로 이동</span>
-        <button id="exit-present">종료 (ESC)</button>
+        <button id="exit-present">${live ? '라이브 종료' : '종료'} (ESC)</button>
       </div>`;
     overlay.querySelector('#exit-present').onclick = exit;
     overlay.querySelector('.stage').onclick = (e) => {
       if (e.offsetX < overlay.clientWidth / 4) go(-1); else go(1);
     };
   };
-  const go = (d) => { idx = Math.max(0, Math.min(slides.length - 1, idx + d)); render(); };
+  const go = (d) => { idx = Math.max(0, Math.min(slides.length - 1, idx + d)); render(); syncLive(); };
   const onKey = (e) => {
     if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') { e.preventDefault(); go(1); }
     else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); go(-1); }
@@ -1293,6 +1405,7 @@ function present(slides, title) {
     overlay.remove();
     Protect.presenting = false;
     Protect.apply();
+    if (live) api('PATCH', `/api/class-sessions/${live.sessionId}/live`, { deck_id: null }).catch(() => {});
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
   };
   presentExit = exit;
@@ -1300,6 +1413,7 @@ function present(slides, title) {
   document.body.appendChild(overlay);
   overlay.requestFullscreen?.().catch(() => {});
   render();
+  syncLive();
 }
 
 /* ---------------- 편집기 ---------------- */
@@ -1836,6 +1950,7 @@ route(/^#\/settings$/, async () => {
     state.access = data.access;
     state.settings = data.settings;
     state.classSession = data.classSession || null;
+    Live.start(); // 게스트일 때만 내부에서 동작
   } catch { state.me = null; }
   if (!location.hash) location.hash = state.me ? (isStaff() ? '#/' : '#/decks') : '#/login';
   navigate();
