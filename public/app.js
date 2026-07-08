@@ -1700,6 +1700,26 @@ function gateSnippet() {
 <\/script>`;
 }
 
+// API 호출량 보고 스니펫 — 외부 앱이 API를 호출할 때마다 reportApiUsage() 를 부른다.
+// (게이트 토큰으로 인증 → 수업·강사 단위로 자동 귀속. sendBeacon이라 CORS 사전요청 없음)
+function usageSnippet() {
+  return `<script>
+(function () {
+  var PLATFORM = '${location.origin}';
+  var token = new URLSearchParams(location.search).get('gate');
+  // API를 호출할 때마다 이 함수를 호출하세요. 예: reportApiUsage(1)
+  window.reportApiUsage = function (calls) {
+    if (!token) return;
+    var payload = JSON.stringify({ token: token, calls: calls || 1 });
+    try {
+      if (navigator.sendBeacon) navigator.sendBeacon(PLATFORM + '/api/usage/report', payload);
+      else fetch(PLATFORM + '/api/usage/report', { method: 'POST', body: payload, keepalive: true });
+    } catch (e) {}
+  };
+})();
+<\/script>`;
+}
+
 // 요금 유형 설정 (모든 유형의 자료 공용)
 function openCostModal(deck, onSaved) {
   const paid = deck.costType === 'api_paid';
@@ -1757,6 +1777,16 @@ function openLinkModal(deck) {
       <button class="btn btn-ghost btn-sm mt" id="lm-copy">스크립트 복사</button>
       <span class="small muted"> — 스크립트를 넣지 않아도 플랫폼 안에서는 열리지만, 원본 주소가 유출되면 직접 접속을 막을 수 없습니다.</span>
     </div>
+    ${deck.costType === 'api_paid' ? `<div class="mt">
+      <div class="field-label">💳 사용량 보고 스니펫 (API 유료 자료)</div>
+      <div class="small muted" style="line-height:1.7">
+        이 스니펫을 함께 넣고, 웹앱이 <b>API를 호출할 때마다</b> <code>reportApiUsage(1)</code>을 부르면
+        실제 호출 수가 <b>수업·강사 단위로</b> 집계되어 "종량 정산"에 반영됩니다.
+        (넣지 않으면 열람 1회 = 1호출로 추정 집계)
+      </div>
+      <div class="snippet-box" id="lm-usnippet">${esc(usageSnippet())}</div>
+      <button class="btn btn-ghost btn-sm mt" id="lm-ucopy">보고 스니펫 복사</button>
+    </div>` : ''}
     <div class="m-actions">
       <button class="btn btn-ghost" id="lm-cancel">닫기</button>
       <button class="btn btn-primary" id="lm-save">저장</button>
@@ -1764,6 +1794,11 @@ function openLinkModal(deck) {
   back.querySelector('#lm-cancel').onclick = () => back.remove();
   back.querySelector('#lm-copy').onclick = async () => {
     try { await navigator.clipboard.writeText(gateSnippet()); toast('스크립트가 복사되었습니다.'); }
+    catch { toast('복사에 실패했습니다. 직접 선택해 복사하세요.', true); }
+  };
+  const ucopy = back.querySelector('#lm-ucopy');
+  if (ucopy) ucopy.onclick = async () => {
+    try { await navigator.clipboard.writeText(usageSnippet()); toast('보고 스니펫이 복사되었습니다.'); }
     catch { toast('복사에 실패했습니다. 직접 선택해 복사하세요.', true); }
   };
   back.querySelector('#lm-save').onclick = async () => {
@@ -2838,41 +2873,64 @@ route(/^#\/my-courses$/, async () => {
 
 /* ---------------- 종량 정산 (관리자 이상) ---------------- */
 let billingMonth = '';
+let billingGroup = 'deck';
 route(/^#\/billing$/, async () => {
   if (!isAdmin()) { location.hash = '#/'; return; }
-  const qs = billingMonth ? `?month=${billingMonth}` : '';
-  const data = await api('GET', `/api/billing${qs}`);
+  const params = [`group=${billingGroup}`];
+  if (billingMonth) params.push(`month=${billingMonth}`);
+  const data = await api('GET', `/api/billing?${params.join('&')}`);
+  const G = billingGroup;
+  const firstCol = G === 'instructor' ? '강사' : G === 'session' ? '수업(차시)' : '자료';
+  const groupTabs = [['deck', '자료별'], ['instructor', '강사별'], ['session', '수업별']];
+  const head = G === 'deck'
+    ? `<th>${firstCol}</th><th>API 제공자</th><th>예상 단가</th><th>호출수(실호출)</th><th>이용 학생</th><th>예상 비용</th>`
+    : `<th>${firstCol}</th><th>${G === 'instructor' ? '아이디' : '담당 강사'}</th><th>자료 수</th><th>호출수(실호출)</th><th>이용 학생</th><th>예상 비용</th>`;
+  const rowHtml = (i) => G === 'deck'
+    ? `<tr>
+        <td data-label="${firstCol}" class="cell-main">💳 ${esc(i.title)}</td>
+        <td data-label="제공자">${esc(i.subtitle) || '<span class="muted">-</span>'}</td>
+        <td data-label="예상 단가">${i.unitCost ? `${Number(i.unitCost).toLocaleString()}원/회` : '<span class="muted">미설정</span>'}</td>
+        <td data-label="호출수">${i.calls.toLocaleString()} <span class="small muted">(${i.apiCalls.toLocaleString()})</span></td>
+        <td data-label="이용 학생">${i.learners.toLocaleString()}명</td>
+        <td data-label="예상 비용"><b>${Number(i.estCost).toLocaleString()}원</b></td>
+      </tr>`
+    : `<tr>
+        <td data-label="${firstCol}" class="cell-main">${G === 'instructor' ? '👤 ' : '📆 '}${esc(i.title)}</td>
+        <td data-label="${G === 'instructor' ? '아이디' : '담당'}">${esc(i.subtitle) || '<span class="muted">-</span>'}</td>
+        <td data-label="자료 수">${(i.decks ?? 0).toLocaleString()}개</td>
+        <td data-label="호출수">${i.calls.toLocaleString()} <span class="small muted">(${i.apiCalls.toLocaleString()})</span></td>
+        <td data-label="이용 학생">${i.learners.toLocaleString()}명</td>
+        <td data-label="예상 비용"><b>${Number(i.estCost).toLocaleString()}원</b></td>
+      </tr>`;
   shell('종량 정산', `
     <div class="page-head">
       <div><div class="ph-t">API 유료 자료 종량 정산</div>
-        <div class="desc">API 비용이 드는 자료의 실제 학생 사용량을 집계합니다. 예상 비용 = 자료별 예상 단가 × 사용 횟수.</div></div>
+        <div class="desc">수업·강사별로 실제 API 사용량을 집계합니다. 예상 비용 = Σ(호출수 × 자료 단가). 괄호 안은 앱이 보고한 실제 API 호출수(그 외는 열람 기준).</div></div>
       <div style="display:flex;gap:8px;align-items:center">
         <input type="month" class="input" id="bm" value="${esc(billingMonth)}">
         <button class="btn btn-ghost btn-sm" id="bm-all">전체 기간</button>
       </div>
     </div>
+    <div class="tabs">
+      ${groupTabs.map(([k, label]) => `<button data-gtab="${k}" class="${billingGroup === k ? 'active' : ''}">${label}</button>`).join('')}
+    </div>
     <div class="card">
       <div class="tbl-scroll"><table class="tbl resp">
-        <thead><tr><th>자료</th><th>API 제공자</th><th>예상 단가</th><th>사용 횟수</th><th>이용 학생</th><th>예상 비용</th></tr></thead>
+        <thead><tr>${head}</tr></thead>
         <tbody>
-          ${data.items.map((i) => `<tr>
-            <td data-label="자료" class="cell-main">💳 ${esc(i.title)}</td>
-            <td data-label="제공자">${esc(i.apiProvider) || '<span class="muted">-</span>'}</td>
-            <td data-label="예상 단가">${i.unitCost ? `${Number(i.unitCost).toLocaleString()}원/회` : '<span class="muted">미설정</span>'}</td>
-            <td data-label="사용 횟수">${i.uses.toLocaleString()}</td>
-            <td data-label="이용 학생">${i.learners.toLocaleString()}명</td>
-            <td data-label="예상 비용"><b>${Number(i.estCost).toLocaleString()}원</b></td>
-          </tr>`).join('') || '<tr><td colspan="6" class="empty-note">API 유료 자료의 사용 기록이 없습니다.</td></tr>'}
+          ${data.items.map(rowHtml).join('') || `<tr><td colspan="6" class="empty-note">${G === 'session' ? '수업(입장 코드) 단위의 API 사용 기록이 없습니다.' : 'API 유료 자료의 사용 기록이 없습니다.'}</td></tr>`}
         </tbody>
         ${data.items.length ? `<tfoot><tr><td colspan="5" style="text-align:right"><b>합계</b></td><td><b>${Number(data.total).toLocaleString()}원</b></td></tr></tfoot>` : ''}
       </table></div>
       <div class="small muted" style="margin-top:10px;line-height:1.7">
         ${billingMonth ? `<b>${esc(billingMonth)}</b> 기준` : '<b>전체 기간</b> 기준'} 집계입니다.
-        단가가 "미설정"인 자료는 "💳 요금" 버튼에서 1회 예상 원가를 입력하면 예상 비용이 계산됩니다.
+        정확한 호출량 집계를 위해서는 외부 웹앱에 "링크 설정 → 사용량 보고 스니펫"을 넣어 API 호출 시마다 보고하도록 하세요.
+        단가 미설정 자료는 "💳 요금"에서 1회 원가를 입력하면 예상 비용이 계산됩니다.
       </div>
     </div>`);
   document.getElementById('bm').onchange = (e) => { billingMonth = e.target.value; navigate(); };
   document.getElementById('bm-all').onclick = () => { billingMonth = ''; navigate(); };
+  document.querySelectorAll('[data-gtab]').forEach((b) => { b.onclick = () => { billingGroup = b.dataset.gtab; navigate(); }; });
 });
 
 /* ---------------- 부팅 ---------------- */
