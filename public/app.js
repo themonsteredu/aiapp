@@ -123,6 +123,19 @@ function openModal(html) {
 }
 
 /* ---------------- 슬라이드 렌더링 (마크다운 최소 문법) ---------------- */
+// 동영상 임베드: 유튜브(watch/shorts/youtu.be) 또는 https mp4/webm 직접 링크
+function videoEmbed(url) {
+  const yt = /(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/)|youtu\.be\/)([\w-]{6,20})/.exec(url);
+  if (yt) {
+    return `<div class="video-box"><iframe src="https://www.youtube.com/embed/${esc(yt[1])}?rel=0&modestbranding=1"
+      title="영상" allow="accelerometer; autoplay; encrypted-media; picture-in-picture" allowfullscreen referrerpolicy="no-referrer"></iframe></div>`;
+  }
+  if (/^https:\/\/[^\s<>"']+\.(mp4|webm|m4v)(\?[^\s<>"']*)?$/i.test(url)) {
+    return `<div class="video-box"><video controls src="${esc(url)}" controlslist="nodownload" disablepictureinpicture oncontextmenu="return false"></video></div>`;
+  }
+  return `<p>${esc(url)}</p>`;
+}
+
 function renderBodyMd(text) {
   const inline = (s) => esc(s)
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
@@ -133,6 +146,8 @@ function renderBodyMd(text) {
   const closeList = () => { if (listOpen) { html += '</ul>'; listOpen = false; } };
   for (const raw of String(text || '').split('\n')) {
     const line = raw.trim();
+    const vid = /^!video\((https?:\/\/[^)\s]+)\)$/.exec(line);
+    if (vid) { closeList(); html += videoEmbed(vid[1]); continue; }
     const img = /^!\[([^\]]*)\]\((https?:\/\/[^)\s]+)\)$/.exec(line);
     if (img) { closeList(); html += `<img src="${esc(img[2])}" alt="${esc(img[1])}">`; continue; }
     if (line.startsWith('## ')) { closeList(); html += `<h2>${inline(line.slice(3))}</h2>`; continue; }
@@ -1465,7 +1480,7 @@ route(/^#\/decks\/(\d+)\/edit$/, async (id) => {
             <div><label>정렬</label>
               <select id="s-align"><option value="left">왼쪽</option><option value="center">가운데</option></select></div>
           </div>
-          <div class="mt"><label class="field-label">본문 — <code>## 소제목</code> · <code>- 글머리</code> · <code>**굵게**</code> · <code>![설명](https://이미지주소)</code></label>
+          <div class="mt"><label class="field-label">본문 — <code>## 소제목</code> · <code>- 글머리</code> · <code>**굵게**</code> · <code>![설명](https://이미지주소)</code> · <code>!video(유튜브 또는 mp4 주소)</code></label>
             <textarea id="s-body"></textarea></div>
           <div class="mt" style="display:flex;align-items:center;gap:10px">
             <button class="btn btn-primary" id="save-slide">슬라이드 저장</button><span class="msg" id="save-msg"></span></div>
