@@ -40,6 +40,8 @@ const ICONS = {
   lock: '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
   fileText: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>',
   chart: '<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
+  layers: '<polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>',
+  creditCard: '<rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/>',
   sliders: '<line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/>',
   search: '<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
   bell: '<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>',
@@ -426,6 +428,15 @@ function periodText(d) {
   if (!d.access_start && !d.access_end) return '상시';
   return `${d.access_start || '…'} ~ ${d.access_end || '…'}`;
 }
+// 요금 유형 배지 (🆓 무료 / 💳 API 유료)
+function costBadge(d) {
+  if (d.costType === 'api_paid') {
+    const prov = d.apiProvider ? ` ${esc(d.apiProvider)}` : '';
+    const unit = d.unitCost ? ` · ${Number(d.unitCost).toLocaleString()}원/회` : '';
+    return `<span class="badge amber plain" title="API 유료 — 사용량만큼 과금">💳 API 유료${prov}${unit}</span>`;
+  }
+  return '<span class="badge green plain">🆓 무료</span>';
+}
 
 const LOG_LABELS = {
   login: ['정상 접속', 'green'], login_failed: ['로그인 실패', 'red'], login_blocked: ['차단 (비활성 계정)', 'red'],
@@ -482,6 +493,7 @@ function menuGroups() {
     return [
       ['메인', [
         ['#/', 'dashboard', '대시보드'],
+        ['#/my-courses', 'layers', '내 과정'],
         ['#/decks', 'decks', '웹앱/PPT 관리'],
         ['#/sessions', 'hash', '수업 입장 코드'],
       ]],
@@ -495,6 +507,7 @@ function menuGroups() {
     ['메인', [
       ['#/', 'dashboard', '대시보드'],
       ['#/decks', 'decks', '웹앱/PPT 관리'],
+      ['#/courses', 'layers', '과정·강사배정'],
       ['#/sessions', 'hash', '수업 입장 코드'],
     ]],
     ['사용자', [
@@ -507,6 +520,7 @@ function menuGroups() {
       ['#/security', 'lock', '보안 설정'],
       ['#/logs', 'fileText', '접속 기록'],
       ['#/report', 'chart', '리포트'],
+      ['#/billing', 'creditCard', '종량 정산'],
       ...(r === 'superadmin' ? [
         ['#/deletions', 'trash', '삭제 요청 승인'],
         ['#/contract', 'fileText', '계약 관리'],
@@ -1356,6 +1370,7 @@ route(/^#\/sessions$/, async () => {
 
 /* ---------------- 웹앱(덱) 관리 ---------------- */
 let deckSubjectTab = 'all';
+let deckCostTab = 'all';
 route(/^#\/decks$/, async () => {
   const data = await api('GET', '/api/decks');
   if (state.me.role === 'student') {
@@ -1399,7 +1414,10 @@ route(/^#\/decks$/, async () => {
     ...subjects.map((s) => [s, `${s} (${data.decks.filter((d) => d.subject === s).length})`]),
     ...(hasEtc && subjects.length ? [['', `미분류 (${data.decks.filter((d) => !d.subject).length})`]] : [])];
   if (deckSubjectTab !== 'all' && !tabs.some(([k]) => k === deckSubjectTab)) deckSubjectTab = 'all';
-  const list = data.decks.filter((d) => deckSubjectTab === 'all' || (d.subject || '') === deckSubjectTab);
+  const paidCount = data.decks.filter((d) => d.costType === 'api_paid').length;
+  const list = data.decks.filter((d) =>
+    (deckSubjectTab === 'all' || (d.subject || '') === deckSubjectTab)
+    && (deckCostTab === 'all' || (deckCostTab === 'paid' ? d.costType === 'api_paid' : d.costType !== 'api_paid')));
   shell('웹앱/PPT 관리', `
     <div class="page-head">
       <div><div class="ph-t">웹앱 라이브러리</div><div class="desc">PPT처럼 발표할 수 있는 웹앱(슬라이드 덱)을 과목별 폴더로 관리합니다.</div></div>
@@ -1408,6 +1426,10 @@ route(/^#\/decks$/, async () => {
     <div class="tabs">
       ${tabs.map(([k, label]) => `<button data-stab="${esc(k)}" class="${deckSubjectTab === k ? 'active' : ''}">${k === 'all' ? '' : '📁 '}${esc(label)}</button>`).join('')}
     </div>
+    <div class="tabs" style="margin-top:-4px">
+      ${[['all', `요금 전체`], ['free', `🆓 무료 (${data.decks.length - paidCount})`], ['paid', `💳 API 유료 (${paidCount})`]]
+        .map(([k, label]) => `<button data-ctab="${k}" class="${deckCostTab === k ? 'active' : ''}">${label}</button>`).join('')}
+    </div>
     <div class="card">
       <div class="tbl-scroll">
         <table class="tbl resp">
@@ -1415,7 +1437,7 @@ route(/^#\/decks$/, async () => {
           <tbody>
             ${list.map((d) => `
               <tr>
-                <td data-label="웹앱명"><div class="cell-main">${d.kind === 'link' ? '🧪 ' : d.kind === 'html' ? '📦 ' : ''}${esc(d.title)}</div><div class="cell-sub">${esc(d.description) || ''} · ${d.kind === 'link' ? '외부 체험형 웹앱' : d.kind === 'html' ? '업로드형 HTML 웹앱' : `슬라이드 ${d.slideCount}장`} · ${esc(d.updated_at)}</div></td>
+                <td data-label="웹앱명"><div class="cell-main">${d.kind === 'link' ? '🧪 ' : d.kind === 'html' ? '📦 ' : ''}${esc(d.title)} ${costBadge(d)}</div><div class="cell-sub">${esc(d.description) || ''} · ${d.kind === 'link' ? '외부 체험형 웹앱' : d.kind === 'html' ? '업로드형 HTML 웹앱' : `슬라이드 ${d.slideCount}장`} · ${esc(d.updated_at)}</div></td>
                 <td data-label="과목">${d.subject ? `<span class="badge violet plain">📁 ${esc(d.subject)}</span>` : '<span class="muted small">미분류</span>'}</td>
                 <td data-label="담당 강사">${esc(d.ownerName)}</td>
                 <td data-label="대상 학생">${esc(d.target_classes) || '<span class="muted">전체</span>'}</td>
@@ -1431,6 +1453,7 @@ route(/^#\/decks$/, async () => {
                         ? `<button class="btn btn-ghost btn-sm" data-htmlup="${d.id}">${icon('edit')} HTML 교체</button>`
                         : `<a class="btn btn-ghost btn-sm" href="#/decks/${d.id}/edit">${icon('edit')} 편집</a>`}
                     <button class="btn btn-ghost btn-sm" data-assign="${d.id}">${icon('shield')} 배정</button>
+                    <button class="btn btn-ghost btn-sm" data-cost="${d.id}" title="요금 유형 설정">💳 요금</button>
                     ${isAdmin() && d.kind === 'slides' ? `<a class="btn btn-ghost btn-sm" href="#/export/${d.id}" title="PDF/백업 내보내기">${icon('download')}</a>` : ''}
                     <button class="btn btn-ghost btn-sm" data-pub="${d.id}" data-val="${d.published ? 0 : 1}">${d.published ? '비공개로' : '공개하기'}</button>
                     ${d.deletePending
@@ -1447,6 +1470,15 @@ route(/^#\/decks$/, async () => {
     </div>`);
   document.querySelectorAll('[data-stab]').forEach((b) => {
     b.onclick = () => { deckSubjectTab = b.dataset.stab; navigate(); };
+  });
+  document.querySelectorAll('[data-ctab]').forEach((b) => {
+    b.onclick = () => { deckCostTab = b.dataset.ctab; navigate(); };
+  });
+  document.querySelectorAll('[data-cost]').forEach((b) => {
+    b.onclick = () => {
+      const deck = data.decks.find((d) => d.id === Number(b.dataset.cost));
+      if (deck) openCostModal(deck, navigate);
+    };
   });
   document.getElementById('btn-new-deck').onclick = () => {
     const back = openModal(`
@@ -1469,6 +1501,15 @@ route(/^#\/decks$/, async () => {
           <input id="nd-subject" list="subject-list" placeholder="예: AI 진로교육 — 기존 과목을 고르거나 새로 입력">
           <datalist id="subject-list">${subjects.map((s) => `<option value="${esc(s)}">`).join('')}</datalist></div>
         <div><label>설명</label><input id="nd-desc" placeholder="예: 나에게 맞는 미래를 찾는 인터랙티브 수업"></div>
+        <div><label>요금 유형</label>
+          <select id="nd-cost">
+            <option value="free">🆓 무료</option>
+            <option value="api_paid">💳 API 유료 (종량 과금)</option>
+          </select></div>
+        <div id="nd-paid-row" style="display:none;grid-template-columns:1fr 1fr;gap:10px">
+          <div><label>API 제공자</label><input id="nd-provider" placeholder="예: OpenAI"></div>
+          <div><label>1인·1회 예상 원가(원)</label><input id="nd-unit" type="number" min="0" value="0"></div>
+        </div>
       </div>
       <div class="m-actions">
         <button class="btn btn-ghost" id="nd-cancel">취소</button>
@@ -1477,6 +1518,9 @@ route(/^#\/decks$/, async () => {
     back.querySelector('#nd-kind').onchange = (e) => {
       back.querySelector('#nd-url-row').style.display = e.target.value === 'link' ? 'block' : 'none';
       back.querySelector('#nd-html-row').style.display = e.target.value === 'html' ? 'block' : 'none';
+    };
+    back.querySelector('#nd-cost').onchange = (e) => {
+      back.querySelector('#nd-paid-row').style.display = e.target.value === 'api_paid' ? 'grid' : 'none';
     };
     back.querySelector('#nd-cancel').onclick = () => back.remove();
     back.querySelector('#nd-save').onclick = async () => {
@@ -1496,6 +1540,9 @@ route(/^#\/decks$/, async () => {
           external_url: back.querySelector('#nd-url').value,
           description: back.querySelector('#nd-desc').value,
           subject: back.querySelector('#nd-subject').value,
+          cost_type: back.querySelector('#nd-cost').value,
+          api_provider: back.querySelector('#nd-provider').value,
+          unit_cost: Number(back.querySelector('#nd-unit').value) || 0,
         });
         back.remove();
         if (kind === 'link') { toast('외부 웹앱이 등록되었습니다. "링크 설정"에서 유출 방지 스크립트를 확인하세요.'); navigate(); }
@@ -1651,6 +1698,45 @@ function gateSnippet() {
     .catch(block);
 })();
 <\/script>`;
+}
+
+// 요금 유형 설정 (모든 유형의 자료 공용)
+function openCostModal(deck, onSaved) {
+  const paid = deck.costType === 'api_paid';
+  const back = openModal(`
+    <h3>요금 유형 — ${esc(deck.title)}</h3>
+    <div class="m-sub">API 비용이 드는 자료는 'API 유료'로 지정하면 학생 사용량이 자동 집계되어 종량 정산 리포트에 반영됩니다.</div>
+    <div class="form-grid" style="grid-template-columns:1fr">
+      <div><label>유형</label>
+        <select id="cm-type">
+          <option value="free" ${!paid ? 'selected' : ''}>🆓 무료</option>
+          <option value="api_paid" ${paid ? 'selected' : ''}>💳 API 유료 (종량 과금)</option>
+        </select></div>
+      <div id="cm-paid" style="display:${paid ? 'grid' : 'none'};grid-template-columns:1fr 1fr;gap:10px">
+        <div><label>API 제공자</label><input id="cm-provider" value="${esc(deck.apiProvider || '')}" placeholder="예: OpenAI"></div>
+        <div><label>1인·1회 예상 원가(원)</label><input id="cm-unit" type="number" min="0" value="${Number(deck.unitCost || 0)}"></div>
+      </div>
+    </div>
+    <div class="m-actions">
+      <button class="btn btn-ghost" id="cm-cancel">취소</button>
+      <button class="btn btn-primary" id="cm-save">저장</button>
+    </div>`);
+  back.querySelector('#cm-type').onchange = (e) => {
+    back.querySelector('#cm-paid').style.display = e.target.value === 'api_paid' ? 'grid' : 'none';
+  };
+  back.querySelector('#cm-cancel').onclick = () => back.remove();
+  back.querySelector('#cm-save').onclick = async () => {
+    try {
+      await api('PATCH', `/api/decks/${deck.id}`, {
+        cost_type: back.querySelector('#cm-type').value,
+        api_provider: back.querySelector('#cm-provider').value,
+        unit_cost: Number(back.querySelector('#cm-unit').value) || 0,
+      });
+      back.remove();
+      toast('요금 유형이 저장되었습니다.');
+      if (onSaved) onSaved();
+    } catch (err) { toast(err.message, true); }
+  };
 }
 
 function openLinkModal(deck) {
@@ -2572,6 +2658,221 @@ route(/^#\/deletions$/, async () => {
       navigate();
     };
   });
+});
+
+/* ---------------- 과정·강사배정 (관리자 이상) ---------------- */
+route(/^#\/courses$/, async () => {
+  if (!isAdmin()) { location.hash = '#/'; return; }
+  const [cData, dData, uData] = await Promise.all([
+    api('GET', '/api/courses'),
+    api('GET', '/api/decks'),
+    api('GET', '/api/users'),
+  ]);
+  const decks = dData.decks;
+  const instructors = uData.users.filter((u) => ['instructor', 'admin'].includes(u.role) && u.id !== state.me.id);
+  const deckById = (id) => decks.find((d) => d.id === id);
+
+  const courseCard = (c) => {
+    const assignedIds = new Set(c.instructors.map((i) => i.id));
+    const itemIds = new Set(c.items.map((i) => i.deckId));
+    const addable = decks.filter((d) => !itemIds.has(d.id));
+    const assignable = instructors.filter((i) => !assignedIds.has(i.id));
+    return `
+    <div class="card" data-course="${c.id}" style="margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
+        <div><h2 style="margin:0">📚 ${esc(c.name)}</h2><div class="small muted">${esc(c.description) || '설명 없음'}</div></div>
+        <button class="btn btn-ghost btn-sm" data-course-del="${c.id}">${icon('trash')} 과정 삭제</button>
+      </div>
+
+      <div class="grid main-cols mt">
+        <div>
+          <div class="field-label">자료 구성 <span class="sub">필수는 자동 배정, 선택은 강사가 담습니다</span></div>
+          <div class="tbl-scroll"><table class="tbl">
+            <tbody>
+              ${c.items.map((it) => `<tr>
+                <td>${it.costType === 'api_paid' ? '💳 ' : '🆓 '}${esc(it.title)}</td>
+                <td style="width:150px">
+                  <select data-req-course="${c.id}" data-req-deck="${it.deckId}" class="input">
+                    <option value="1" ${it.required ? 'selected' : ''}>필수</option>
+                    <option value="0" ${!it.required ? 'selected' : ''}>선택</option>
+                  </select></td>
+                <td style="width:40px"><button class="btn btn-ghost btn-sm" data-item-del="${c.id}:${it.deckId}" title="빼기">✕</button></td>
+              </tr>`).join('') || '<tr><td colspan="3" class="empty-note">담긴 자료가 없습니다.</td></tr>'}
+            </tbody>
+          </table></div>
+          ${addable.length ? `<div style="display:flex;gap:6px;margin-top:8px">
+            <select class="input" data-add-deck="${c.id}" style="flex:1">
+              ${addable.map((d) => `<option value="${d.id}">${d.costType === 'api_paid' ? '💳 ' : '🆓 '}${esc(d.title)}</option>`).join('')}
+            </select>
+            <select class="input" data-add-req="${c.id}" style="width:90px"><option value="1">필수</option><option value="0">선택</option></select>
+            <button class="btn btn-soft btn-sm" data-add-item="${c.id}">추가</button>
+          </div>` : '<div class="small muted" style="margin-top:8px">모든 자료가 이미 담겨 있습니다.</div>'}
+        </div>
+
+        <div class="col-stack">
+          <div class="field-label">담당 강사배정</div>
+          <div>${c.instructors.map((i) => `<span class="badge blue" style="margin:0 6px 6px 0">${esc(i.name)}
+            <a data-unassign="${c.id}:${i.id}" style="cursor:pointer;margin-left:4px">✕</a></span>`).join('') || '<span class="small muted">아직 배정된 강사가 없습니다.</span>'}</div>
+          ${assignable.length ? `<div style="display:flex;gap:6px;margin-top:8px">
+            <select class="input" data-assign-inst="${c.id}" style="flex:1">
+              ${assignable.map((i) => `<option value="${i.id}">${esc(i.name)} (${esc(ROLE_LABELS[i.role] || i.role)})</option>`).join('')}
+            </select>
+            <button class="btn btn-soft btn-sm" data-do-assign="${c.id}">배정</button>
+          </div>` : ''}
+          <div class="small muted" style="margin-top:8px;line-height:1.6">
+            💡 API 유료 자료가 포함된 과정은 사용량이 <b>종량 정산</b>에 집계됩니다.
+          </div>
+        </div>
+      </div>
+    </div>`;
+  };
+
+  shell('과정·강사배정', `
+    <div class="page-head">
+      <div><div class="ph-t">과정(패키지) 관리</div>
+        <div class="desc">수업의뢰 단위로 자료를 묶고(필수/선택), 강사를 배정합니다. 강사는 필수 자료를 자동으로 받고 선택 자료는 직접 담습니다.</div></div>
+    </div>
+    <div class="card" style="margin-bottom:18px">
+      <h2>새 과정 만들기</h2>
+      <form id="course-form" class="form-grid">
+        <div><label>과정 이름</label><input name="name" required placeholder="예: 베이킹 기초 (8차시)"></div>
+        <div><label>설명</label><input name="description" placeholder="예: AI 베이킹 진로 체험 과정"></div>
+        <div style="align-self:end"><button class="btn btn-primary" type="submit" style="width:100%;justify-content:center">${icon('plus')} 과정 생성</button></div>
+      </form>
+      <div class="msg" id="course-msg"></div>
+    </div>
+    ${cData.courses.map(courseCard).join('') || '<p class="empty-note">아직 과정이 없습니다. 위에서 만들어 보세요.</p>'}`);
+
+  document.getElementById('course-form').onsubmit = async (e) => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    try {
+      await api('POST', '/api/courses', { name: f.get('name'), description: f.get('description') });
+      toast('과정이 생성되었습니다.'); navigate();
+    } catch (err) { const m = document.getElementById('course-msg'); m.textContent = err.message; m.className = 'msg err'; }
+  };
+  document.querySelectorAll('[data-course-del]').forEach((b) => {
+    b.onclick = async () => {
+      if (!confirm('이 과정을 삭제할까요? (자료 자체는 삭제되지 않습니다)')) return;
+      await api('DELETE', `/api/courses/${b.dataset.courseDel}`); toast('삭제되었습니다.'); navigate();
+    };
+  });
+  document.querySelectorAll('[data-add-item]').forEach((b) => {
+    b.onclick = async () => {
+      const cid = b.dataset.addItem;
+      const deckId = Number(document.querySelector(`[data-add-deck="${cid}"]`).value);
+      const required = document.querySelector(`[data-add-req="${cid}"]`).value === '1';
+      await api('POST', `/api/courses/${cid}/items`, { deck_id: deckId, required }); navigate();
+    };
+  });
+  document.querySelectorAll('[data-req-course]').forEach((s) => {
+    s.onchange = async () => {
+      await api('POST', `/api/courses/${s.dataset.reqCourse}/items`, { deck_id: Number(s.dataset.reqDeck), required: s.value === '1' });
+      toast('변경되었습니다.');
+    };
+  });
+  document.querySelectorAll('[data-item-del]').forEach((b) => {
+    b.onclick = async () => {
+      const [cid, did] = b.dataset.itemDel.split(':');
+      await api('DELETE', `/api/courses/${cid}/items/${did}`); navigate();
+    };
+  });
+  document.querySelectorAll('[data-do-assign]').forEach((b) => {
+    b.onclick = async () => {
+      const cid = b.dataset.doAssign;
+      const instId = Number(document.querySelector(`[data-assign-inst="${cid}"]`).value);
+      await api('POST', `/api/courses/${cid}/instructors`, { instructor_id: instId }); toast('배정되었습니다.'); navigate();
+    };
+  });
+  document.querySelectorAll('[data-unassign]').forEach((a) => {
+    a.onclick = async () => {
+      const [cid, iid] = a.dataset.unassign.split(':');
+      await api('DELETE', `/api/courses/${cid}/instructors/${iid}`); navigate();
+    };
+  });
+});
+
+/* ---------------- 내 과정 (강사) ---------------- */
+route(/^#\/my-courses$/, async () => {
+  if (!state.me || state.me.role !== 'instructor') { location.hash = '#/'; return; }
+  const data = await api('GET', '/api/my-courses');
+  const itemRow = (it, extra = '') => `
+    <div class="log-item"><div class="li-main"><div class="li-top">
+      <span class="badge ${it.costType === 'api_paid' ? 'amber' : 'green'} plain">${it.costType === 'api_paid' ? '💳 유료' : '🆓 무료'}</span>
+      <span class="li-who">${esc(it.title)}</span></div>
+      ${it.costType === 'api_paid' && it.unitCost ? `<div class="li-det small muted">사용 시 약 ${Number(it.unitCost).toLocaleString()}원/회 과금</div>` : ''}</div>
+      <div class="li-meta">${extra}</div></div>`;
+  shell('내 과정', `
+    <div class="page-head"><div><div class="ph-t">내게 배정된 과정</div>
+      <div class="desc">필수 자료는 자동으로 제공되고, 선택 자료는 "담기"로 추가하면 웹앱/PPT 관리에 나타납니다.</div></div></div>
+    ${data.courses.map((c) => `
+      <div class="card" style="margin-bottom:16px">
+        <h2 style="margin-top:0">📚 ${esc(c.name)}</h2>
+        <div class="small muted">${esc(c.description) || ''}</div>
+        <div class="grid main-cols mt">
+          <div>
+            <div class="field-label">필수 자료 <span class="sub">항상 사용 가능</span></div>
+            ${c.required.map((it) => itemRow(it, '<span class="badge blue">필수</span>')).join('') || '<div class="empty-note">필수 자료 없음</div>'}
+          </div>
+          <div>
+            <div class="field-label">선택 가능 자료 <span class="sub">필요한 것만 담기</span></div>
+            ${c.optional.map((it) => itemRow(it, it.opted
+              ? `<button class="btn btn-ghost btn-sm" data-optout="${c.id}:${it.deckId}">담기 취소</button>`
+              : `<button class="btn btn-soft btn-sm" data-optin="${c.id}:${it.deckId}">＋ 담기</button>`)).join('') || '<div class="empty-note">선택 자료 없음</div>'}
+          </div>
+        </div>
+      </div>`).join('') || '<p class="empty-note">아직 배정된 과정이 없습니다. 관리자에게 문의하세요.</p>'}`);
+  document.querySelectorAll('[data-optin]').forEach((b) => {
+    b.onclick = async () => {
+      const [cid, did] = b.dataset.optin.split(':');
+      await api('POST', `/api/courses/${cid}/opt-in`, { deck_id: Number(did) }); toast('자료를 담았습니다.'); navigate();
+    };
+  });
+  document.querySelectorAll('[data-optout]').forEach((b) => {
+    b.onclick = async () => {
+      const [cid, did] = b.dataset.optout.split(':');
+      await api('DELETE', `/api/courses/${cid}/opt-in/${did}`); toast('담기를 취소했습니다.'); navigate();
+    };
+  });
+});
+
+/* ---------------- 종량 정산 (관리자 이상) ---------------- */
+let billingMonth = '';
+route(/^#\/billing$/, async () => {
+  if (!isAdmin()) { location.hash = '#/'; return; }
+  const qs = billingMonth ? `?month=${billingMonth}` : '';
+  const data = await api('GET', `/api/billing${qs}`);
+  shell('종량 정산', `
+    <div class="page-head">
+      <div><div class="ph-t">API 유료 자료 종량 정산</div>
+        <div class="desc">API 비용이 드는 자료의 실제 학생 사용량을 집계합니다. 예상 비용 = 자료별 예상 단가 × 사용 횟수.</div></div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input type="month" class="input" id="bm" value="${esc(billingMonth)}">
+        <button class="btn btn-ghost btn-sm" id="bm-all">전체 기간</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="tbl-scroll"><table class="tbl resp">
+        <thead><tr><th>자료</th><th>API 제공자</th><th>예상 단가</th><th>사용 횟수</th><th>이용 학생</th><th>예상 비용</th></tr></thead>
+        <tbody>
+          ${data.items.map((i) => `<tr>
+            <td data-label="자료" class="cell-main">💳 ${esc(i.title)}</td>
+            <td data-label="제공자">${esc(i.apiProvider) || '<span class="muted">-</span>'}</td>
+            <td data-label="예상 단가">${i.unitCost ? `${Number(i.unitCost).toLocaleString()}원/회` : '<span class="muted">미설정</span>'}</td>
+            <td data-label="사용 횟수">${i.uses.toLocaleString()}</td>
+            <td data-label="이용 학생">${i.learners.toLocaleString()}명</td>
+            <td data-label="예상 비용"><b>${Number(i.estCost).toLocaleString()}원</b></td>
+          </tr>`).join('') || '<tr><td colspan="6" class="empty-note">API 유료 자료의 사용 기록이 없습니다.</td></tr>'}
+        </tbody>
+        ${data.items.length ? `<tfoot><tr><td colspan="5" style="text-align:right"><b>합계</b></td><td><b>${Number(data.total).toLocaleString()}원</b></td></tr></tfoot>` : ''}
+      </table></div>
+      <div class="small muted" style="margin-top:10px;line-height:1.7">
+        ${billingMonth ? `<b>${esc(billingMonth)}</b> 기준` : '<b>전체 기간</b> 기준'} 집계입니다.
+        단가가 "미설정"인 자료는 "💳 요금" 버튼에서 1회 예상 원가를 입력하면 예상 비용이 계산됩니다.
+      </div>
+    </div>`);
+  document.getElementById('bm').onchange = (e) => { billingMonth = e.target.value; navigate(); };
+  document.getElementById('bm-all').onclick = () => { billingMonth = ''; navigate(); };
 });
 
 /* ---------------- 부팅 ---------------- */
