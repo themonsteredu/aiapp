@@ -1005,13 +1005,13 @@ route(/^#\/decks$/, async () => {
     data.decks.forEach((d) => { (groups[d.subject || ''] ||= []).push(d); });
     const deckCard = (d, i) => `
       <div class="deck-card">
-        <div class="deck-thumb dg-${i % 4}"><div class="deco">${['🤖', '💡', '📊', '🚀'][i % 4]}</div><div class="orb"></div><div class="dt">${esc(d.title)}</div></div>
+        <div class="deck-thumb dg-${i % 4}"><div class="deco">${d.kind === 'link' ? '🧪' : ['🤖', '💡', '📊', '🚀'][i % 4]}</div><div class="orb"></div><div class="dt">${esc(d.title)}</div></div>
         <div class="body">
           <div class="desc">${esc(d.description) || '설명 없음'}</div>
           <div class="meta">
-            <span class="small muted">슬라이드 ${d.slideCount}장 · ${esc(d.ownerName)} 강사</span>
+            <span class="small muted">${d.kind === 'link' ? '체험형 웹앱' : `슬라이드 ${d.slideCount}장`} · ${esc(d.ownerName)} 강사</span>
             ${d.accessibleNow
-              ? `<a href="#/view/${d.id}" class="btn btn-primary btn-sm">${icon('play')} 학습 시작</a>`
+              ? `<a href="#/view/${d.id}" class="btn btn-primary btn-sm">${icon('play')} ${d.kind === 'link' ? '체험 시작' : '학습 시작'}</a>`
               : '<span class="badge red">차단 시간</span>'}
           </div>
         </div>
@@ -1048,7 +1048,7 @@ route(/^#\/decks$/, async () => {
           <tbody>
             ${list.map((d) => `
               <tr>
-                <td data-label="웹앱명"><div class="cell-main">${esc(d.title)}</div><div class="cell-sub">${esc(d.description) || ''} · 슬라이드 ${d.slideCount}장 · ${esc(d.updated_at)}</div></td>
+                <td data-label="웹앱명"><div class="cell-main">${d.kind === 'link' ? '🧪 ' : ''}${esc(d.title)}</div><div class="cell-sub">${esc(d.description) || ''} · ${d.kind === 'link' ? '외부 체험형 웹앱' : `슬라이드 ${d.slideCount}장`} · ${esc(d.updated_at)}</div></td>
                 <td data-label="과목">${d.subject ? `<span class="badge violet plain">📁 ${esc(d.subject)}</span>` : '<span class="muted small">미분류</span>'}</td>
                 <td data-label="담당 강사">${esc(d.ownerName)}</td>
                 <td data-label="대상 학생">${esc(d.target_classes) || '<span class="muted">전체</span>'}</td>
@@ -1056,8 +1056,10 @@ route(/^#\/decks$/, async () => {
                 <td data-label="상태">${deckStatusBadge(d)}</td>
                 <td>
                   <div class="row-actions">
-                    <a class="btn btn-primary btn-sm" href="#/view/${d.id}">${icon('play')} 재생</a>
-                    <a class="btn btn-ghost btn-sm" href="#/decks/${d.id}/edit">${icon('edit')} 편집</a>
+                    <a class="btn btn-primary btn-sm" href="#/view/${d.id}">${icon('play')} ${d.kind === 'link' ? '열기' : '재생'}</a>
+                    ${d.kind === 'link'
+                      ? `<button class="btn btn-ghost btn-sm" data-linkedit="${d.id}">${icon('edit')} 링크 설정</button>`
+                      : `<a class="btn btn-ghost btn-sm" href="#/decks/${d.id}/edit">${icon('edit')} 편집</a>`}
                     <button class="btn btn-ghost btn-sm" data-assign="${d.id}">${icon('shield')} 배정</button>
                     <button class="btn btn-ghost btn-sm" data-pub="${d.id}" data-val="${d.published ? 0 : 1}">${d.published ? '비공개로' : '공개하기'}</button>
                     <button class="btn btn-danger btn-sm" data-del="${d.id}">${icon('trash')}</button>
@@ -1074,9 +1076,16 @@ route(/^#\/decks$/, async () => {
   document.getElementById('btn-new-deck').onclick = () => {
     const back = openModal(`
       <h3>새 웹앱 만들기</h3>
-      <div class="m-sub">제목과 과목(폴더)을 입력하면 첫 슬라이드가 자동 생성됩니다.</div>
+      <div class="m-sub">직접 만드는 슬라이드, 또는 이미 배포된 체험형 웹앱(주소 연결) 중에서 선택하세요.</div>
       <div class="form-grid" style="grid-template-columns:1fr">
-        <div><label>제목</label><input id="nd-title" placeholder="예: AI 진로탐색"></div>
+        <div><label>유형</label>
+          <select id="nd-kind">
+            <option value="slides">슬라이드 (이 플랫폼에서 직접 제작)</option>
+            <option value="link">외부 체험형 웹앱 (주소 연결 · 유출 방지 게이트)</option>
+          </select></div>
+        <div><label>제목</label><input id="nd-title" placeholder="예: AI 프롬프트 연습"></div>
+        <div id="nd-url-row" style="display:none"><label>웹앱 주소 (https://)</label>
+          <input id="nd-url" placeholder="예: https://ai-prompt-practice.vercel.app"></div>
         <div><label>과목 (폴더)</label>
           <input id="nd-subject" list="subject-list" placeholder="예: AI 진로교육 — 기존 과목을 고르거나 새로 입력">
           <datalist id="subject-list">${subjects.map((s) => `<option value="${esc(s)}">`).join('')}</datalist></div>
@@ -1086,19 +1095,33 @@ route(/^#\/decks$/, async () => {
         <button class="btn btn-ghost" id="nd-cancel">취소</button>
         <button class="btn btn-primary" id="nd-save">만들기</button>
       </div>`);
+    back.querySelector('#nd-kind').onchange = (e) => {
+      back.querySelector('#nd-url-row').style.display = e.target.value === 'link' ? 'block' : 'none';
+    };
     back.querySelector('#nd-cancel').onclick = () => back.remove();
     back.querySelector('#nd-save').onclick = async () => {
       const title = back.querySelector('#nd-title').value.trim();
+      const kind = back.querySelector('#nd-kind').value;
       if (!title) return toast('제목을 입력하세요.', true);
-      const r = await api('POST', '/api/decks', {
-        title,
-        description: back.querySelector('#nd-desc').value,
-        subject: back.querySelector('#nd-subject').value,
-      });
-      back.remove();
-      location.hash = `#/decks/${r.id}/edit`;
+      try {
+        const r = await api('POST', '/api/decks', {
+          title, kind,
+          external_url: back.querySelector('#nd-url').value,
+          description: back.querySelector('#nd-desc').value,
+          subject: back.querySelector('#nd-subject').value,
+        });
+        back.remove();
+        if (kind === 'link') { toast('외부 웹앱이 등록되었습니다. "링크 설정"에서 유출 방지 스크립트를 확인하세요.'); navigate(); }
+        else location.hash = `#/decks/${r.id}/edit`;
+      } catch (err) { toast(err.message, true); }
     };
   };
+  document.querySelectorAll('[data-linkedit]').forEach((b) => {
+    b.onclick = () => {
+      const deck = data.decks.find((d) => d.id === Number(b.dataset.linkedit));
+      if (deck) openLinkModal(deck);
+    };
+  });
   document.querySelectorAll('[data-assign]').forEach((b) => {
     b.onclick = () => {
       const deck = data.decks.find((d) => d.id === Number(b.dataset.assign));
@@ -1121,10 +1144,94 @@ route(/^#\/decks$/, async () => {
   });
 });
 
+/* ---------------- 외부 웹앱 링크 설정 (유출 방지 게이트 안내 포함) ---------------- */
+function gateSnippet() {
+  return `<script>
+(function () {
+  var PLATFORM = '${location.origin}';
+  function block() {
+    document.documentElement.innerHTML =
+      '<div style="font-family:sans-serif;display:flex;height:100vh;' +
+      'align-items:center;justify-content:center;text-align:center;color:#334">' +
+      '이 체험 웹앱은 수업 플랫폼을 통해서만<br>접속할 수 있습니다.</div>';
+  }
+  var t = new URLSearchParams(location.search).get('gate');
+  if (!t) { block(); return; }
+  fetch(PLATFORM + '/api/gate/verify?token=' + encodeURIComponent(t))
+    .then(function (r) { return r.json(); })
+    .then(function (d) { if (!d.valid) block(); })
+    .catch(block);
+})();
+<\/script>`;
+}
+
+function openLinkModal(deck) {
+  const back = openModal(`
+    <h3>외부 웹앱 설정 — ${esc(deck.title)}</h3>
+    <div class="m-sub">학생은 이 플랫폼을 통해서만 웹앱을 열게 됩니다.</div>
+    <div class="form-grid" style="grid-template-columns:1fr">
+      <div><label>웹앱 주소 (https://)</label><input id="lm-url" value="${esc(deck.external_url)}"></div>
+    </div>
+    <div class="mt">
+      <div class="field-label">🛡️ 유출 방지 게이트 (강력 권장)</div>
+      <div class="small muted" style="line-height:1.7">
+        아래 스크립트를 웹앱의 <code>&lt;/body&gt;</code> 바로 앞에 붙여넣으면,
+        이 플랫폼이 발급한 <b>15분짜리 서명 토큰 없이는 웹앱이 스스로 접속을 거부</b>합니다.
+        누가 주소를 알아내 공유해도 열리지 않습니다.
+      </div>
+      <div class="snippet-box" id="lm-snippet">${esc(gateSnippet())}</div>
+      <button class="btn btn-ghost btn-sm mt" id="lm-copy">스크립트 복사</button>
+      <span class="small muted"> — 스크립트를 넣지 않아도 플랫폼 안에서는 열리지만, 원본 주소가 유출되면 직접 접속을 막을 수 없습니다.</span>
+    </div>
+    <div class="m-actions">
+      <button class="btn btn-ghost" id="lm-cancel">닫기</button>
+      <button class="btn btn-primary" id="lm-save">저장</button>
+    </div>`);
+  back.querySelector('#lm-cancel').onclick = () => back.remove();
+  back.querySelector('#lm-copy').onclick = async () => {
+    try { await navigator.clipboard.writeText(gateSnippet()); toast('스크립트가 복사되었습니다.'); }
+    catch { toast('복사에 실패했습니다. 직접 선택해 복사하세요.', true); }
+  };
+  back.querySelector('#lm-save').onclick = async () => {
+    try {
+      await api('PATCH', `/api/decks/${deck.id}`, { external_url: back.querySelector('#lm-url').value });
+      back.remove();
+      toast('저장되었습니다.');
+      navigate();
+    } catch (err) { toast(err.message, true); }
+  };
+}
+
 /* ---------------- 뷰어 + 프레젠테이션 ---------------- */
 route(/^#\/view\/(\d+)$/, async (id) => {
   const data = await api('GET', `/api/decks/${id}`);
   const wm = state.settings && state.settings.watermark;
+
+  // 외부 체험형 웹앱: 게이트 토큰을 붙여 플랫폼 안에서 임베드
+  if (data.deck.kind === 'link') {
+    const gate = await api('GET', `/api/gate-token/${id}`);
+    shell(data.deck.title, `
+      <div class="page-head">
+        <div><div class="ph-t">🧪 ${esc(data.deck.title)}</div>
+          <div class="desc">${esc(data.deck.description)} · ${esc(data.deck.ownerName)} 강사 · 체험형 웹앱</div></div>
+        <div style="display:flex;gap:8px">
+          ${data.canEdit ? `<button class="btn btn-ghost" id="btn-linkedit">${icon('edit')} 링크 설정</button>` : ''}
+          <button class="btn btn-primary" id="btn-embed-full">${icon('play')} 전체화면</button>
+        </div>
+      </div>
+      <div class="embed-wrap no-select" id="embed-wrap">
+        <iframe src="${esc(gate.url)}" allow="fullscreen; clipboard-write" referrerpolicy="no-referrer"></iframe>
+        ${wm ? watermarkDiv() : ''}
+      </div>
+      <p class="small muted mt">접속 토큰은 ${gate.expiresInMinutes}분간 유효합니다. 화면 위 워터마크로 열람자가 식별됩니다.</p>`);
+    document.getElementById('btn-embed-full').onclick = () => {
+      document.getElementById('embed-wrap').requestFullscreen?.().catch(() => {});
+    };
+    const editBtn = document.getElementById('btn-linkedit');
+    if (editBtn) editBtn.onclick = () => openLinkModal(data.deck);
+    return;
+  }
+
   let idx = 0;
   shell(data.deck.title, `
     <div class="page-head">
@@ -1199,7 +1306,7 @@ function present(slides, title) {
 route(/^#\/decks\/(\d+)\/edit$/, async (id) => {
   if (!isStaff()) { location.hash = '#/decks'; return; }
   const data = await api('GET', `/api/decks/${id}`);
-  if (!data.canEdit) { location.hash = '#/decks'; return; }
+  if (!data.canEdit || data.deck.kind === 'link') { location.hash = '#/decks'; return; }
   let slides = data.slides;
   let sel = 0;
 
