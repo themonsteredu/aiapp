@@ -1122,7 +1122,7 @@ route(/^#\/sessions$/, async () => {
   });
   const launchLive = async (sessionId, deckId) => {
     const dd = await api('GET', `/api/decks/${deckId}`);
-    if (dd.deck.kind === 'link') return toast('라이브 발표는 슬라이드형 웹앱만 가능합니다.', true);
+    if (dd.deck.kind !== 'slides') return toast('라이브 발표는 슬라이드형 웹앱만 가능합니다.', true);
     present(dd.slides, dd.deck.title, { sessionId, deckId });
   };
   document.querySelectorAll('[data-golive]').forEach((b) => {
@@ -1176,13 +1176,13 @@ route(/^#\/decks$/, async () => {
     data.decks.forEach((d) => { (groups[d.subject || ''] ||= []).push(d); });
     const deckCard = (d, i) => `
       <div class="deck-card">
-        <div class="deck-thumb dg-${i % 4}"><div class="deco">${d.kind === 'link' ? '🧪' : ['🤖', '💡', '📊', '🚀'][i % 4]}</div><div class="orb"></div><div class="dt">${esc(d.title)}</div></div>
+        <div class="deck-thumb dg-${i % 4}"><div class="deco">${d.kind !== 'slides' ? '🧪' : ['🤖', '💡', '📊', '🚀'][i % 4]}</div><div class="orb"></div><div class="dt">${esc(d.title)}</div></div>
         <div class="body">
           <div class="desc">${esc(d.description) || '설명 없음'}</div>
           <div class="meta">
-            <span class="small muted">${d.kind === 'link' ? '체험형 웹앱' : `슬라이드 ${d.slideCount}장`} · ${esc(d.ownerName)} 강사</span>
+            <span class="small muted">${d.kind !== 'slides' ? '체험형 웹앱' : `슬라이드 ${d.slideCount}장`} · ${esc(d.ownerName)} 강사</span>
             ${d.accessibleNow
-              ? `<a href="#/view/${d.id}" class="btn btn-primary btn-sm">${icon('play')} ${d.kind === 'link' ? '체험 시작' : '학습 시작'}</a>`
+              ? `<a href="#/view/${d.id}" class="btn btn-primary btn-sm">${icon('play')} ${d.kind !== 'slides' ? '체험 시작' : '학습 시작'}</a>`
               : '<span class="badge red">차단 시간</span>'}
           </div>
         </div>
@@ -1219,7 +1219,7 @@ route(/^#\/decks$/, async () => {
           <tbody>
             ${list.map((d) => `
               <tr>
-                <td data-label="웹앱명"><div class="cell-main">${d.kind === 'link' ? '🧪 ' : ''}${esc(d.title)}</div><div class="cell-sub">${esc(d.description) || ''} · ${d.kind === 'link' ? '외부 체험형 웹앱' : `슬라이드 ${d.slideCount}장`} · ${esc(d.updated_at)}</div></td>
+                <td data-label="웹앱명"><div class="cell-main">${d.kind === 'link' ? '🧪 ' : d.kind === 'html' ? '📦 ' : ''}${esc(d.title)}</div><div class="cell-sub">${esc(d.description) || ''} · ${d.kind === 'link' ? '외부 체험형 웹앱' : d.kind === 'html' ? '업로드형 HTML 웹앱' : `슬라이드 ${d.slideCount}장`} · ${esc(d.updated_at)}</div></td>
                 <td data-label="과목">${d.subject ? `<span class="badge violet plain">📁 ${esc(d.subject)}</span>` : '<span class="muted small">미분류</span>'}</td>
                 <td data-label="담당 강사">${esc(d.ownerName)}</td>
                 <td data-label="대상 학생">${esc(d.target_classes) || '<span class="muted">전체</span>'}</td>
@@ -1227,12 +1227,14 @@ route(/^#\/decks$/, async () => {
                 <td data-label="상태">${deckStatusBadge(d)}</td>
                 <td>
                   <div class="row-actions">
-                    <a class="btn btn-primary btn-sm" href="#/view/${d.id}">${icon('play')} ${d.kind === 'link' ? '열기' : '재생'}</a>
+                    <a class="btn btn-primary btn-sm" href="#/view/${d.id}">${icon('play')} ${d.kind === 'slides' ? '재생' : '열기'}</a>
                     ${d.kind === 'link'
                       ? `<button class="btn btn-ghost btn-sm" data-linkedit="${d.id}">${icon('edit')} 링크 설정</button>`
-                      : `<a class="btn btn-ghost btn-sm" href="#/decks/${d.id}/edit">${icon('edit')} 편집</a>`}
+                      : d.kind === 'html'
+                        ? `<button class="btn btn-ghost btn-sm" data-htmlup="${d.id}">${icon('edit')} HTML 교체</button>`
+                        : `<a class="btn btn-ghost btn-sm" href="#/decks/${d.id}/edit">${icon('edit')} 편집</a>`}
                     <button class="btn btn-ghost btn-sm" data-assign="${d.id}">${icon('shield')} 배정</button>
-                    ${isAdmin() && d.kind !== 'link' ? `<a class="btn btn-ghost btn-sm" href="#/export/${d.id}" title="PDF/백업 내보내기">${icon('download')}</a>` : ''}
+                    ${isAdmin() && d.kind === 'slides' ? `<a class="btn btn-ghost btn-sm" href="#/export/${d.id}" title="PDF/백업 내보내기">${icon('download')}</a>` : ''}
                     <button class="btn btn-ghost btn-sm" data-pub="${d.id}" data-val="${d.published ? 0 : 1}">${d.published ? '비공개로' : '공개하기'}</button>
                     <button class="btn btn-danger btn-sm" data-del="${d.id}">${icon('trash')}</button>
                   </div>
@@ -1253,11 +1255,15 @@ route(/^#\/decks$/, async () => {
         <div><label>유형</label>
           <select id="nd-kind">
             <option value="slides">슬라이드 (이 플랫폼에서 직접 제작)</option>
-            <option value="link">외부 체험형 웹앱 (주소 연결 · 유출 방지 게이트)</option>
+            <option value="html">HTML 파일 업로드 (배포 없이 바로 실행)</option>
+            <option value="link">외부 배포 웹앱 (주소 연결 · 유출 방지 게이트)</option>
           </select></div>
         <div><label>제목</label><input id="nd-title" placeholder="예: AI 프롬프트 연습"></div>
         <div id="nd-url-row" style="display:none"><label>웹앱 주소 (https://)</label>
           <input id="nd-url" placeholder="예: https://ai-prompt-practice.vercel.app"></div>
+        <div id="nd-html-row" style="display:none"><label>HTML 파일 (.html, 3MB 이하)</label>
+          <input id="nd-html" type="file" accept=".html,.htm,text/html">
+          <div class="small muted" style="margin-top:5px">CSS·자바스크립트가 파일 안에 포함된 단일 HTML이어야 합니다. (AI로 만든 웹앱 파일 그대로 OK)</div></div>
         <div><label>과목 (폴더)</label>
           <input id="nd-subject" list="subject-list" placeholder="예: AI 진로교육 — 기존 과목을 고르거나 새로 입력">
           <datalist id="subject-list">${subjects.map((s) => `<option value="${esc(s)}">`).join('')}</datalist></div>
@@ -1269,6 +1275,7 @@ route(/^#\/decks$/, async () => {
       </div>`);
     back.querySelector('#nd-kind').onchange = (e) => {
       back.querySelector('#nd-url-row').style.display = e.target.value === 'link' ? 'block' : 'none';
+      back.querySelector('#nd-html-row').style.display = e.target.value === 'html' ? 'block' : 'none';
     };
     back.querySelector('#nd-cancel').onclick = () => back.remove();
     back.querySelector('#nd-save').onclick = async () => {
@@ -1276,14 +1283,22 @@ route(/^#\/decks$/, async () => {
       const kind = back.querySelector('#nd-kind').value;
       if (!title) return toast('제목을 입력하세요.', true);
       try {
+        let html;
+        if (kind === 'html') {
+          const file = back.querySelector('#nd-html').files[0];
+          if (!file) return toast('HTML 파일을 선택하세요.', true);
+          if (file.size > 3 * 1024 * 1024) return toast('HTML 파일은 3MB 이하여야 합니다.', true);
+          html = await file.text();
+        }
         const r = await api('POST', '/api/decks', {
-          title, kind,
+          title, kind, html,
           external_url: back.querySelector('#nd-url').value,
           description: back.querySelector('#nd-desc').value,
           subject: back.querySelector('#nd-subject').value,
         });
         back.remove();
         if (kind === 'link') { toast('외부 웹앱이 등록되었습니다. "링크 설정"에서 유출 방지 스크립트를 확인하세요.'); navigate(); }
+        else if (kind === 'html') { toast('HTML 웹앱이 업로드되었습니다. "열기"로 바로 실행해 보세요.'); navigate(); }
         else location.hash = `#/decks/${r.id}/edit`;
       } catch (err) { toast(err.message, true); }
     };
@@ -1292,6 +1307,24 @@ route(/^#\/decks$/, async () => {
     b.onclick = () => {
       const deck = data.decks.find((d) => d.id === Number(b.dataset.linkedit));
       if (deck) openLinkModal(deck);
+    };
+  });
+  // HTML 웹앱 파일 교체
+  document.querySelectorAll('[data-htmlup]').forEach((b) => {
+    b.onclick = () => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.html,.htm,text/html';
+      input.onchange = async () => {
+        const file = input.files[0];
+        if (!file) return;
+        if (file.size > 3 * 1024 * 1024) return toast('HTML 파일은 3MB 이하여야 합니다.', true);
+        try {
+          await api('PATCH', `/api/decks/${b.dataset.htmlup}`, { html: await file.text() });
+          toast('HTML이 교체되었습니다.');
+        } catch (err) { toast(err.message, true); }
+      };
+      input.click();
     };
   });
   document.querySelectorAll('[data-assign]').forEach((b) => {
@@ -1320,7 +1353,7 @@ route(/^#\/decks$/, async () => {
 route(/^#\/export\/(\d+)$/, async (id) => {
   if (!isAdmin()) { location.hash = '#/decks'; return; }
   const data = await api('GET', `/api/decks/${id}`);
-  if (data.deck.kind === 'link') { location.hash = '#/decks'; return; }
+  if (data.deck.kind !== 'slides') { location.hash = '#/decks'; return; }
   document.body.classList.add('allow-print');
   shell(`내보내기 — ${data.deck.title}`, `
     <div class="page-head export-toolbar">
@@ -1455,6 +1488,24 @@ route(/^#\/view\/(\d+)$/, async (id) => {
   const data = await api('GET', `/api/decks/${id}`);
   const wm = state.settings && state.settings.watermark;
 
+  // 업로드형 HTML 웹앱: 플랫폼이 직접 서빙 (배포 불필요)
+  if (data.deck.kind === 'html') {
+    shell(data.deck.title, `
+      <div class="page-head">
+        <div><div class="ph-t">📦 ${esc(data.deck.title)}</div>
+          <div class="desc">${esc(data.deck.description)} · ${esc(data.deck.ownerName)} 강사 · 업로드형 웹앱</div></div>
+        <button class="btn btn-primary" id="btn-embed-full">${icon('play')} 전체화면</button>
+      </div>
+      <div class="embed-wrap no-select" id="embed-wrap">
+        <iframe src="/api/webapp/${data.deck.id}" sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups" allow="fullscreen" referrerpolicy="no-referrer"></iframe>
+        ${wm ? watermarkDiv() : ''}
+      </div>`);
+    document.getElementById('btn-embed-full').onclick = () => {
+      document.getElementById('embed-wrap').requestFullscreen?.().catch(() => {});
+    };
+    return;
+  }
+
   // 외부 체험형 웹앱: 게이트 토큰을 붙여 플랫폼 안에서 임베드
   if (data.deck.kind === 'link') {
     const gate = await api('GET', `/api/gate-token/${id}`);
@@ -1564,7 +1615,7 @@ route(/^#\/decks\/(\d+)\/edit$/, async (id) => {
     api('GET', `/api/decks/${id}`),
     api('GET', '/api/backgrounds').catch(() => ({ backgrounds: [] })),
   ]);
-  if (!data.canEdit || data.deck.kind === 'link') { location.hash = '#/decks'; return; }
+  if (!data.canEdit || data.deck.kind !== 'slides') { location.hash = '#/decks'; return; }
   let slides = data.slides;
   let backgrounds = bgData.backgrounds;
   let sel = 0;
