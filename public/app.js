@@ -131,7 +131,8 @@ function videoEmbed(url) {
     return `<div class="video-box"><iframe src="https://www.youtube.com/embed/${esc(yt[1])}?rel=0&modestbranding=1"
       title="영상" allow="accelerometer; autoplay; encrypted-media; picture-in-picture" allowfullscreen referrerpolicy="no-referrer"></iframe></div>`;
   }
-  if (/^https:\/\/[^\s<>"']+\.(mp4|webm|m4v)(\?[^\s<>"']*)?$/i.test(url)) {
+  // https mp4/webm 직접 링크 또는 플랫폼에 업로드한 동영상 자산(/api/assets/N)
+  if (/^https:\/\/[^\s<>"']+\.(mp4|webm|m4v)(\?[^\s<>"']*)?$/i.test(url) || /^\/api\/assets\/\d+$/.test(url)) {
     return `<div class="video-box"><video controls src="${esc(url)}" controlslist="nodownload" disablepictureinpicture oncontextmenu="return false"></video></div>`;
   }
   return `<p>${esc(url)}</p>`;
@@ -147,7 +148,7 @@ function renderBodyMd(text) {
   const closeList = () => { if (listOpen) { html += '</ul>'; listOpen = false; } };
   for (const raw of String(text || '').split('\n')) {
     const line = raw.trim();
-    const vid = /^!video\((https?:\/\/[^)\s]+)\)$/.exec(line);
+    const vid = /^!video\(((?:https?:\/\/|\/api\/assets\/)[^)\s]+)\)$/.exec(line);
     if (vid) { closeList(); html += videoEmbed(vid[1]); continue; }
     const img = /^!\[([^\]]*)\]\(((?:https?:\/\/|\/api\/assets\/)[^)\s]+)\)$/.exec(line);
     if (img) { closeList(); html += `<img src="${esc(img[2])}" alt="${esc(img[1])}">`; continue; }
@@ -1115,6 +1116,12 @@ async function openItemsModal(sessionId, session, allDecks) {
 route(/^#\/sessions$/, async () => {
   if (!isStaff()) { location.hash = '#/decks'; return; }
   const [data, decksData] = await Promise.all([api('GET', '/api/class-sessions'), api('GET', '/api/decks')]);
+  // 관리자 이상은 담당 강사를 배정할 수 있음 → 강사 목록 조회
+  let instructors = [];
+  if (isAdmin()) {
+    instructors = (await api('GET', '/api/users').catch(() => ({ users: [] }))).users
+      .filter((u) => u.role === 'instructor' && u.active);
+  }
   shell('수업 입장 코드', `
     <div class="page-head">
       <div><div class="ph-t">수업 입장 코드</div>
@@ -1125,6 +1132,11 @@ route(/^#\/sessions$/, async () => {
       <form id="cs-form">
         <div class="form-grid">
           <div style="grid-column:span 2"><label>수업명</label><input name="title" required placeholder="예: ○○중학교 1-1반 2차시"></div>
+          ${isAdmin() ? `<div><label>담당 강사</label>
+            <select name="instructor_id">
+              <option value="">나 (${esc(state.me.name)})</option>
+              ${instructors.map((u) => `<option value="${u.id}">${esc(u.name)} (${esc(u.username)})</option>`).join('')}
+            </select></div>` : ''}
           <div><label>유효 시간</label>
             <select name="duration_minutes">
               <option value="60">1시간</option><option value="120" selected>2시간</option>
@@ -1149,7 +1161,7 @@ route(/^#\/sessions$/, async () => {
     <div class="card">
       <div class="tbl-scroll">
         <table class="tbl resp">
-          <thead><tr><th>입장 코드</th><th>수업명</th><th>자료</th><th>참여</th><th>상태</th><th>남은 시간</th><th style="width:300px">관리</th></tr></thead>
+          <thead><tr><th>입장 코드</th><th>수업명</th><th>담당 강사</th><th>자료</th><th>참여</th><th>상태</th><th>남은 시간</th><th style="width:300px">관리</th></tr></thead>
           <tbody>
             ${data.sessions.map((s) => {
               const [label, color] = SESSION_STATUS[s.status];
@@ -1157,6 +1169,7 @@ route(/^#\/sessions$/, async () => {
               return `<tr>
                 <td data-label="입장 코드"><button class="btn btn-soft btn-sm" data-big="${esc(s.code)}" title="크게 보기" style="font-size:16px;letter-spacing:3px;font-weight:800">${esc(s.code)}</button></td>
                 <td data-label="수업명"><div class="cell-main">${esc(s.title)}</div><div class="cell-sub">${esc(s.created_at)}</div></td>
+                <td data-label="담당 강사">${esc(s.instructor_name) || '<span class="muted">-</span>'}</td>
                 <td data-label="자료">${esc(matText)}</td>
                 <td data-label="참여"><b>${s.joined}</b>명</td>
                 <td data-label="상태"><span class="badge ${color}">${label}</span></td>
@@ -1169,7 +1182,7 @@ route(/^#\/sessions$/, async () => {
                   <button class="btn btn-danger btn-sm" data-csdel="${s.id}">${icon('trash')}</button>
                 </div></td>
               </tr>`;
-            }).join('') || '<tr><td colspan="7" class="empty-note">아직 만든 수업이 없습니다. 위에서 코드를 발급해 보세요.</td></tr>'}
+            }).join('') || '<tr><td colspan="8" class="empty-note">아직 만든 수업이 없습니다. 위에서 코드를 발급해 보세요.</td></tr>'}
           </tbody>
         </table>
       </div>
@@ -1183,6 +1196,7 @@ route(/^#\/sessions$/, async () => {
     try {
       const r = await api('POST', '/api/class-sessions', {
         title: f.get('title'), deck_ids: deckIds, duration_minutes: f.get('duration_minutes'),
+        instructor_id: f.get('instructor_id') || null,
       });
       showBigCode(r.code, f.get('title'));
       navigate();
@@ -1775,8 +1789,18 @@ route(/^#\/decks\/(\d+)\/edit$/, async (id) => {
               <button type="button" class="btn btn-ghost btn-sm" id="upload-bg" style="width:100%;justify-content:center">🖼️ 배경 이미지 업로드</button>
               <input type="file" id="bg-file" accept="image/png,image/jpeg,image/webp" style="display:none"></div>
           </div>
-          <div class="mt"><label class="field-label">본문 — <code>## 소제목</code> · <code>- 글머리</code> · <code>**굵게**</code> · <code>![설명](https://이미지주소)</code> · <code>!video(유튜브 또는 mp4 주소)</code></label>
-            <textarea id="s-body"></textarea></div>
+          <div class="mt">
+            <div style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:8px">
+              <label class="field-label" style="margin:0">본문 — <code>## 소제목</code> · <code>- 글머리</code> · <code>**굵게</code> · <code>![설명](이미지주소)</code> · <code>!video(유튜브/mp4)</code></label>
+              <div style="display:flex;gap:6px">
+                <button class="btn btn-ghost btn-sm" id="insert-video" type="button">🎬 동영상 파일</button>
+                <button class="btn btn-ghost btn-sm" id="insert-image" type="button">🖼️ 이미지 파일</button>
+                <input type="file" id="media-file" accept="video/mp4,video/webm,image/png,image/jpeg,image/webp" style="display:none">
+              </div>
+            </div>
+            <textarea id="s-body" class="mt"></textarea>
+            <div class="small muted" style="margin-top:5px">동영상 파일은 커서 위치에 <code>!video(...)</code>로 삽입됩니다. 25MB 이하 권장 — 긴 영상은 유튜브(일부공개) 링크를 쓰세요.</div>
+          </div>
           <div class="mt" style="display:flex;align-items:center;gap:10px">
             <button class="btn btn-primary" id="save-slide">슬라이드 저장</button><span class="msg" id="save-msg"></span></div>
         </div>
@@ -1905,6 +1929,44 @@ route(/^#\/decks\/(\d+)\/edit$/, async (id) => {
       updatePreview();
       toast(`배경 "${r.name}"이(가) 추가되었습니다. 슬라이드를 저장하면 적용됩니다.`);
     } catch (err) { toast(err.message, true); }
+    e.target.value = '';
+  };
+
+  // 동영상/이미지 파일을 본문 커서 위치에 삽입
+  const fileToDataUrl = (file) => new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = () => reject(new Error('파일을 읽을 수 없습니다.'));
+    r.readAsDataURL(file);
+  });
+  const insertAtCursor = (text) => {
+    const ta = $('#s-body');
+    const start = ta.selectionStart ?? ta.value.length;
+    const before = ta.value.slice(0, start);
+    const after = ta.value.slice(ta.selectionEnd ?? start);
+    const nl = before && !before.endsWith('\n') ? '\n' : '';
+    ta.value = `${before}${nl}${text}\n${after}`;
+    updatePreview();
+  };
+  let mediaMode = 'video';
+  $('#insert-video').onclick = () => { mediaMode = 'video'; $('#media-file').accept = 'video/mp4,video/webm'; $('#media-file').click(); };
+  $('#insert-image').onclick = () => { mediaMode = 'image'; $('#media-file').accept = 'image/png,image/jpeg,image/webp'; $('#media-file').click(); };
+  $('#media-file').onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const limitMB = mediaMode === 'video' ? 25 : 8;
+    if (file.size > limitMB * 1024 * 1024) { toast(`파일은 ${limitMB}MB 이하여야 합니다.`, true); e.target.value = ''; return; }
+    const msg = $('#save-msg');
+    msg.textContent = '업로드 중…'; msg.className = 'msg';
+    try {
+      let dataUrl;
+      if (mediaMode === 'image') dataUrl = await compressImage(file, 1600);
+      else dataUrl = await fileToDataUrl(file);
+      const r = await api('POST', `/api/decks/${id}/asset`, { data: dataUrl });
+      insertAtCursor(mediaMode === 'video' ? `!video(/api/assets/${r.id})` : `![](/api/assets/${r.id})`);
+      msg.textContent = `${mediaMode === 'video' ? '동영상' : '이미지'}이 삽입되었습니다. 저장을 눌러 반영하세요.`;
+      msg.className = 'msg ok';
+    } catch (err) { msg.textContent = err.message; msg.className = 'msg err'; }
     e.target.value = '';
   };
 

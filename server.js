@@ -41,7 +41,7 @@ function readBody(req) {
     const chunks = [];
     req.on('data', (c) => {
       size += c.length;
-      if (size > 6 * 1024 * 1024) {
+      if (size > 40 * 1024 * 1024) { // 동영상 파일 업로드 대비 (Vercel 자체는 4.5MB 제한)
         reject(new Error('body too large'));
         req.destroy();
         return;
