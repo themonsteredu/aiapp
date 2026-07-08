@@ -168,15 +168,32 @@ function slideHtml(slide, { watermark } = {}) {
     </div>`;
 }
 
-function watermarkDiv() {
+// 워터마크: 보안 설정의 내용 템플릿({이름}/{아이디}/{시각})·배치·진하기를 반영
+function watermarkLabel() {
   const u = state.me;
   const now = new Date();
   const stamp = `${now.getMonth() + 1}/${now.getDate()} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-  const label = `${u.name} (${u.username}) ${stamp}`;
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="360" height="220">
-    <text x="20" y="120" font-size="15" fill="rgba(128,128,128,0.22)" transform="rotate(-25 180 110)" font-family="sans-serif">${label.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</text>
-  </svg>`;
-  return `<div class="watermark" style="background-image:url('data:image/svg+xml;utf8,${encodeURIComponent(svg)}')"></div>`;
+  const tpl = (state.settings && state.settings.wm_text) || '{이름} ({아이디}) {시각}';
+  return tpl.replace(/\{이름\}/g, u.name).replace(/\{아이디\}/g, u.username).replace(/\{시각\}/g, stamp);
+}
+
+function watermarkDiv() {
+  const st = state.settings || {};
+  const label = watermarkLabel();
+  const opacity = { light: 0.11, medium: 0.22, strong: 0.38 }[st.wm_opacity] || 0.22;
+  const pos = st.wm_position || 'tile';
+  if (pos === 'tile') {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="360" height="220">
+      <text x="20" y="120" font-size="15" fill="rgba(128,128,128,${opacity})" transform="rotate(-25 180 110)" font-family="sans-serif">${label.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</text>
+    </svg>`;
+    return `<div class="watermark" style="background-image:url('data:image/svg+xml;utf8,${encodeURIComponent(svg)}')"></div>`;
+  }
+  const place = {
+    'corner-br': 'right:16px;bottom:12px;',
+    'corner-tl': 'left:16px;top:12px;',
+    'center': 'left:50%;top:50%;transform:translate(-50%,-50%) rotate(-18deg);font-size:1.7em;',
+  }[pos] || 'right:16px;bottom:12px;';
+  return `<div class="watermark"><span style="position:absolute;${place}color:rgba(128,128,128,${opacity});font-weight:700;font-size:.95em;white-space:nowrap;">${esc(label)}</span></div>`;
 }
 
 /* ---------------- 보호 모드 (복제·캡처 억제) ----------------
@@ -930,6 +947,35 @@ route(/^#\/security$/, async () => {
       </div>
       <div class="col-stack">
         <div class="card">
+          <h2>워터마크 표시 설정</h2>
+          <div class="form-grid" style="grid-template-columns:1fr">
+            <div><label>표시 내용</label>
+              <input id="wm-text" value="${esc(state.settings.wm_text || '{이름} ({아이디}) {시각}')}" maxlength="100">
+              <div class="small muted" style="margin-top:5px"><code>{이름}</code> <code>{아이디}</code> <code>{시각}</code>을 조합하세요. 예: <code>{이름} · 무단유출금지</code></div></div>
+          </div>
+          <div class="form-grid mt" style="grid-template-columns:1fr 1fr">
+            <div><label>배치</label>
+              <select id="wm-pos">
+                <option value="tile" ${state.settings.wm_position === 'tile' ? 'selected' : ''}>전체 반복 (추적에 가장 효과적)</option>
+                <option value="corner-br" ${state.settings.wm_position === 'corner-br' ? 'selected' : ''}>우측 하단 1개</option>
+                <option value="corner-tl" ${state.settings.wm_position === 'corner-tl' ? 'selected' : ''}>좌측 상단 1개</option>
+                <option value="center" ${state.settings.wm_position === 'center' ? 'selected' : ''}>중앙 1개 (크게)</option>
+              </select></div>
+            <div><label>진하기</label>
+              <select id="wm-op">
+                <option value="light" ${state.settings.wm_opacity === 'light' ? 'selected' : ''}>연하게</option>
+                <option value="medium" ${state.settings.wm_opacity === 'medium' || !state.settings.wm_opacity ? 'selected' : ''}>보통</option>
+                <option value="strong" ${state.settings.wm_opacity === 'strong' ? 'selected' : ''}>진하게</option>
+              </select></div>
+          </div>
+          <div class="mt"><div class="field-label">미리보기</div><div id="wm-preview" style="max-width:430px"></div></div>
+          <div class="mt"><button class="btn btn-primary btn-sm" id="wm-save">워터마크 설정 저장</button></div>
+          <p class="small muted mt" style="line-height:1.7">
+            워터마크를 아예 끄려면 왼쪽 "워터마크 추적" 토글을 사용하세요.<br>
+            ※ 배치를 모서리 1개로 바꾸면 화면은 깔끔해지지만 잘라내기 쉬워져 <b>유출 추적 효과는 약해집니다</b>. 보호가 중요하면 "전체 반복"을 권장합니다.
+          </p>
+        </div>
+        <div class="card">
           <h2>IP 허용 목록</h2>
           <div class="small muted" style="margin-bottom:10px;line-height:1.7">
             IP 제한이 켜져 있을 때 학생 로그인이 허용되는 IP를 지정합니다.<br>
@@ -953,6 +999,32 @@ route(/^#\/security$/, async () => {
     const data2 = await api('PATCH', '/api/settings', { ip_allowlist: document.getElementById('ip-allowlist').value });
     state.settings = data2.settings;
     toast('IP 허용 목록이 저장되었습니다.');
+  };
+
+  // 워터마크 설정: 입력값을 임시 적용해 실시간 미리보기
+  const wmPreview = () => {
+    const saved = { ...state.settings };
+    state.settings.wm_text = document.getElementById('wm-text').value;
+    state.settings.wm_position = document.getElementById('wm-pos').value;
+    state.settings.wm_opacity = document.getElementById('wm-op').value;
+    document.getElementById('wm-preview').innerHTML = slideHtml(
+      { title: '미리보기 슬라이드', body: '- 워터마크가 이렇게 표시됩니다', bg: 'theme-white', align: 'left' },
+      { watermark: true }
+    );
+    state.settings = saved;
+  };
+  for (const id of ['wm-text', 'wm-pos', 'wm-op']) {
+    document.getElementById(id).addEventListener('input', wmPreview);
+  }
+  wmPreview();
+  document.getElementById('wm-save').onclick = async () => {
+    const data3 = await api('PATCH', '/api/settings', {
+      wm_text: document.getElementById('wm-text').value,
+      wm_position: document.getElementById('wm-pos').value,
+      wm_opacity: document.getElementById('wm-op').value,
+    });
+    state.settings = data3.settings;
+    toast('워터마크 설정이 저장되었습니다.');
   };
 });
 
