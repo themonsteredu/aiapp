@@ -473,24 +473,89 @@ table.matrix { width: 100%; border-collapse: separate; border-spacing: 5px; min-
 /* ============ 슬라이드 렌더링 ============ */
 .slide-frame {
   aspect-ratio: 16 / 9; border-radius: 14px; overflow: hidden; position: relative;
-  display: flex; flex-direction: column; justify-content: center; padding: 6%;
+  display: flex; flex-direction: column; justify-content: center; padding: 6.5% 7%;
   border: 1px solid var(--line); box-shadow: var(--shadow-sm);
+  letter-spacing: -0.015em;
 }
 .slide-frame.align-center { text-align: center; align-items: center; }
-.slide-frame h1 { font-size: 2.2em; margin-bottom: .5em; line-height: 1.25; letter-spacing: -.02em; }
-.slide-frame h2 { font-size: 1.4em; margin: .6em 0 .4em; }
-.slide-frame p { font-size: 1.05em; line-height: 1.7; margin: .3em 0; }
-.slide-frame ul, .slide-frame ol { margin: .4em 0 .4em 1.4em; }
-.slide-frame li { font-size: 1.05em; line-height: 1.8; }
-.slide-frame img { max-width: 70%; max-height: 40%; border-radius: 10px; margin: .5em 0; }
-.slide-frame code { background: rgba(127, 127, 127, .2); padding: 1px 6px; border-radius: 5px; }
 
-.theme-navy { background: linear-gradient(135deg, #0b1836, #1e3a8a); color: #fff; }
-.theme-white { background: #fff; color: #1c2740; }
-.theme-mint { background: linear-gradient(135deg, #ccfbf1, #99f6e4); color: #134e4a; }
-.theme-sunset { background: linear-gradient(135deg, #7c2d12, #ea580c); color: #fff; }
-.theme-violet { background: linear-gradient(135deg, #4c1d95, #7c3aed); color: #fff; }
-.theme-dark { background: #111827; color: #f9fafb; }
+.slide-frame h1 {
+  font-size: 2.35em; font-weight: 800; margin-bottom: .45em; line-height: 1.18; letter-spacing: -.03em;
+}
+.slide-frame h1::after {
+  content: ''; display: block; width: 1.5em; height: .13em; border-radius: 99px;
+  background: var(--sl-accent); margin-top: .32em;
+}
+.slide-frame.align-center h1::after { margin-left: auto; margin-right: auto; }
+.slide-frame h2 {
+  font-size: 1.32em; font-weight: 800; margin: .7em 0 .35em; color: var(--sl-accent);
+  letter-spacing: -.01em;
+}
+.slide-frame p { font-size: 1.06em; line-height: 1.75; margin: .3em 0; opacity: .94; }
+.slide-frame ul, .slide-frame ol { margin: .45em 0 .45em 1.35em; }
+.slide-frame li { font-size: 1.06em; line-height: 1.9; opacity: .94; }
+.slide-frame li::marker { color: var(--sl-accent); font-weight: 800; }
+.slide-frame strong { color: var(--sl-strong, inherit); }
+.slide-frame img {
+  max-width: 72%; max-height: 42%; border-radius: 12px; margin: .5em 0;
+  box-shadow: 0 14px 34px -14px rgba(0, 0, 0, .45);
+}
+.slide-frame code {
+  background: rgba(127, 127, 127, .18); padding: 1px 8px; border-radius: 6px;
+  font-family: ui-monospace, monospace; font-size: .92em;
+}
+/* 은은한 코너 광원 장식 */
+.slide-frame::before {
+  content: ''; position: absolute; width: 42%; aspect-ratio: 1; border-radius: 50%;
+  right: -14%; top: -22%; background: radial-gradient(circle, var(--sl-glow), transparent 68%);
+  pointer-events: none;
+}
+
+/* 테마: 배경 레이어드 그라데이션 + 포인트 컬러 */
+.theme-navy {
+  color: #f2f6ff; --sl-accent: #56ccf2; --sl-strong: #9bdcff; --sl-glow: rgba(86, 204, 242, .22);
+  background:
+    radial-gradient(120% 90% at -10% 115%, rgba(124, 58, 237, .30), transparent 55%),
+    linear-gradient(150deg, #0a1230 0%, #14295e 55%, #1c3d80 100%);
+}
+.theme-white {
+  color: #17223f; --sl-accent: #2563eb; --sl-strong: #1d4ed8; --sl-glow: rgba(37, 99, 235, .10);
+  background:
+    radial-gradient(110% 85% at -8% 112%, rgba(13, 148, 136, .07), transparent 55%),
+    linear-gradient(160deg, #ffffff 0%, #f2f6fd 100%);
+}
+.theme-mint {
+  color: #0b3a34; --sl-accent: #0d9488; --sl-strong: #0f766e; --sl-glow: rgba(13, 148, 136, .16);
+  background:
+    radial-gradient(110% 85% at -8% 112%, rgba(59, 130, 246, .08), transparent 55%),
+    linear-gradient(150deg, #f2fdf9 0%, #d3f6ea 60%, #b9efe0 100%);
+}
+.theme-sunset {
+  color: #fff5ec; --sl-accent: #ffb45e; --sl-strong: #ffd29b; --sl-glow: rgba(255, 180, 94, .25);
+  background:
+    radial-gradient(120% 90% at -10% 115%, rgba(124, 45, 90, .55), transparent 60%),
+    linear-gradient(150deg, #38102e 0%, #7c2d3e 55%, #bf4f3a 100%);
+}
+.theme-violet {
+  color: #f6f2ff; --sl-accent: #c4b5fd; --sl-strong: #ddd2ff; --sl-glow: rgba(196, 181, 253, .24);
+  background:
+    radial-gradient(120% 90% at -10% 115%, rgba(37, 99, 235, .30), transparent 58%),
+    linear-gradient(150deg, #201040 0%, #46209a 55%, #6a2fd0 100%);
+}
+.theme-dark {
+  color: #f4f5f7; --sl-accent: #fbbf24; --sl-strong: #fde08a; --sl-glow: rgba(251, 191, 36, .13);
+  background:
+    radial-gradient(110% 85% at -8% 112%, rgba(59, 130, 246, .10), transparent 55%),
+    linear-gradient(160deg, #0b0e15 0%, #1a2233 100%);
+}
+
+/* 이미지 전용 슬라이드 (PPT 변환): 여백 없이 원본 그대로 */
+.slide-frame.img-slide { padding: 0; background: #0b0e15; }
+.slide-frame.img-slide::before { display: none; }
+.slide-frame.img-slide img.full {
+  width: 100%; height: 100%; max-width: none; max-height: none;
+  object-fit: contain; margin: 0; border-radius: 0; box-shadow: none;
+}
 
 /* ============ 프레젠테이션 ============ */
 .present-overlay { position: fixed; inset: 0; z-index: 100; background: #000; display: flex; flex-direction: column; }

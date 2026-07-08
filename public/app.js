@@ -148,7 +148,7 @@ function renderBodyMd(text) {
     const line = raw.trim();
     const vid = /^!video\((https?:\/\/[^)\s]+)\)$/.exec(line);
     if (vid) { closeList(); html += videoEmbed(vid[1]); continue; }
-    const img = /^!\[([^\]]*)\]\((https?:\/\/[^)\s]+)\)$/.exec(line);
+    const img = /^!\[([^\]]*)\]\(((?:https?:\/\/|\/api\/assets\/)[^)\s]+)\)$/.exec(line);
     if (img) { closeList(); html += `<img src="${esc(img[2])}" alt="${esc(img[1])}">`; continue; }
     if (line.startsWith('## ')) { closeList(); html += `<h2>${inline(line.slice(3))}</h2>`; continue; }
     if (line.startsWith('- ')) { if (!listOpen) { html += '<ul>'; listOpen = true; } html += `<li>${inline(line.slice(2))}</li>`; continue; }
@@ -160,6 +160,15 @@ function renderBodyMd(text) {
 }
 
 function slideHtml(slide, { watermark } = {}) {
+  // 이미지 한 장만 있는 슬라이드(PPT 변환)는 여백 없이 원본 그대로 표시
+  const only = /^!\[[^\]]*\]\(((?:https?:\/\/|\/api\/assets\/)[^)\s]+)\)$/.exec(String(slide.body || '').trim());
+  if (only && !String(slide.title || '').trim()) {
+    return `
+      <div class="slide-frame img-slide">
+        <img class="full" src="${esc(only[1])}" alt="슬라이드">
+        ${watermark ? watermarkDiv() : ''}
+      </div>`;
+  }
   return `
     <div class="slide-frame ${esc(slide.bg)} ${slide.align === 'center' ? 'align-center' : ''}">
       ${slide.title ? `<h1>${esc(slide.title)}</h1>` : ''}
@@ -1538,6 +1547,15 @@ route(/^#\/decks\/(\d+)\/edit$/, async (id) => {
           <button class="btn btn-ghost btn-sm" id="mv-dn">↓</button>
           <button class="btn btn-danger btn-sm" id="del-slide">${icon('trash')}</button>
         </div>
+        <div class="mt">
+          <button class="btn btn-ghost btn-sm" id="import-ppt" style="width:100%;justify-content:center">📥 PPT 이미지 가져오기</button>
+          <input type="file" id="import-files" accept="image/png,image/jpeg,image/webp" multiple style="display:none">
+          <div class="small muted" style="margin-top:7px;line-height:1.6">
+            PowerPoint에서 <b>파일 → 내보내기 → PNG/JPEG</b>로 저장한 슬라이드 이미지들을
+            한꺼번에 선택하면 순서대로 추가됩니다. (디자인 원본 그대로)
+          </div>
+          <div class="msg" id="import-msg"></div>
+        </div>
       </div>
       <div class="col-stack">
         <div class="card">
@@ -1627,6 +1645,48 @@ route(/^#\/decks\/(\d+)\/edit$/, async (id) => {
   };
   $('#mv-up').onclick = () => move(-1);
   $('#mv-dn').onclick = () => move(1);
+
+  // ---- PPT 이미지 가져오기: 클라이언트에서 리사이즈·압축 후 순서대로 업로드 ----
+  const compressImage = (file) => new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const MAX_W = 1600;
+      const scale = Math.min(1, MAX_W / img.width);
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(img.src);
+      resolve(canvas.toDataURL('image/jpeg', 0.86));
+    };
+    img.onerror = () => reject(new Error(`${file.name} 파일을 읽을 수 없습니다.`));
+    img.src = URL.createObjectURL(file);
+  });
+  $('#import-ppt').onclick = () => $('#import-files').click();
+  $('#import-files').onchange = async (e) => {
+    // 파일명 자연 정렬 (슬라이드1, 슬라이드2, … 슬라이드10 순서 유지)
+    const files = [...e.target.files].sort((a, b) => a.name.localeCompare(b.name, 'ko', { numeric: true }));
+    if (!files.length) return;
+    const msg = $('#import-msg');
+    try {
+      for (let i = 0; i < files.length; i++) {
+        msg.textContent = `업로드 중… ${i + 1} / ${files.length} (${files[i].name})`;
+        msg.className = 'msg';
+        const dataUrl = await compressImage(files[i]);
+        await api('POST', `/api/decks/${id}/import-image`, { data: dataUrl });
+      }
+      msg.textContent = `${files.length}장을 가져왔습니다.`;
+      msg.className = 'msg ok';
+      const fresh = await api('GET', `/api/decks/${id}`);
+      slides = fresh.slides;
+      sel = slides.length - 1;
+      refreshList(); loadForm();
+    } catch (err) {
+      msg.textContent = err.message;
+      msg.className = 'msg err';
+    }
+    e.target.value = '';
+  };
 });
 
 /* ---------------- 사용자 관리 (권한/강사/학생 공용 엔진) ---------------- */

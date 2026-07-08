@@ -41,7 +41,7 @@ function readBody(req) {
     const chunks = [];
     req.on('data', (c) => {
       size += c.length;
-      if (size > 2 * 1024 * 1024) {
+      if (size > 6 * 1024 * 1024) {
         reject(new Error('body too large'));
         req.destroy();
         return;
