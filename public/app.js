@@ -347,6 +347,8 @@ const Live = {
         return;
       }
       if (d.live && onLive && window.__liveUpdate) window.__liveUpdate(d.live);
+      // 라이브가 아닐 때는 자료 잠금/해제 변화를 감지해 목록 갱신
+      if (!d.live && window.__deckRefresh) window.__deckRefresh();
     } catch {}
   },
 };
@@ -360,6 +362,7 @@ let presentExit = null; // 발표 모드 정리 함수 (라우팅 이동 시 잔
 async function navigate() {
   if (presentExit) presentExit();
   window.__liveUpdate = null;
+  window.__deckRefresh = null;
   document.body.classList.remove('allow-print'); // 내보내기 화면 밖에서는 인쇄 차단 유지
   const hash = location.hash || '#/';
   if (!state.me && hash !== '#/login') { location.hash = '#/login'; return; }
@@ -1046,6 +1049,69 @@ route(/^#\/security$/, async () => {
 /* ---------------- 수업 입장 코드 ---------------- */
 const SESSION_STATUS = { live: ['진행 중', 'green'], expired: ['시간 만료', 'gray'], ended: ['종료됨', 'gray'] };
 
+// 수업 자료 관리 모달: 자료 추가/삭제 + 학생 공개 토글 + 잠금/해제
+async function openItemsModal(sessionId, session, allDecks) {
+  const kindIcon = (k) => (k === 'link' || k === 'html' ? '🧪' : k === 'slides' ? '📑' : '📄');
+  const back = openModal('<div class="m-sub">불러오는 중…</div>');
+  const modal = back.querySelector('.modal');
+  const rerender = async () => {
+    const { items } = await api('GET', `/api/class-sessions/${sessionId}/items`);
+    const usedIds = new Set(items.map((i) => i.deck_id));
+    const addable = allDecks.filter((d) => !usedIds.has(d.id));
+    modal.innerHTML = `
+      <h3>자료 관리 — ${esc(session ? session.title : '수업')}</h3>
+      <div class="m-sub">각 자료를 <b>학생 공개</b>할지, 지금 <b>열지(잠금 해제)</b>를 조절합니다. PPT·동영상은 공개를 꺼서 강사 발표 전용으로, 웹앱은 잠가두었다가 활동 시간에 여세요.</div>
+      <div class="item-list">
+        ${items.map((it) => `
+          <div class="item-row">
+            <div class="ir-main"><span class="ir-ic">${kindIcon(it.kind)}</span><span class="ir-title">${esc(it.deck_title)}</span></div>
+            <label class="ir-toggle" title="학생 목록에 노출">
+              <input type="checkbox" data-vis="${it.id}" ${it.student_visible ? 'checked' : ''}><span>학생 공개</span>
+            </label>
+            <button class="btn btn-sm ${it.unlocked ? 'btn-soft' : 'btn-primary'}" data-lock="${it.id}" data-to="${it.unlocked ? 0 : 1}" ${it.student_visible ? '' : 'disabled title="학생 비공개 자료"'}>
+              ${it.unlocked ? '🔓 열림' : '🔒 잠금'}
+            </button>
+            <button class="btn btn-danger btn-sm" data-rm="${it.id}">${icon('trash')}</button>
+          </div>`).join('') || '<div class="empty-note">담긴 자료가 없습니다. 아래에서 추가하세요.</div>'}
+      </div>
+      <div class="mt" style="display:flex;gap:8px">
+        <select id="add-deck" class="input" style="flex:1">
+          <option value="">+ 자료 추가…</option>
+          ${addable.map((d) => `<option value="${d.id}">${kindIcon(d.kind)} ${esc(d.title)}</option>`).join('')}
+        </select>
+        <button class="btn btn-ghost" id="add-btn">추가</button>
+      </div>
+      <div class="m-actions"><button class="btn btn-primary" id="items-close">완료</button></div>`;
+    modal.querySelector('#items-close').onclick = () => back.remove();
+    modal.querySelector('#add-btn').onclick = async () => {
+      const v = modal.querySelector('#add-deck').value;
+      if (!v) return;
+      try { await api('POST', `/api/class-sessions/${sessionId}/items`, { deck_id: Number(v) }); await rerender(); }
+      catch (err) { toast(err.message, true); }
+    };
+    modal.querySelectorAll('[data-vis]').forEach((el) => {
+      el.onchange = async () => {
+        await api('PATCH', `/api/class-sessions/${sessionId}/items/${el.dataset.vis}`, { student_visible: el.checked });
+        await rerender();
+      };
+    });
+    modal.querySelectorAll('[data-lock]').forEach((bt) => {
+      bt.onclick = async () => {
+        await api('PATCH', `/api/class-sessions/${sessionId}/items/${bt.dataset.lock}`, { unlocked: bt.dataset.to === '1' });
+        toast(bt.dataset.to === '1' ? '자료를 열었습니다. 학생 화면에 곧 나타납니다.' : '자료를 잠갔습니다.');
+        await rerender();
+      };
+    });
+    modal.querySelectorAll('[data-rm]').forEach((bt) => {
+      bt.onclick = async () => {
+        await api('DELETE', `/api/class-sessions/${sessionId}/items/${bt.dataset.rm}`);
+        await rerender();
+      };
+    });
+  };
+  await rerender();
+}
+
 route(/^#\/sessions$/, async () => {
   if (!isStaff()) { location.hash = '#/decks'; return; }
   const [data, decksData] = await Promise.all([api('GET', '/api/class-sessions'), api('GET', '/api/decks')]);
@@ -1056,38 +1122,50 @@ route(/^#\/sessions$/, async () => {
     </div>
     <div class="card" style="margin-bottom:18px">
       <h2>새 수업 만들기</h2>
-      <form id="cs-form" class="form-grid">
-        <div style="grid-column:span 2"><label>수업명</label><input name="title" required placeholder="예: ○○중학교 1-1반 AI 진로탐색"></div>
-        <div><label>수업에서 사용할 웹앱</label>
-          <select name="deck_id"><option value="">공개 중인 전체 웹앱</option>
-            ${decksData.decks.map((d) => `<option value="${d.id}">${esc(d.title)}</option>`).join('')}</select></div>
-        <div><label>유효 시간</label>
-          <select name="duration_minutes">
-            <option value="60">1시간</option><option value="120" selected>2시간</option>
-            <option value="240">4시간</option><option value="480">8시간</option>
-          </select></div>
-        <div><button class="btn btn-primary" type="submit" style="width:100%;justify-content:center">${icon('plus')} 코드 발급</button></div>
+      <form id="cs-form">
+        <div class="form-grid">
+          <div style="grid-column:span 2"><label>수업명</label><input name="title" required placeholder="예: ○○중학교 1-1반 2차시"></div>
+          <div><label>유효 시간</label>
+            <select name="duration_minutes">
+              <option value="60">1시간</option><option value="120" selected>2시간</option>
+              <option value="240">4시간</option><option value="480">8시간</option>
+            </select></div>
+          <div><button class="btn btn-primary" type="submit" style="width:100%;justify-content:center">${icon('plus')} 코드 발급</button></div>
+        </div>
+        <div class="mt">
+          <label class="field-label">수업에 담을 자료 (선택) — 여러 개를 담고, 학생 공개·잠금은 아래 목록의 "자료 관리"에서 조절합니다</label>
+          <div class="pick-grid">
+            ${decksData.decks.map((d) => `
+              <label class="pick-item">
+                <input type="checkbox" name="deck_ids" value="${d.id}">
+                <span>${d.kind === 'link' || d.kind === 'html' ? '🧪' : d.kind === 'slides' ? '📑' : '📄'} ${esc(d.title)}</span>
+              </label>`).join('') || '<span class="small muted">먼저 웹앱/PPT를 만들어 주세요.</span>'}
+          </div>
+          <div class="small muted" style="margin-top:6px">아무것도 선택하지 않으면 공개 중인 전체 자료가 열립니다.</div>
+        </div>
       </form>
       <div class="msg" id="cs-msg"></div>
     </div>
     <div class="card">
       <div class="tbl-scroll">
         <table class="tbl resp">
-          <thead><tr><th>입장 코드</th><th>수업명</th><th>웹앱</th><th>참여</th><th>상태</th><th>남은 시간</th><th style="width:220px">관리</th></tr></thead>
+          <thead><tr><th>입장 코드</th><th>수업명</th><th>자료</th><th>참여</th><th>상태</th><th>남은 시간</th><th style="width:300px">관리</th></tr></thead>
           <tbody>
             ${data.sessions.map((s) => {
               const [label, color] = SESSION_STATUS[s.status];
+              const matText = s.item_count > 0 ? `자료 ${s.item_count}개` : (s.deck_title || '전체 공개 웹앱');
               return `<tr>
                 <td data-label="입장 코드"><button class="btn btn-soft btn-sm" data-big="${esc(s.code)}" title="크게 보기" style="font-size:16px;letter-spacing:3px;font-weight:800">${esc(s.code)}</button></td>
                 <td data-label="수업명"><div class="cell-main">${esc(s.title)}</div><div class="cell-sub">${esc(s.created_at)}</div></td>
-                <td data-label="웹앱">${esc(s.deck_title) || '<span class="muted">전체 공개 웹앱</span>'}</td>
+                <td data-label="자료">${esc(matText)}</td>
                 <td data-label="참여"><b>${s.joined}</b>명</td>
                 <td data-label="상태"><span class="badge ${color}">${label}</span></td>
                 <td data-label="남은 시간">${s.status === 'live' ? `${Math.floor(s.remainingMinutes / 60)}시간 ${s.remainingMinutes % 60}분` : '-'}</td>
                 <td><div class="row-actions">
+                  ${s.status !== 'ended' ? `<button class="btn btn-ghost btn-sm" data-items="${s.id}">${icon('folder')} 자료 관리</button>` : ''}
                   ${s.status === 'live' ? `
-                    <button class="btn btn-primary btn-sm" data-golive="${s.id}">🔴 라이브 발표</button>
-                    <button class="btn btn-ghost btn-sm" data-end="${s.id}">수업 종료</button>` : ''}
+                    <button class="btn btn-primary btn-sm" data-golive="${s.id}">🔴 라이브</button>
+                    <button class="btn btn-ghost btn-sm" data-end="${s.id}">종료</button>` : ''}
                   <button class="btn btn-danger btn-sm" data-csdel="${s.id}">${icon('trash')}</button>
                 </div></td>
               </tr>`;
@@ -1101,14 +1179,20 @@ route(/^#\/sessions$/, async () => {
     e.preventDefault();
     const f = new FormData(e.target);
     const msg = document.getElementById('cs-msg');
+    const deckIds = f.getAll('deck_ids').map(Number);
     try {
       const r = await api('POST', '/api/class-sessions', {
-        title: f.get('title'), deck_id: f.get('deck_id') || null, duration_minutes: f.get('duration_minutes'),
+        title: f.get('title'), deck_ids: deckIds, duration_minutes: f.get('duration_minutes'),
       });
       showBigCode(r.code, f.get('title'));
       navigate();
     } catch (err) { msg.textContent = err.message; msg.className = 'msg err'; }
   };
+  // 자료 관리 모달
+  document.querySelectorAll('[data-items]').forEach((b) => {
+    b.onclick = () => openItemsModal(Number(b.dataset.items),
+      data.sessions.find((s) => s.id === Number(b.dataset.items)), decksData.decks);
+  });
   const showBigCode = (code, title) => {
     openModal(`
       <h3 style="text-align:center">${esc(title || '수업 입장 코드')}</h3>
@@ -1171,6 +1255,17 @@ let deckSubjectTab = 'all';
 route(/^#\/decks$/, async () => {
   const data = await api('GET', '/api/decks');
   if (state.me.role === 'student') {
+    // 게스트: 강사가 자료를 열거나 잠그면 화면이 몇 초 내로 갱신되도록 폴링 훅 등록
+    if (state.me.isGuest) {
+      window.__deckState = JSON.stringify(data.decks.map((d) => [d.id, d.accessibleNow]));
+      window.__deckRefresh = async () => {
+        try {
+          const fresh = await api('GET', '/api/decks');
+          const sig = JSON.stringify(fresh.decks.map((d) => [d.id, d.accessibleNow]));
+          if (sig !== window.__deckState && location.hash === '#/decks') navigate();
+        } catch {}
+      };
+    }
     // 과목(폴더)별로 묶어서 표시
     const groups = {};
     data.decks.forEach((d) => { (groups[d.subject || ''] ||= []).push(d); });
@@ -1183,7 +1278,9 @@ route(/^#\/decks$/, async () => {
             <span class="small muted">${d.kind !== 'slides' ? '체험형 웹앱' : `슬라이드 ${d.slideCount}장`} · ${esc(d.ownerName)} 강사</span>
             ${d.accessibleNow
               ? `<a href="#/view/${d.id}" class="btn btn-primary btn-sm">${icon('play')} ${d.kind !== 'slides' ? '체험 시작' : '학습 시작'}</a>`
-              : '<span class="badge red">차단 시간</span>'}
+              : d.locked
+                ? '<span class="badge amber">🔒 잠김 — 선생님 대기</span>'
+                : '<span class="badge red">차단 시간</span>'}
           </div>
         </div>
       </div>`;

@@ -711,3 +711,27 @@ table.matrix { width: 100%; border-collapse: separate; border-spacing: 5px; min-
     border-radius: 0; border: none; box-shadow: none; width: 100%;
   }
 }
+
+/* ============ 수업 자료 선택 / 관리 ============ */
+.pick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+.pick-item {
+  display: flex; align-items: center; gap: 9px; border: 1px solid var(--line-strong);
+  border-radius: 10px; padding: 9px 12px; cursor: pointer; font-size: 13px; font-weight: 600;
+  background: #fff; transition: border-color .1s, background .1s;
+}
+.pick-item:hover { border-color: var(--blue-500); }
+.pick-item:has(input:checked) { border-color: var(--blue-500); background: var(--blue-50); }
+.pick-item input { width: 16px; height: 16px; accent-color: var(--blue-600); }
+.pick-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.item-list { display: flex; flex-direction: column; gap: 8px; margin: 6px 0 4px; }
+.item-row {
+  display: flex; align-items: center; gap: 10px; border: 1px solid var(--line);
+  border-radius: 11px; padding: 10px 12px; background: #fff;
+}
+.item-row .ir-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 9px; }
+.item-row .ir-ic { font-size: 17px; }
+.item-row .ir-title { font-weight: 700; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ir-toggle { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--text-2); white-space: nowrap; cursor: pointer; }
+.ir-toggle input { width: 15px; height: 15px; accent-color: var(--blue-600); }
+.item-row .btn[disabled] { opacity: .45; cursor: not-allowed; }
