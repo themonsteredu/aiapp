@@ -8,10 +8,11 @@
 const $app = document.getElementById('app');
 
 const state = {
-  me: null,        // 로그인 사용자
-  access: null,    // 시간제 접근 상태
-  settings: null,  // 보안 설정
-  dash: null,      // 대시보드 캐시 (알림용)
+  me: null,           // 로그인 사용자
+  access: null,       // 시간제 접근 상태
+  settings: null,     // 보안 설정
+  classSession: null, // 게스트(입장 코드) 수업 정보
+  dash: null,         // 대시보드 캐시 (알림용)
   dashAt: 0,
 };
 
@@ -64,6 +65,8 @@ const ICONS = {
   briefcase: '<rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>',
   monitor: '<rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>',
   x: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
+  hash: '<line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/>',
+  folder: '<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>',
 };
 function icon(name) {
   return `<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name] || ''}</svg>`;
@@ -327,6 +330,8 @@ const LOG_LABELS = {
   schedule_created: ['시간표 추가', 'blue'], schedule_updated: ['시간표 수정', 'gray'], schedule_deleted: ['시간표 삭제', 'gray'],
   deck_created: ['웹앱 생성', 'blue'], deck_updated: ['웹앱 수정', 'gray'], deck_deleted: ['웹앱 삭제', 'red'],
   settings_updated: ['보안 설정 변경', 'amber'],
+  guest_joined: ['수업 입장 (코드)', 'green'], join_failed: ['입장 코드 오류', 'amber'],
+  session_created: ['수업 코드 생성', 'blue'], session_ended: ['수업 종료', 'gray'], session_deleted: ['수업 삭제', 'gray'],
 };
 function browserOf(ua) {
   if (!ua) return '-';
@@ -355,6 +360,9 @@ function logListHtml(logs) {
 /* ---------------- 셸 (사이드바 + 헤더) ---------------- */
 function menuGroups() {
   const r = state.me.role;
+  if (state.me.isGuest) {
+    return [['수업', [['#/decks', 'decks', '수업 자료']]]];
+  }
   if (r === 'student') {
     return [['메뉴', [
       ['#/decks', 'decks', '내 학습 자료'],
@@ -367,6 +375,7 @@ function menuGroups() {
       ['메인', [
         ['#/', 'dashboard', '대시보드'],
         ['#/decks', 'decks', '웹앱/PPT 관리'],
+        ['#/sessions', 'hash', '수업 입장 코드'],
       ]],
       ['사용자', [['#/students', 'users', '학생 관리']]],
       ['운영', [
@@ -379,6 +388,7 @@ function menuGroups() {
     ['메인', [
       ['#/', 'dashboard', '대시보드'],
       ['#/decks', 'decks', '웹앱/PPT 관리'],
+      ['#/sessions', 'hash', '수업 입장 코드'],
     ]],
     ['사용자', [
       ['#/permissions', 'shield', '권한 관리'],
@@ -416,9 +426,15 @@ function shell(title, contentHtml) {
           `).join('')}
         </nav>
         <div class="side-foot">
-          ${icon('clock')} ${acc ? `${esc(acc.now.dayName)}요일 ${esc(acc.now.time)}` : '-'}<br>
-          접근 상태: ${acc && acc.allowed ? '<span class="ok">허용 시간</span>' : '<span class="bad">차단 시간</span>'}<br>
-          <span class="tz">${acc ? esc(acc.now.timezone) : ''}</span>
+          ${state.me.isGuest && state.classSession ? `
+            ${icon('hash')} 수업: <b>${esc(state.classSession.title)}</b><br>
+            종료: ${esc(new Date(state.classSession.expiresAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }))}<br>
+            <span class="tz">수업 종료 시 자동 로그아웃됩니다</span>
+          ` : `
+            ${icon('clock')} ${acc ? `${esc(acc.now.dayName)}요일 ${esc(acc.now.time)}` : '-'}<br>
+            접근 상태: ${acc && acc.allowed ? '<span class="ok">허용 시간</span>' : '<span class="bad">차단 시간</span>'}<br>
+            <span class="tz">${acc ? esc(acc.now.timezone) : ''}</span>
+          `}
         </div>
       </aside>
       <div class="main">
@@ -515,6 +531,7 @@ async function fetchDash(force = false) {
 
 /* ---------------- 로그인 ---------------- */
 route(/^#\/login$/, () => {
+  let tab = 'join'; // 'join' (수업 입장 코드) | 'account' (계정 로그인)
   let otpMode = null; // null | 'otp' | 'setup'
   let secret = '';
   const render = (errMsg = '') => {
@@ -524,7 +541,18 @@ route(/^#\/login$/, () => {
           <div class="lmark">AI</div>
           <div class="logo">AI 온라인 플랫폼 관리자</div>
           <div class="sub">진로교육 웹앱 · 권한 및 접근 관리 시스템</div>
-          ${otpMode === null ? `
+          <div class="tabs" style="margin-bottom:4px">
+            <button type="button" data-ltab="join" class="${tab === 'join' ? 'active' : ''}">수업 참여</button>
+            <button type="button" data-ltab="account" class="${tab === 'account' ? 'active' : ''}">계정 로그인</button>
+          </div>
+          ${tab === 'join' ? `
+            <label>입장 코드 (6자리)</label>
+            <input class="input" name="code" inputmode="numeric" maxlength="6" placeholder="000000" required
+              style="font-size:22px;letter-spacing:8px;text-align:center;font-weight:800">
+            <label>이름</label>
+            <input class="input" name="name" placeholder="예: 김학생" maxlength="30" required>
+            <div class="small muted" style="margin-top:10px;line-height:1.6">선생님이 화면에 보여주는 6자리 코드를 입력하세요.<br>계정·비밀번호 없이 이번 수업 동안만 이용됩니다.</div>
+          ` : otpMode === null ? `
             <label>아이디</label>
             <input class="input" name="username" autocomplete="username" required>
             <label>비밀번호</label>
@@ -539,28 +567,40 @@ route(/^#\/login$/, () => {
             ` : '<label>2단계 인증 코드 (6자리)</label>'}
             <input class="input" name="otp" inputmode="numeric" maxlength="6" placeholder="000000" required autofocus>
           `}
-          <button class="btn btn-primary" type="submit">${otpMode ? '인증하기' : '로그인'}</button>
+          <button class="btn btn-primary" type="submit">${tab === 'join' ? '수업 입장하기' : (otpMode ? '인증하기' : '로그인')}</button>
           <div class="login-error">${esc(errMsg)}</div>
         </form>
       </div>`;
     document.getElementById('login-form').onsubmit = onSubmit;
+    document.querySelectorAll('[data-ltab]').forEach((b) => {
+      b.onclick = () => { tab = b.dataset.ltab; otpMode = null; render(); };
+    });
   };
   const loginCreds = { username: '', password: '' };
+  const enter = (data) => {
+    state.me = data.user;
+    state.access = data.access;
+    state.settings = data.settings;
+    state.classSession = data.classSession || null;
+    state.dash = null;
+    location.hash = data.user.mustChangePassword ? '#/password' : (level(data.user.role) >= 1 ? '#/' : '#/decks');
+  };
   async function onSubmit(e) {
     e.preventDefault();
     const f = new FormData(e.target);
+    if (tab === 'join') {
+      try {
+        enter(await api('POST', '/api/join', { code: f.get('code'), name: f.get('name') }));
+      } catch (err) { render(err.message); }
+      return;
+    }
     loginCreds.username = f.get('username');
     loginCreds.password = f.get('password');
     try {
-      const data = await api('POST', '/api/login', {
+      enter(await api('POST', '/api/login', {
         username: loginCreds.username, password: loginCreds.password,
         otp: f.get('otp') || undefined,
-      });
-      state.me = data.user;
-      state.access = data.access;
-      state.settings = data.settings;
-      state.dash = null;
-      location.hash = data.user.mustChangePassword ? '#/password' : (level(data.user.role) >= 1 ? '#/' : '#/decks');
+      }));
     } catch (err) {
       if (err.data?.needOtpSetup) { otpMode = 'setup'; secret = err.data.secret; render(f.get('otp') ? err.message : ''); }
       else if (err.data?.needOtp) { otpMode = 'otp'; render(f.get('otp') ? err.message : ''); }
@@ -590,6 +630,7 @@ async function refreshMe() {
     state.me = data.user;
     state.access = data.access;
     state.settings = data.settings;
+    state.classSession = data.classSession || null;
     navigate();
   } catch {}
 }
@@ -862,41 +903,153 @@ route(/^#\/security$/, async () => {
   };
 });
 
-/* ---------------- 웹앱(덱) 관리 ---------------- */
-route(/^#\/decks$/, async () => {
-  const data = await api('GET', '/api/decks');
-  if (state.me.role === 'student') {
-    shell('내 학습 자료', `
-      <div class="deck-cards">
-        ${data.decks.map((d, i) => `
-          <div class="deck-card">
-            <div class="deck-thumb dg-${i % 4}"><div class="deco">${['🤖', '💡', '📊', '🚀'][i % 4]}</div><div class="orb"></div><div class="dt">${esc(d.title)}</div></div>
-            <div class="body">
-              <div class="desc">${esc(d.description) || '설명 없음'}</div>
-              <div class="meta">
-                <span class="small muted">슬라이드 ${d.slideCount}장 · ${esc(d.ownerName)} 강사</span>
-                ${d.accessibleNow
-                  ? `<a href="#/view/${d.id}" class="btn btn-primary btn-sm">${icon('play')} 학습 시작</a>`
-                  : '<span class="badge red">차단 시간</span>'}
-              </div>
-            </div>
-          </div>`).join('') || '<p class="empty-note">아직 열람 가능한 학습 자료가 없습니다.</p>'}
-      </div>`);
-    return;
-  }
-  shell('웹앱/PPT 관리', `
+/* ---------------- 수업 입장 코드 ---------------- */
+const SESSION_STATUS = { live: ['진행 중', 'green'], expired: ['시간 만료', 'gray'], ended: ['종료됨', 'gray'] };
+
+route(/^#\/sessions$/, async () => {
+  if (!isStaff()) { location.hash = '#/decks'; return; }
+  const [data, decksData] = await Promise.all([api('GET', '/api/class-sessions'), api('GET', '/api/decks')]);
+  shell('수업 입장 코드', `
     <div class="page-head">
-      <div><div class="ph-t">웹앱 라이브러리</div><div class="desc">PPT처럼 발표할 수 있는 웹앱(슬라이드 덱)을 만들고 반·기간을 배정합니다.</div></div>
-      <button class="btn btn-primary" id="btn-new-deck">${icon('plus')} 새 웹앱 만들기</button>
+      <div><div class="ph-t">수업 입장 코드</div>
+        <div class="desc">1회성 수업용 코드입니다. 학생은 계정 없이 <b>코드 + 이름</b>만으로 입장하며, 수업이 끝나면 자동으로 접근이 끊기고 임시 계정은 정리됩니다.</div></div>
+    </div>
+    <div class="card" style="margin-bottom:18px">
+      <h2>새 수업 만들기</h2>
+      <form id="cs-form" class="form-grid">
+        <div style="grid-column:span 2"><label>수업명</label><input name="title" required placeholder="예: ○○중학교 1-1반 AI 진로탐색"></div>
+        <div><label>수업에서 사용할 웹앱</label>
+          <select name="deck_id"><option value="">공개 중인 전체 웹앱</option>
+            ${decksData.decks.map((d) => `<option value="${d.id}">${esc(d.title)}</option>`).join('')}</select></div>
+        <div><label>유효 시간</label>
+          <select name="duration_minutes">
+            <option value="60">1시간</option><option value="120" selected>2시간</option>
+            <option value="240">4시간</option><option value="480">8시간</option>
+          </select></div>
+        <div><button class="btn btn-primary" type="submit" style="width:100%;justify-content:center">${icon('plus')} 코드 발급</button></div>
+      </form>
+      <div class="msg" id="cs-msg"></div>
     </div>
     <div class="card">
       <div class="tbl-scroll">
         <table class="tbl resp">
-          <thead><tr><th>웹앱명</th><th>담당 강사</th><th>대상 학생</th><th>권한 기간</th><th>상태</th><th style="width:300px">관리</th></tr></thead>
+          <thead><tr><th>입장 코드</th><th>수업명</th><th>웹앱</th><th>참여</th><th>상태</th><th>남은 시간</th><th style="width:220px">관리</th></tr></thead>
           <tbody>
-            ${data.decks.map((d) => `
+            ${data.sessions.map((s) => {
+              const [label, color] = SESSION_STATUS[s.status];
+              return `<tr>
+                <td data-label="입장 코드"><button class="btn btn-soft btn-sm" data-big="${esc(s.code)}" title="크게 보기" style="font-size:16px;letter-spacing:3px;font-weight:800">${esc(s.code)}</button></td>
+                <td data-label="수업명"><div class="cell-main">${esc(s.title)}</div><div class="cell-sub">${esc(s.created_at)}</div></td>
+                <td data-label="웹앱">${esc(s.deck_title) || '<span class="muted">전체 공개 웹앱</span>'}</td>
+                <td data-label="참여"><b>${s.joined}</b>명</td>
+                <td data-label="상태"><span class="badge ${color}">${label}</span></td>
+                <td data-label="남은 시간">${s.status === 'live' ? `${Math.floor(s.remainingMinutes / 60)}시간 ${s.remainingMinutes % 60}분` : '-'}</td>
+                <td><div class="row-actions">
+                  ${s.status === 'live' ? `<button class="btn btn-ghost btn-sm" data-end="${s.id}">수업 종료</button>` : ''}
+                  <button class="btn btn-danger btn-sm" data-csdel="${s.id}">${icon('trash')}</button>
+                </div></td>
+              </tr>`;
+            }).join('') || '<tr><td colspan="7" class="empty-note">아직 만든 수업이 없습니다. 위에서 코드를 발급해 보세요.</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+    </div>`);
+
+  document.getElementById('cs-form').onsubmit = async (e) => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const msg = document.getElementById('cs-msg');
+    try {
+      const r = await api('POST', '/api/class-sessions', {
+        title: f.get('title'), deck_id: f.get('deck_id') || null, duration_minutes: f.get('duration_minutes'),
+      });
+      showBigCode(r.code, f.get('title'));
+      navigate();
+    } catch (err) { msg.textContent = err.message; msg.className = 'msg err'; }
+  };
+  const showBigCode = (code, title) => {
+    openModal(`
+      <h3 style="text-align:center">${esc(title || '수업 입장 코드')}</h3>
+      <div class="m-sub" style="text-align:center">학생들에게 이 코드를 보여주세요 — 로그인 화면의 "수업 참여"에서 입력합니다</div>
+      <div style="text-align:center;font-size:64px;font-weight:800;letter-spacing:14px;color:var(--navy-800);padding:24px 0">${esc(code)}</div>
+      <div class="m-actions"><button class="btn btn-primary" onclick="this.closest('.modal-back').remove()">닫기</button></div>`);
+  };
+  document.querySelectorAll('[data-big]').forEach((b) => {
+    const row = data.sessions.find((s) => s.code === b.dataset.big);
+    b.onclick = () => showBigCode(b.dataset.big, row ? row.title : '');
+  });
+  document.querySelectorAll('[data-end]').forEach((b) => {
+    b.onclick = async () => {
+      if (!confirm('이 수업을 종료할까요? 접속 중인 학생은 즉시 차단됩니다.')) return;
+      await api('PATCH', `/api/class-sessions/${b.dataset.end}`, {});
+      toast('수업이 종료되었습니다.');
+      navigate();
+    };
+  });
+  document.querySelectorAll('[data-csdel]').forEach((b) => {
+    b.onclick = async () => {
+      if (!confirm('이 수업 기록과 임시 학생 계정을 삭제할까요? (접속 기록은 보존됩니다)')) return;
+      await api('DELETE', `/api/class-sessions/${b.dataset.csdel}`);
+      navigate();
+    };
+  });
+});
+
+/* ---------------- 웹앱(덱) 관리 ---------------- */
+let deckSubjectTab = 'all';
+route(/^#\/decks$/, async () => {
+  const data = await api('GET', '/api/decks');
+  if (state.me.role === 'student') {
+    // 과목(폴더)별로 묶어서 표시
+    const groups = {};
+    data.decks.forEach((d) => { (groups[d.subject || ''] ||= []).push(d); });
+    const deckCard = (d, i) => `
+      <div class="deck-card">
+        <div class="deck-thumb dg-${i % 4}"><div class="deco">${['🤖', '💡', '📊', '🚀'][i % 4]}</div><div class="orb"></div><div class="dt">${esc(d.title)}</div></div>
+        <div class="body">
+          <div class="desc">${esc(d.description) || '설명 없음'}</div>
+          <div class="meta">
+            <span class="small muted">슬라이드 ${d.slideCount}장 · ${esc(d.ownerName)} 강사</span>
+            ${d.accessibleNow
+              ? `<a href="#/view/${d.id}" class="btn btn-primary btn-sm">${icon('play')} 학습 시작</a>`
+              : '<span class="badge red">차단 시간</span>'}
+          </div>
+        </div>
+      </div>`;
+    shell(state.me.isGuest ? '수업 자료' : '내 학습 자료', `
+      ${Object.keys(groups).sort((a, b) => (a === '' ? 1 : b === '' ? -1 : a.localeCompare(b))).map((subject) => `
+        <h2 class="card-title" style="margin:6px 0 12px">${icon('folder')} ${esc(subject) || '기타 자료'}
+          <span class="sub">${groups[subject].length}개</span></h2>
+        <div class="deck-cards" style="margin-bottom:22px">
+          ${groups[subject].map(deckCard).join('')}
+        </div>`).join('') || '<p class="empty-note">아직 열람 가능한 학습 자료가 없습니다.</p>'}`);
+    return;
+  }
+  // 과목(폴더) 탭
+  const subjects = [...new Set(data.decks.map((d) => d.subject || ''))].filter(Boolean).sort();
+  const hasEtc = data.decks.some((d) => !d.subject);
+  const tabs = [['all', `전체 (${data.decks.length})`],
+    ...subjects.map((s) => [s, `${s} (${data.decks.filter((d) => d.subject === s).length})`]),
+    ...(hasEtc && subjects.length ? [['', `미분류 (${data.decks.filter((d) => !d.subject).length})`]] : [])];
+  if (deckSubjectTab !== 'all' && !tabs.some(([k]) => k === deckSubjectTab)) deckSubjectTab = 'all';
+  const list = data.decks.filter((d) => deckSubjectTab === 'all' || (d.subject || '') === deckSubjectTab);
+  shell('웹앱/PPT 관리', `
+    <div class="page-head">
+      <div><div class="ph-t">웹앱 라이브러리</div><div class="desc">PPT처럼 발표할 수 있는 웹앱(슬라이드 덱)을 과목별 폴더로 관리합니다.</div></div>
+      <button class="btn btn-primary" id="btn-new-deck">${icon('plus')} 새 웹앱 만들기</button>
+    </div>
+    <div class="tabs">
+      ${tabs.map(([k, label]) => `<button data-stab="${esc(k)}" class="${deckSubjectTab === k ? 'active' : ''}">${k === 'all' ? '' : '📁 '}${esc(label)}</button>`).join('')}
+    </div>
+    <div class="card">
+      <div class="tbl-scroll">
+        <table class="tbl resp">
+          <thead><tr><th>웹앱명</th><th>과목</th><th>담당 강사</th><th>대상 학생</th><th>권한 기간</th><th>상태</th><th style="width:300px">관리</th></tr></thead>
+          <tbody>
+            ${list.map((d) => `
               <tr>
                 <td data-label="웹앱명"><div class="cell-main">${esc(d.title)}</div><div class="cell-sub">${esc(d.description) || ''} · 슬라이드 ${d.slideCount}장 · ${esc(d.updated_at)}</div></td>
+                <td data-label="과목">${d.subject ? `<span class="badge violet plain">📁 ${esc(d.subject)}</span>` : '<span class="muted small">미분류</span>'}</td>
                 <td data-label="담당 강사">${esc(d.ownerName)}</td>
                 <td data-label="대상 학생">${esc(d.target_classes) || '<span class="muted">전체</span>'}</td>
                 <td data-label="권한 기간" class="small">${esc(periodText(d))}</td>
@@ -910,17 +1063,23 @@ route(/^#\/decks$/, async () => {
                     <button class="btn btn-danger btn-sm" data-del="${d.id}">${icon('trash')}</button>
                   </div>
                 </td>
-              </tr>`).join('') || '<tr><td colspan="6" class="empty-note">웹앱이 없습니다. 새로 만들어 보세요.</td></tr>'}
+              </tr>`).join('') || '<tr><td colspan="7" class="empty-note">이 폴더에 웹앱이 없습니다. 새로 만들어 보세요.</td></tr>'}
           </tbody>
         </table>
       </div>
     </div>`);
+  document.querySelectorAll('[data-stab]').forEach((b) => {
+    b.onclick = () => { deckSubjectTab = b.dataset.stab; navigate(); };
+  });
   document.getElementById('btn-new-deck').onclick = () => {
     const back = openModal(`
       <h3>새 웹앱 만들기</h3>
-      <div class="m-sub">제목과 설명을 입력하면 첫 슬라이드가 자동 생성됩니다.</div>
+      <div class="m-sub">제목과 과목(폴더)을 입력하면 첫 슬라이드가 자동 생성됩니다.</div>
       <div class="form-grid" style="grid-template-columns:1fr">
         <div><label>제목</label><input id="nd-title" placeholder="예: AI 진로탐색"></div>
+        <div><label>과목 (폴더)</label>
+          <input id="nd-subject" list="subject-list" placeholder="예: AI 진로교육 — 기존 과목을 고르거나 새로 입력">
+          <datalist id="subject-list">${subjects.map((s) => `<option value="${esc(s)}">`).join('')}</datalist></div>
         <div><label>설명</label><input id="nd-desc" placeholder="예: 나에게 맞는 미래를 찾는 인터랙티브 수업"></div>
       </div>
       <div class="m-actions">
@@ -931,7 +1090,11 @@ route(/^#\/decks$/, async () => {
     back.querySelector('#nd-save').onclick = async () => {
       const title = back.querySelector('#nd-title').value.trim();
       if (!title) return toast('제목을 입력하세요.', true);
-      const r = await api('POST', '/api/decks', { title, description: back.querySelector('#nd-desc').value });
+      const r = await api('POST', '/api/decks', {
+        title,
+        description: back.querySelector('#nd-desc').value,
+        subject: back.querySelector('#nd-subject').value,
+      });
       back.remove();
       location.hash = `#/decks/${r.id}/edit`;
     };
@@ -1048,8 +1211,9 @@ route(/^#\/decks\/(\d+)\/edit$/, async (id) => {
   shell(`편집 — ${data.deck.title}`, `
     <div class="page-head">
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-        <input class="input" id="deck-title" value="${esc(data.deck.title)}" style="font-weight:800;width:280px">
-        <input class="input" id="deck-desc" value="${esc(data.deck.description)}" placeholder="설명" style="width:280px">
+        <input class="input" id="deck-title" value="${esc(data.deck.title)}" style="font-weight:800;width:250px">
+        <input class="input" id="deck-subject" value="${esc(data.deck.subject || '')}" placeholder="과목 (폴더)" style="width:150px">
+        <input class="input" id="deck-desc" value="${esc(data.deck.description)}" placeholder="설명" style="width:250px">
         <button class="btn btn-ghost btn-sm" id="save-deck">덱 정보 저장</button>
       </div>
       <div style="display:flex;gap:8px;align-items:center">
@@ -1125,7 +1289,9 @@ route(/^#\/decks\/(\d+)\/edit$/, async (id) => {
     refreshList();
   };
   $('#save-deck').onclick = async () => {
-    await api('PATCH', `/api/decks/${id}`, { title: $('#deck-title').value, description: $('#deck-desc').value });
+    await api('PATCH', `/api/decks/${id}`, {
+      title: $('#deck-title').value, description: $('#deck-desc').value, subject: $('#deck-subject').value,
+    });
     toast('덱 정보가 저장되었습니다.');
   };
   $('#add-slide').onclick = async () => {
@@ -1562,6 +1728,7 @@ route(/^#\/settings$/, async () => {
     state.me = data.user;
     state.access = data.access;
     state.settings = data.settings;
+    state.classSession = data.classSession || null;
   } catch { state.me = null; }
   if (!location.hash) location.hash = state.me ? (isStaff() ? '#/' : '#/decks') : '#/login';
   navigate();
