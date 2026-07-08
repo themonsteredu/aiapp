@@ -42,6 +42,7 @@ const ICONS = {
   chart: '<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
   layers: '<polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>',
   creditCard: '<rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/>',
+  receipt: '<path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><line x1="8" y1="8" x2="16" y2="8"/><line x1="8" y1="12" x2="16" y2="12"/>',
   sliders: '<line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/>',
   search: '<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
   bell: '<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>',
@@ -520,7 +521,8 @@ function menuGroups() {
       ['#/security', 'lock', '보안 설정'],
       ['#/logs', 'fileText', '접속 기록'],
       ['#/report', 'chart', '리포트'],
-      ['#/billing', 'creditCard', '종량 정산'],
+      ['#/billing', 'creditCard', '종량 집계'],
+      ['#/settlement', 'receipt', '정산(청구 배분)'],
       ...(r === 'superadmin' ? [
         ['#/deletions', 'trash', '삭제 요청 승인'],
         ['#/contract', 'fileText', '계약 관리'],
@@ -2931,6 +2933,99 @@ route(/^#\/billing$/, async () => {
   document.getElementById('bm').onchange = (e) => { billingMonth = e.target.value; navigate(); };
   document.getElementById('bm-all').onclick = () => { billingMonth = ''; navigate(); };
   document.querySelectorAll('[data-gtab]').forEach((b) => { b.onclick = () => { billingGroup = b.dataset.gtab; navigate(); }; });
+});
+
+/* ---------------- 정산 (청구 배분) — 관리자 이상 ---------------- */
+let settleMonth = new Date().toISOString().slice(0, 7);
+let settleGroup = 'instructor';
+route(/^#\/settlement$/, async () => {
+  if (!isAdmin()) { location.hash = '#/'; return; }
+  const data = await api('GET', `/api/settlements?month=${settleMonth}&group=${settleGroup}`);
+  const groupTabs = [['instructor', '강사별'], ['session', '수업별'], ['deck', '자료별']];
+  const gLabel = { instructor: '강사', session: '수업(차시)', deck: '자료' }[settleGroup];
+
+  const provCard = (p) => `
+    <div class="card" data-prov="${esc(p.provider)}" style="margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+        <div>
+          <h2 style="margin:0">🧾 ${esc(p.providerLabel)}</h2>
+          <div class="small muted">${settleMonth} · 총 호출 ${p.totalCalls.toLocaleString()}회
+            ${p.confirmed ? '<span class="badge green">정산 확정</span>' : p.invoiceAmount != null ? '<span class="badge amber">미확정</span>' : '<span class="badge gray">청구액 미입력</span>'}</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+          <div><label class="small muted">실제 청구액(원)</label><br>
+            <input class="input" type="number" min="0" data-inv-amt style="width:150px" value="${p.invoiceAmount != null ? p.invoiceAmount : ''}" placeholder="예: 34000"></div>
+          <div><label class="small muted">메모</label><br>
+            <input class="input" data-inv-note style="width:160px" value="${esc(p.note || '')}" placeholder="청구서 번호 등"></div>
+          <label class="small" style="display:flex;gap:5px;align-items:center;padding-bottom:9px"><input type="checkbox" data-inv-confirm ${p.confirmed ? 'checked' : ''}> 확정</label>
+          <button class="btn btn-primary btn-sm" data-inv-save>저장</button>
+          ${p.invoiceId ? `<button class="btn btn-ghost btn-sm" data-inv-del="${p.invoiceId}">삭제</button>` : ''}
+        </div>
+      </div>
+      ${p.totalCalls === 0 ? '<div class="empty-note">이 프로바이더의 사용 기록이 없어 배분할 수 없습니다.</div>' : `
+      <div class="tbl-scroll mt"><table class="tbl resp">
+        <thead><tr><th>${gLabel}</th><th>${settleGroup === 'instructor' ? '아이디' : settleGroup === 'session' ? '담당' : ''}</th><th>호출수(실호출)</th><th>비율</th><th>배분액</th></tr></thead>
+        <tbody>
+          ${p.rows.map((r) => `<tr>
+            <td class="cell-main">${settleGroup === 'instructor' ? '👤 ' : settleGroup === 'session' ? '📆 ' : '💳 '}${esc(r.title)}</td>
+            <td>${esc(r.subtitle) || '<span class="muted">-</span>'}</td>
+            <td>${r.calls.toLocaleString()} <span class="small muted">(${r.apiCalls.toLocaleString()})</span></td>
+            <td>${(r.ratio * 100).toFixed(1)}%</td>
+            <td><b>${r.amount != null ? Number(r.amount).toLocaleString() + '원' : '<span class="muted">청구액 입력 시</span>'}</b></td>
+          </tr>`).join('')}
+        </tbody>
+        ${p.invoiceAmount != null ? `<tfoot><tr><td colspan="4" style="text-align:right"><b>합계 (= 청구액)</b></td><td><b>${Number(p.invoiceAmount).toLocaleString()}원</b></td></tr></tfoot>` : ''}
+      </table></div>`}
+    </div>`;
+
+  shell('정산 (청구 배분)', `
+    <div class="page-head">
+      <div><div class="ph-t">정산 — 실제 청구액 배분</div>
+        <div class="desc">프로바이더 실제 청구액을 입력하면, 측정된 호출 비율로 강사·수업·자료에 자동 배분합니다. 총액은 청구서와 정확히 일치합니다.</div></div>
+      <div><input type="month" class="input" id="sm" value="${esc(settleMonth)}"></div>
+    </div>
+    <div class="tabs">
+      ${groupTabs.map(([k, label]) => `<button data-sgtab="${k}" class="${settleGroup === k ? 'active' : ''}">${label}</button>`).join('')}
+    </div>
+    <div class="card" style="margin-bottom:16px;background:var(--surface-2,rgba(127,127,127,.04))">
+      <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px">
+        <div><b>${esc(settleMonth)} 정산 총액</b> <span class="small muted">(입력된 청구액 합계)</span></div>
+        <div style="font-size:20px;font-weight:800">${Number(data.grandInvoice).toLocaleString()}원</div>
+      </div>
+    </div>
+    ${data.providers.length ? data.providers.map(provCard).join('') : '<p class="empty-note">이 달에 API 유료 자료 사용 기록이 없습니다.</p>'}
+    <div class="card">
+      <div class="small muted" style="line-height:1.8">
+        <b>정산 방식</b> — 각 프로바이더(OpenAI 등)의 실제 청구서 금액을 입력하면,
+        그 프로바이더 자료의 <b>측정된 호출 비율</b>대로 대상에 배분합니다.
+        고정 예상단가와 달리 <b>총액이 청구서와 정확히 일치</b>하고, 배분 비율만 실제 사용량을 따릅니다.
+        <br>정확도를 높이려면 유료 앱에 "링크 설정 → 사용량 보고 스니펫"을 넣어 실호출을 보고하게 하세요
+        (미보고 자료는 열람 1회=1호출로 추정 배분).
+      </div>
+    </div>`);
+
+  document.getElementById('sm').onchange = (e) => { settleMonth = e.target.value || settleMonth; navigate(); };
+  document.querySelectorAll('[data-sgtab]').forEach((b) => { b.onclick = () => { settleGroup = b.dataset.sgtab; navigate(); }; });
+  document.querySelectorAll('[data-prov]').forEach((card) => {
+    const prov = card.dataset.prov;
+    const saveBtn = card.querySelector('[data-inv-save]');
+    if (saveBtn) saveBtn.onclick = async () => {
+      try {
+        await api('POST', '/api/settlements', {
+          period: settleMonth, provider: prov,
+          invoice_amount: Number(card.querySelector('[data-inv-amt]').value) || 0,
+          note: card.querySelector('[data-inv-note]').value,
+          confirmed: card.querySelector('[data-inv-confirm]').checked,
+        });
+        toast('저장되었습니다.'); navigate();
+      } catch (err) { toast(err.message, true); }
+    };
+    const delBtn = card.querySelector('[data-inv-del]');
+    if (delBtn) delBtn.onclick = async () => {
+      if (!confirm('입력한 청구액을 삭제할까요?')) return;
+      await api('DELETE', `/api/settlements/${delBtn.dataset.invDel}`); toast('삭제되었습니다.'); navigate();
+    };
+  });
 });
 
 /* ---------------- 부팅 ---------------- */
