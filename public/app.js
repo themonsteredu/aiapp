@@ -64,6 +64,7 @@ const ICONS = {
   award: '<circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/>',
   briefcase: '<rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>',
   monitor: '<rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>',
+  download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
   x: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
   hash: '<line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/>',
   folder: '<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>',
@@ -169,8 +170,12 @@ function slideHtml(slide, { watermark } = {}) {
         ${watermark ? watermarkDiv() : ''}
       </div>`;
   }
+  // 업로드한 배경 이미지 (bg:<자산ID>:<light|dark>)
+  const bgm = /^bg:(\d+):(light|dark)$/.exec(String(slide.bg || ''));
+  const cls = bgm ? `custom-bg tone-${bgm[2]}` : esc(slide.bg);
+  const style = bgm ? ` style="background-image:url('/api/assets/${bgm[1]}')"` : '';
   return `
-    <div class="slide-frame ${esc(slide.bg)} ${slide.align === 'center' ? 'align-center' : ''}">
+    <div class="slide-frame ${cls} ${slide.align === 'center' ? 'align-center' : ''}"${style}>
       ${slide.title ? `<h1>${esc(slide.title)}</h1>` : ''}
       ${renderBodyMd(slide.body)}
       ${watermark ? watermarkDiv() : ''}
@@ -355,6 +360,7 @@ let presentExit = null; // 발표 모드 정리 함수 (라우팅 이동 시 잔
 async function navigate() {
   if (presentExit) presentExit();
   window.__liveUpdate = null;
+  document.body.classList.remove('allow-print'); // 내보내기 화면 밖에서는 인쇄 차단 유지
   const hash = location.hash || '#/';
   if (!state.me && hash !== '#/login') { location.hash = '#/login'; return; }
   if (state.me && state.me.mustChangePassword && hash !== '#/password' && hash !== '#/login') {
@@ -1226,6 +1232,7 @@ route(/^#\/decks$/, async () => {
                       ? `<button class="btn btn-ghost btn-sm" data-linkedit="${d.id}">${icon('edit')} 링크 설정</button>`
                       : `<a class="btn btn-ghost btn-sm" href="#/decks/${d.id}/edit">${icon('edit')} 편집</a>`}
                     <button class="btn btn-ghost btn-sm" data-assign="${d.id}">${icon('shield')} 배정</button>
+                    ${isAdmin() && d.kind !== 'link' ? `<a class="btn btn-ghost btn-sm" href="#/export/${d.id}" title="PDF/백업 내보내기">${icon('download')}</a>` : ''}
                     <button class="btn btn-ghost btn-sm" data-pub="${d.id}" data-val="${d.published ? 0 : 1}">${d.published ? '비공개로' : '공개하기'}</button>
                     <button class="btn btn-danger btn-sm" data-del="${d.id}">${icon('trash')}</button>
                   </div>
@@ -1307,6 +1314,44 @@ route(/^#\/decks$/, async () => {
       navigate();
     };
   });
+});
+
+/* ---------------- 내보내기 (관리자 이상: PDF 저장 / JSON 백업) ---------------- */
+route(/^#\/export\/(\d+)$/, async (id) => {
+  if (!isAdmin()) { location.hash = '#/decks'; return; }
+  const data = await api('GET', `/api/decks/${id}`);
+  if (data.deck.kind === 'link') { location.hash = '#/decks'; return; }
+  document.body.classList.add('allow-print');
+  shell(`내보내기 — ${data.deck.title}`, `
+    <div class="page-head export-toolbar">
+      <div><div class="ph-t">${icon('download')} ${esc(data.deck.title)} 내보내기</div>
+        <div class="desc">PDF 저장: 인쇄 대화상자에서 "PDF로 저장" 선택 · 용지 방향 "가로" 권장. 슬라이드 1장 = 1페이지.</div></div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-ghost" id="btn-json">JSON 백업</button>
+        <button class="btn btn-primary" id="btn-pdf">${icon('download')} PDF로 저장 (인쇄)</button>
+      </div>
+    </div>
+    <div class="export-pages">
+      ${data.slides.map((s) => `<div class="print-page">${slideHtml(s)}</div>`).join('') || '<p class="empty-note">슬라이드가 없습니다.</p>'}
+    </div>`);
+  document.getElementById('btn-pdf').onclick = () => window.print();
+  document.getElementById('btn-json').onclick = () => {
+    const backup = {
+      exportedAt: new Date().toISOString(),
+      deck: {
+        title: data.deck.title, description: data.deck.description, subject: data.deck.subject,
+        target_classes: data.deck.target_classes, access_start: data.deck.access_start, access_end: data.deck.access_end,
+      },
+      slides: data.slides.map((s) => ({ title: s.title, body: s.body, bg: s.bg, align: s.align })),
+    };
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${data.deck.title}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    toast('JSON 백업이 다운로드되었습니다.');
+  };
 });
 
 /* ---------------- 라이브 따라가기 화면 (게스트) ---------------- */
@@ -1515,9 +1560,13 @@ function present(slides, title, live = null) {
 /* ---------------- 편집기 ---------------- */
 route(/^#\/decks\/(\d+)\/edit$/, async (id) => {
   if (!isStaff()) { location.hash = '#/decks'; return; }
-  const data = await api('GET', `/api/decks/${id}`);
+  const [data, bgData] = await Promise.all([
+    api('GET', `/api/decks/${id}`),
+    api('GET', '/api/backgrounds').catch(() => ({ backgrounds: [] })),
+  ]);
   if (!data.canEdit || data.deck.kind === 'link') { location.hash = '#/decks'; return; }
   let slides = data.slides;
+  let backgrounds = bgData.backgrounds;
   let sel = 0;
 
   const listHtml = () => slides.map((s, i) => `
@@ -1561,14 +1610,22 @@ route(/^#\/decks\/(\d+)\/edit$/, async (id) => {
         <div class="card">
           <div class="form-grid">
             <div style="grid-column:1/-1"><label>슬라이드 제목</label><input id="s-title"></div>
-            <div><label>테마</label>
+            <div><label>테마 / 배경</label>
               <select id="s-bg">
-                <option value="theme-navy">네이비</option><option value="theme-white">화이트</option>
-                <option value="theme-mint">민트</option><option value="theme-sunset">선셋</option>
-                <option value="theme-violet">바이올렛</option><option value="theme-dark">다크</option>
+                <optgroup label="기본 테마">
+                  <option value="theme-navy">네이비</option><option value="theme-white">화이트</option>
+                  <option value="theme-mint">민트</option><option value="theme-sunset">선셋</option>
+                  <option value="theme-violet">바이올렛</option><option value="theme-dark">다크</option>
+                </optgroup>
+                <optgroup label="내 배경" id="bg-group"></optgroup>
               </select></div>
+            <div id="tone-row" style="display:none"><label>글자색 (내 배경용)</label>
+              <select id="s-tone"><option value="light">밝게 (어두운 배경)</option><option value="dark">어둡게 (밝은 배경)</option></select></div>
             <div><label>정렬</label>
               <select id="s-align"><option value="left">왼쪽</option><option value="center">가운데</option></select></div>
+            <div><label>배경 추가</label>
+              <button type="button" class="btn btn-ghost btn-sm" id="upload-bg" style="width:100%;justify-content:center">🖼️ 배경 이미지 업로드</button>
+              <input type="file" id="bg-file" accept="image/png,image/jpeg,image/webp" style="display:none"></div>
           </div>
           <div class="mt"><label class="field-label">본문 — <code>## 소제목</code> · <code>- 글머리</code> · <code>**굵게**</code> · <code>![설명](https://이미지주소)</code> · <code>!video(유튜브 또는 mp4 주소)</code></label>
             <textarea id="s-body"></textarea></div>
@@ -1580,18 +1637,38 @@ route(/^#\/decks\/(\d+)\/edit$/, async (id) => {
     </div>`);
 
   const $ = (s) => document.querySelector(s);
+
+  // ---- 배경 라이브러리: select 옵션 구성 + 값 합성(bg:<id>:<tone>) ----
+  const renderBgOptions = () => {
+    $('#bg-group').innerHTML = backgrounds.map((b) => `<option value="bg:${b.id}">${esc(b.name)}</option>`).join('');
+  };
+  renderBgOptions();
+  const syncToneRow = () => {
+    $('#tone-row').style.display = $('#s-bg').value.startsWith('bg:') ? 'block' : 'none';
+  };
+  const currentBg = () => {
+    const v = $('#s-bg').value;
+    return v.startsWith('bg:') ? `${v}:${$('#s-tone').value}` : v;
+  };
   const loadForm = () => {
     const s = slides[sel];
     if (!s) { $('#preview').innerHTML = ''; return; }
     $('#s-title').value = s.title;
     $('#s-body').value = s.body;
-    $('#s-bg').value = s.bg;
+    const bgm = /^(bg:\d+):(light|dark)$/.exec(s.bg || '');
+    if (bgm && [...$('#s-bg').options].some((o) => o.value === bgm[1])) {
+      $('#s-bg').value = bgm[1];
+      $('#s-tone').value = bgm[2];
+    } else {
+      $('#s-bg').value = bgm ? 'theme-navy' : s.bg;
+    }
     $('#s-align').value = s.align;
+    syncToneRow();
     updatePreview();
   };
   const updatePreview = () => {
     $('#preview').innerHTML = slideHtml({
-      title: $('#s-title').value, body: $('#s-body').value, bg: $('#s-bg').value, align: $('#s-align').value,
+      title: $('#s-title').value, body: $('#s-body').value, bg: currentBg(), align: $('#s-align').value,
     });
   };
   const refreshList = () => { $('#slide-list').innerHTML = listHtml(); bindList(); };
@@ -1602,12 +1679,14 @@ route(/^#\/decks\/(\d+)\/edit$/, async (id) => {
   };
   bindList();
   loadForm();
-  for (const sid of ['s-title', 's-body', 's-bg', 's-align']) $(`#${sid}`).addEventListener('input', updatePreview);
+  for (const sid of ['s-title', 's-body', 's-bg', 's-tone', 's-align']) {
+    $(`#${sid}`).addEventListener('input', () => { syncToneRow(); updatePreview(); });
+  }
 
   $('#save-slide').onclick = async () => {
     const s = slides[sel];
     if (!s) return;
-    Object.assign(s, { title: $('#s-title').value, body: $('#s-body').value, bg: $('#s-bg').value, align: $('#s-align').value });
+    Object.assign(s, { title: $('#s-title').value, body: $('#s-body').value, bg: currentBg(), align: $('#s-align').value });
     await api('PATCH', `/api/slides/${s.id}`, { title: s.title, body: s.body, bg: s.bg, align: s.align });
     $('#save-msg').textContent = '저장되었습니다.';
     $('#save-msg').className = 'msg ok';
@@ -1647,10 +1726,10 @@ route(/^#\/decks\/(\d+)\/edit$/, async (id) => {
   $('#mv-dn').onclick = () => move(1);
 
   // ---- PPT 이미지 가져오기: 클라이언트에서 리사이즈·압축 후 순서대로 업로드 ----
-  const compressImage = (file) => new Promise((resolve, reject) => {
+  const compressImage = (file, maxW = 1600) => new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
-      const MAX_W = 1600;
+      const MAX_W = maxW;
       const scale = Math.min(1, MAX_W / img.width);
       const canvas = document.createElement('canvas');
       canvas.width = Math.round(img.width * scale);
@@ -1662,6 +1741,25 @@ route(/^#\/decks\/(\d+)\/edit$/, async (id) => {
     img.onerror = () => reject(new Error(`${file.name} 파일을 읽을 수 없습니다.`));
     img.src = URL.createObjectURL(file);
   });
+  // 배경 이미지 업로드 → 라이브러리에 추가 후 바로 선택
+  $('#upload-bg').onclick = () => $('#bg-file').click();
+  $('#bg-file').onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      const dataUrl = await compressImage(file, 1920);
+      const name = file.name.replace(/\.[^.]+$/, '').slice(0, 50) || '내 배경';
+      const r = await api('POST', '/api/backgrounds', { data: dataUrl, name });
+      backgrounds.unshift({ id: r.id, name: r.name });
+      renderBgOptions();
+      $('#s-bg').value = `bg:${r.id}`;
+      syncToneRow();
+      updatePreview();
+      toast(`배경 "${r.name}"이(가) 추가되었습니다. 슬라이드를 저장하면 적용됩니다.`);
+    } catch (err) { toast(err.message, true); }
+    e.target.value = '';
+  };
+
   $('#import-ppt').onclick = () => $('#import-files').click();
   $('#import-files').onchange = async (e) => {
     // 파일명 자연 정렬 (슬라이드1, 슬라이드2, … 슬라이드10 순서 유지)

@@ -683,3 +683,31 @@ table.matrix { width: 100%; border-collapse: separate; border-spacing: 5px; min-
 .slide-frame .video-box iframe, .slide-frame .video-box video {
   width: 100%; height: 100%; border: 0; display: block;
 }
+
+/* ============ 업로드 배경 슬라이드 ============ */
+.slide-frame.custom-bg { background-size: cover; background-position: center; }
+.slide-frame.custom-bg::before { display: none; }
+.slide-frame.tone-light {
+  color: #fff; --sl-accent: #ffd166; --sl-strong: #ffe9b3; --sl-glow: transparent;
+  text-shadow: 0 1px 16px rgba(0, 0, 0, .55);
+}
+.slide-frame.tone-dark {
+  color: #17223f; --sl-accent: #2563eb; --sl-strong: #1d4ed8; --sl-glow: transparent;
+  text-shadow: 0 1px 12px rgba(255, 255, 255, .6);
+}
+
+/* ============ 내보내기 (관리자: PDF 저장/백업) ============ */
+.export-pages { display: flex; flex-direction: column; gap: 18px; max-width: 1000px; }
+@media print {
+  /* 내보내기 화면에서만 인쇄 허용 (기본은 인쇄 차단 유지) */
+  body.allow-print > #app { display: block !important; }
+  body.allow-print #print-guard { display: none !important; }
+  body.allow-print .sidebar, body.allow-print .header,
+  body.allow-print .export-toolbar, body.allow-print .side-overlay { display: none !important; }
+  body.allow-print .content { padding: 0 !important; }
+  body.allow-print .export-pages { gap: 0; max-width: none; }
+  body.allow-print .print-page { page-break-after: always; break-inside: avoid; }
+  body.allow-print .print-page .slide-frame {
+    border-radius: 0; border: none; box-shadow: none; width: 100%;
+  }
+}
