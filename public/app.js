@@ -465,7 +465,6 @@ function menuGroups() {
       ]],
       ['사용자', [['#/students', 'users', '학생 관리']]],
       ['운영', [
-        ['#/schedules', 'calendar', '접근 시간표'],
         ['#/settings', 'sliders', '설정'],
       ]],
     ];
@@ -791,8 +790,9 @@ function openAssignModal(deck, onSaved) {
 /* ---------------- 대시보드 ---------------- */
 route(/^#\/$/, async () => {
   if (!isStaff()) { location.hash = '#/decks'; return; }
-  const [dash, sched, decksData] = await Promise.all([
+  const [dash, sched, decksData, cal] = await Promise.all([
     fetchDash(true), api('GET', '/api/schedules'), api('GET', '/api/decks'),
+    isAdmin() ? api('GET', '/api/class-calendar').catch(() => null) : Promise.resolve(null),
   ]);
   state.access = sched;
   const s = dash.stats;
@@ -845,14 +845,27 @@ route(/^#\/$/, async () => {
           </div>
         </div>
 
+        ${isAdmin() && cal ? `
         <div class="card">
-          <h2>시간표 기반 접근 제어
+          <h2>수업 일정 캘린더
             <span class="spacer"></span>
-            <span class="badge green plain">접근 허용</span><span class="badge blue plain">웹앱별 허용</span><span class="badge red plain">차단 시간</span><span class="badge gray plain">자동 잠금</span>
+            <select id="cal-filter" class="input" style="width:auto;padding:6px 10px;font-size:12.5px">
+              <option value="">전체 강사</option>
+              ${cal.teachers.map((t) => `<option value="${t.id}">${esc(t.name)} (${esc(ROLE_LABELS[t.role] || t.role)})</option>`).join('')}
+            </select>
+          </h2>
+          <div id="cal-body">${classCalendarHtml(cal.sessions, '')}</div>
+        </div>` : ''}
+
+        ${isAdmin() ? `
+        <div class="card">
+          <h2>웹앱 허용 시간표
+            <span class="spacer"></span>
+            <span class="badge green plain">접근 허용</span><span class="badge blue plain">웹앱별</span><span class="badge red plain">차단</span><span class="badge gray plain">자동 잠금</span>
           </h2>
           ${scheduleMatrixHtml(sched.windows)}
-          ${isAdmin() ? `<div class="mt"><a href="#/schedules" class="btn btn-soft btn-sm">시간표 설정 ${icon('chevRight')}</a></div>` : ''}
-        </div>
+          <div class="mt"><a href="#/schedules" class="btn btn-soft btn-sm">시간표 설정 ${icon('chevRight')}</a></div>
+        </div>` : ''}
 
         <div class="card">
           <h2>웹앱 배정 현황 <span class="spacer"></span><a href="#/decks" class="btn btn-soft btn-sm">전체 보기</a></h2>
@@ -917,7 +930,54 @@ route(/^#\/$/, async () => {
       if (deck) openAssignModal(deck, navigate);
     };
   });
+  // 캘린더 강사 필터 (클라이언트 측 재렌더)
+  const calFilter = document.getElementById('cal-filter');
+  if (calFilter && cal) {
+    calFilter.onchange = () => {
+      document.getElementById('cal-body').innerHTML = classCalendarHtml(cal.sessions, calFilter.value);
+    };
+  }
 });
+
+/* 수업 일정 주간 캘린더 (요일 × 시간대). filterId가 있으면 그 담당자만 표시 */
+const CAL_COLORS = ['#2563eb', '#0d9488', '#7c3aed', '#ea8a0c', '#dc2626', '#0891b2', '#c026d3'];
+function classCalendarHtml(sessions, filterId) {
+  const list = sessions.filter((s) => !filterId || String(s.instructor_id) === String(filterId));
+  if (!list.length) return '<div class="empty-note">표시할 수업 일정이 없습니다.</div>';
+  const toMin = (t) => { const m = /(\d{2}):(\d{2})/.exec(t || ''); return m ? +m[1] * 60 + +m[2] : 0; };
+  // 표시 시간 범위 (데이터 기준, 최소 09~18 보장)
+  let lo = 9 * 60, hi = 18 * 60;
+  list.forEach((s) => { lo = Math.min(lo, toMin(s.start_time)); hi = Math.max(hi, toMin(s.end_time)); });
+  lo = Math.floor(lo / 60) * 60; hi = Math.ceil(hi / 60) * 60;
+  const HPX = 44; // 시간당 픽셀
+  const hours = [];
+  for (let h = lo / 60; h < hi / 60; h++) hours.push(h);
+  const colorOf = (id) => CAL_COLORS[(id || 0) % CAL_COLORS.length];
+  const dayCol = (d) => {
+    const items = list.filter((s) => s.dow === d);
+    return `<div class="cal-day">
+      ${items.map((s) => {
+        const top = (toMin(s.start_time) - lo) / 60 * HPX;
+        const h = Math.max(20, (toMin(s.end_time) - toMin(s.start_time)) / 60 * HPX);
+        const c = colorOf(s.instructor_id);
+        const dim = s.expired || !s.active;
+        return `<div class="cal-ev" style="top:${top}px;height:${h}px;background:${c}1a;border-left:3px solid ${c};${dim ? 'opacity:.5;' : ''}" title="${esc(s.title)} · ${esc(s.instructor_name || '')} · ${esc(s.start_time)}~${esc(s.end_time)}">
+          <div class="ce-t">${esc(s.title)}</div>
+          <div class="ce-m">${esc(s.start_time)}~${esc(s.end_time)} · ${esc(s.instructor_name || '-')}</div>
+        </div>`;
+      }).join('')}
+    </div>`;
+  };
+  return `<div class="cal-wrap"><div class="cal-grid" style="--rows:${hours.length}">
+    <div class="cal-corner"></div>
+    ${DAY_ORDER.map((d) => `<div class="cal-head">${DAY_NAMES[d]}</div>`).join('')}
+    <div class="cal-times">${hours.map((h) => `<div class="cal-time" style="height:${HPX}px">${String(h).padStart(2, '0')}:00</div>`).join('')}</div>
+    ${DAY_ORDER.map((d) => `<div class="cal-daywrap" style="height:${hours.length * HPX}px">
+      ${hours.map(() => `<div class="cal-line" style="height:${HPX}px"></div>`).join('')}
+      ${dayCol(d)}
+    </div>`).join('')}
+  </div></div>`;
+}
 
 /* ---------------- 보안 설정 ---------------- */
 const SEC_ITEMS = [
@@ -1280,9 +1340,7 @@ route(/^#\/decks$/, async () => {
         } catch {}
       };
     }
-    // 과목(폴더)별로 묶어서 표시
-    const groups = {};
-    data.decks.forEach((d) => { (groups[d.subject || ''] ||= []).push(d); });
+    // 학생 화면은 과목(폴더) 구분 없이 자료를 평면으로 나열
     const deckCard = (d, i) => `
       <div class="deck-card">
         <div class="deck-thumb dg-${i % 4}"><div class="deco">${d.kind !== 'slides' ? '🧪' : ['🤖', '💡', '📊', '🚀'][i % 4]}</div><div class="orb"></div><div class="dt">${esc(d.title)}</div></div>
@@ -1299,12 +1357,9 @@ route(/^#\/decks$/, async () => {
         </div>
       </div>`;
     shell(state.me.isGuest ? '수업 자료' : '내 학습 자료', `
-      ${Object.keys(groups).sort((a, b) => (a === '' ? 1 : b === '' ? -1 : a.localeCompare(b))).map((subject) => `
-        <h2 class="card-title" style="margin:6px 0 12px">${icon('folder')} ${esc(subject) || '기타 자료'}
-          <span class="sub">${groups[subject].length}개</span></h2>
-        <div class="deck-cards" style="margin-bottom:22px">
-          ${groups[subject].map(deckCard).join('')}
-        </div>`).join('') || '<p class="empty-note">아직 열람 가능한 학습 자료가 없습니다.</p>'}`);
+      <div class="deck-cards">
+        ${data.decks.map(deckCard).join('') || '<p class="empty-note">아직 열람 가능한 학습 자료가 없습니다.</p>'}
+      </div>`);
     return;
   }
   // 과목(폴더) 탭
@@ -1339,6 +1394,7 @@ route(/^#\/decks$/, async () => {
                 <td>
                   <div class="row-actions">
                     <a class="btn btn-primary btn-sm" href="#/view/${d.id}">${icon('play')} ${d.kind === 'slides' ? '재생' : '열기'}</a>
+                    ${d.editable === false ? '<span class="small muted">배정된 자료 (읽기 전용)</span>' : `
                     ${d.kind === 'link'
                       ? `<button class="btn btn-ghost btn-sm" data-linkedit="${d.id}">${icon('edit')} 링크 설정</button>`
                       : d.kind === 'html'
@@ -1347,7 +1403,7 @@ route(/^#\/decks$/, async () => {
                     <button class="btn btn-ghost btn-sm" data-assign="${d.id}">${icon('shield')} 배정</button>
                     ${isAdmin() && d.kind === 'slides' ? `<a class="btn btn-ghost btn-sm" href="#/export/${d.id}" title="PDF/백업 내보내기">${icon('download')}</a>` : ''}
                     <button class="btn btn-ghost btn-sm" data-pub="${d.id}" data-val="${d.published ? 0 : 1}">${d.published ? '비공개로' : '공개하기'}</button>
-                    <button class="btn btn-danger btn-sm" data-del="${d.id}">${icon('trash')}</button>
+                    <button class="btn btn-danger btn-sm" data-del="${d.id}">${icon('trash')}</button>`}
                   </div>
                 </td>
               </tr>`).join('') || '<tr><td colspan="7" class="empty-note">이 폴더에 웹앱이 없습니다. 새로 만들어 보세요.</td></tr>'}
@@ -2132,6 +2188,8 @@ route(/^#\/users$/, () => { location.hash = isAdmin() ? '#/permissions' : '#/stu
 
 /* ---------------- 시간표 접근 설정 ---------------- */
 route(/^#\/schedules$/, async () => {
+  // 강사는 웹앱 허용 시간표를 볼 필요가 없음 → 대시보드로
+  if (state.me.role === 'instructor') { location.hash = '#/'; return; }
   const data = await api('GET', '/api/schedules');
   state.access = data;
   const canEdit = isAdmin();

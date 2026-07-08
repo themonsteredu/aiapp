@@ -735,3 +735,23 @@ table.matrix { width: 100%; border-collapse: separate; border-spacing: 5px; min-
 .ir-toggle { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--text-2); white-space: nowrap; cursor: pointer; }
 .ir-toggle input { width: 15px; height: 15px; accent-color: var(--blue-600); }
 .item-row .btn[disabled] { opacity: .45; cursor: not-allowed; }
+
+/* ============ 수업 일정 캘린더 ============ */
+.cal-wrap { overflow-x: auto; }
+.cal-grid { display: grid; grid-template-columns: 52px repeat(7, minmax(84px, 1fr)); min-width: 640px; }
+.cal-corner, .cal-head {
+  position: sticky; top: 0; background: #fff; z-index: 2;
+  text-align: center; font-size: 12px; font-weight: 800; color: var(--text-2);
+  padding: 7px 0; border-bottom: 1px solid var(--line);
+}
+.cal-times { display: flex; flex-direction: column; }
+.cal-time { font-size: 10.5px; color: var(--text-3); text-align: right; padding-right: 6px; border-top: 1px solid var(--line); box-sizing: border-box; }
+.cal-daywrap { position: relative; border-left: 1px solid var(--line); }
+.cal-line { border-top: 1px solid var(--line); box-sizing: border-box; }
+.cal-day { position: absolute; inset: 0; }
+.cal-ev {
+  position: absolute; left: 3px; right: 3px; border-radius: 7px; padding: 4px 7px; overflow: hidden;
+  box-shadow: var(--shadow-sm); cursor: default;
+}
+.cal-ev .ce-t { font-size: 11.5px; font-weight: 800; color: var(--text); line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cal-ev .ce-m { font-size: 10px; color: var(--text-2); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
