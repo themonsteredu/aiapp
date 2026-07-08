@@ -12,6 +12,7 @@ const state = {
   access: null,       // 시간제 접근 상태
   settings: null,     // 보안 설정
   classSession: null, // 게스트(입장 코드) 수업 정보
+  mustAgree: false,   // 계약·보안 동의 필요 여부
   dash: null,         // 대시보드 캐시 (알림용)
   dashAt: 0,
 };
@@ -91,6 +92,11 @@ async function api(method, url, body) {
     renderBlocked();
     throw new Error(data.message);
   }
+  if (res.status === 403 && data.error === 'agreement_required') {
+    state.mustAgree = true;
+    if (location.hash !== '#/agreement') location.hash = '#/agreement';
+    throw new Error(data.message);
+  }
   if (!res.ok) {
     const err = new Error(data.error || '요청에 실패했습니다.');
     err.data = data;
@@ -162,9 +168,20 @@ function renderBodyMd(text) {
 }
 
 function slideHtml(slide, { watermark } = {}) {
+  const bodyTrim = String(slide.body || '').trim();
+  const hasTitle = !!String(slide.title || '').trim();
+  // 동영상 한 개만 있는 슬라이드는 검은 배경에 꽉 차게 재생 (슬라이드 사이 삽입 영상)
+  const vidOnly = /^!video\(((?:https?:\/\/|\/api\/assets\/)[^)\s]+)\)$/.exec(bodyTrim);
+  if (vidOnly && !hasTitle) {
+    return `
+      <div class="slide-frame video-slide">
+        ${videoEmbed(vidOnly[1])}
+        ${watermark ? watermarkDiv() : ''}
+      </div>`;
+  }
   // 이미지 한 장만 있는 슬라이드(PPT 변환)는 여백 없이 원본 그대로 표시
-  const only = /^!\[[^\]]*\]\(((?:https?:\/\/|\/api\/assets\/)[^)\s]+)\)$/.exec(String(slide.body || '').trim());
-  if (only && !String(slide.title || '').trim()) {
+  const only = /^!\[[^\]]*\]\(((?:https?:\/\/|\/api\/assets\/)[^)\s]+)\)$/.exec(bodyTrim);
+  if (only && !hasTitle) {
     return `
       <div class="slide-frame img-slide">
         <img class="full" src="${esc(only[1])}" alt="슬라이드">
@@ -371,6 +388,11 @@ async function navigate() {
     location.hash = '#/password';
     return;
   }
+  // 계약·보안 동의 강제 (강사·관리자)
+  if (state.me && state.mustAgree && !['#/agreement', '#/login', '#/password'].includes(hash)) {
+    location.hash = '#/agreement';
+    return;
+  }
   if (state.me && state.me.role === 'student' && state.access && !state.access.allowed
       && !['#/password', '#/login', '#/settings'].includes(hash)) {
     renderBlocked();
@@ -485,6 +507,10 @@ function menuGroups() {
       ['#/security', 'lock', '보안 설정'],
       ['#/logs', 'fileText', '접속 기록'],
       ['#/report', 'chart', '리포트'],
+      ...(r === 'superadmin' ? [
+        ['#/deletions', 'trash', '삭제 요청 승인'],
+        ['#/contract', 'fileText', '계약 관리'],
+      ] : []),
       ['#/settings', 'sliders', '설정'],
     ]],
   ];
@@ -668,10 +694,13 @@ route(/^#\/login$/, () => {
     state.access = data.access;
     state.settings = data.settings;
     state.classSession = data.classSession || null;
+    state.mustAgree = !!data.mustAgree;
     state.dash = null;
     Live.stop();
     Live.start(); // 게스트일 때만 내부에서 동작
-    location.hash = data.user.mustChangePassword ? '#/password' : (level(data.user.role) >= 1 ? '#/' : '#/decks');
+    location.hash = data.user.mustChangePassword ? '#/password'
+      : state.mustAgree ? '#/agreement'
+      : (level(data.user.role) >= 1 ? '#/' : '#/decks');
   };
   async function onSubmit(e) {
     e.preventDefault();
@@ -719,6 +748,7 @@ async function refreshMe() {
     state.access = data.access;
     state.settings = data.settings;
     state.classSession = data.classSession || null;
+    state.mustAgree = !!data.mustAgree;
     navigate();
   } catch {}
 }
@@ -1390,7 +1420,7 @@ route(/^#\/decks$/, async () => {
                 <td data-label="담당 강사">${esc(d.ownerName)}</td>
                 <td data-label="대상 학생">${esc(d.target_classes) || '<span class="muted">전체</span>'}</td>
                 <td data-label="권한 기간" class="small">${esc(periodText(d))}</td>
-                <td data-label="상태">${deckStatusBadge(d)}</td>
+                <td data-label="상태">${deckStatusBadge(d)}${d.deletePending ? ' <span class="badge amber">삭제 대기</span>' : ''}</td>
                 <td>
                   <div class="row-actions">
                     <a class="btn btn-primary btn-sm" href="#/view/${d.id}">${icon('play')} ${d.kind === 'slides' ? '재생' : '열기'}</a>
@@ -1403,7 +1433,11 @@ route(/^#\/decks$/, async () => {
                     <button class="btn btn-ghost btn-sm" data-assign="${d.id}">${icon('shield')} 배정</button>
                     ${isAdmin() && d.kind === 'slides' ? `<a class="btn btn-ghost btn-sm" href="#/export/${d.id}" title="PDF/백업 내보내기">${icon('download')}</a>` : ''}
                     <button class="btn btn-ghost btn-sm" data-pub="${d.id}" data-val="${d.published ? 0 : 1}">${d.published ? '비공개로' : '공개하기'}</button>
-                    <button class="btn btn-danger btn-sm" data-del="${d.id}">${icon('trash')}</button>`}
+                    ${d.deletePending
+                      ? '<span class="small muted">삭제 승인 대기</span>'
+                      : d.canDelete
+                        ? `<button class="btn btn-danger btn-sm" data-del="${d.id}">${icon('trash')} ${state.me.role === 'superadmin' ? '삭제' : '삭제 요청'}</button>`
+                        : ''}`}
                   </div>
                 </td>
               </tr>`).join('') || '<tr><td colspan="7" class="empty-note">이 폴더에 웹앱이 없습니다. 새로 만들어 보세요.</td></tr>'}
@@ -1508,9 +1542,15 @@ route(/^#\/decks$/, async () => {
   });
   document.querySelectorAll('[data-del]').forEach((b) => {
     b.onclick = async () => {
-      if (!confirm('이 웹앱과 모든 슬라이드를 삭제할까요?')) return;
-      await api('DELETE', `/api/decks/${b.dataset.del}`);
-      toast('삭제되었습니다.');
+      const isSuper = state.me.role === 'superadmin';
+      const ok = isSuper
+        ? confirm('이 웹앱과 모든 슬라이드를 삭제할까요?')
+        : confirm('삭제를 요청할까요? 슈퍼관리자 승인 후 실제로 삭제됩니다.');
+      if (!ok) return;
+      let reason = '';
+      if (!isSuper) { reason = prompt('삭제 사유(선택)를 입력하세요.', '') || ''; }
+      const r = await api('DELETE', `/api/decks/${b.dataset.del}`, isSuper ? undefined : { reason });
+      toast(isSuper || (r && r.deleted) ? '삭제되었습니다.' : '삭제 요청이 접수되었습니다. 슈퍼관리자 승인을 기다립니다.');
       navigate();
     };
   });
@@ -1778,19 +1818,24 @@ function present(slides, title, live = null) {
 /* ---------------- 편집기 ---------------- */
 route(/^#\/decks\/(\d+)\/edit$/, async (id) => {
   if (!isStaff()) { location.hash = '#/decks'; return; }
-  const [data, bgData] = await Promise.all([
-    api('GET', `/api/decks/${id}`),
-    api('GET', '/api/backgrounds').catch(() => ({ backgrounds: [] })),
-  ]);
+  const data = await api('GET', `/api/decks/${id}`);
   if (!data.canEdit || data.deck.kind !== 'slides') { location.hash = '#/decks'; return; }
   let slides = data.slides;
-  let backgrounds = bgData.backgrounds;
   let sel = 0;
+
+  // 슬라이드 종류 판별: 이미지 / 동영상 / (레거시) 텍스트
+  const slideKind = (s) => {
+    const b = String(s.body || '').trim();
+    if (/^!video\(/.test(b)) return 'video';
+    if (/^!\[[^\]]*\]\(/.test(b) && !String(s.title || '').trim()) return 'image';
+    return 'text';
+  };
+  const kindTag = { image: '🖼️ 이미지', video: '🎬 동영상', text: '📝 텍스트' };
 
   const listHtml = () => slides.map((s, i) => `
     <div class="slide-item ${i === sel ? 'active' : ''}" data-i="${i}">
-      <span class="n">${i + 1}</span><span class="t">${esc(s.title) || '(제목 없음)'}</span>
-    </div>`).join('');
+      <span class="n">${i + 1}</span><span class="t">${kindTag[slideKind(s)]}</span>
+    </div>`).join('') || '<div class="empty-note" style="padding:18px">슬라이드가 없습니다. 아래에서 PPT 이미지 또는 동영상을 추가하세요.</div>';
 
   shell(`편집 — ${data.deck.title}`, `
     <div class="page-head">
@@ -1806,98 +1851,56 @@ route(/^#\/decks\/(\d+)\/edit$/, async (id) => {
       </div>
     </div>
     <div class="editor">
-      <div>
+      <div class="col-stack">
         <div class="slide-list" id="slide-list">${listHtml()}</div>
         <div class="mt" style="display:flex;gap:6px;flex-wrap:wrap">
-          <button class="btn btn-soft btn-sm" id="add-slide">${icon('plus')} 슬라이드</button>
-          <button class="btn btn-ghost btn-sm" id="mv-up">↑</button>
-          <button class="btn btn-ghost btn-sm" id="mv-dn">↓</button>
-          <button class="btn btn-danger btn-sm" id="del-slide">${icon('trash')}</button>
+          <button class="btn btn-ghost btn-sm" id="mv-up">↑ 위로</button>
+          <button class="btn btn-ghost btn-sm" id="mv-dn">↓ 아래로</button>
+          <button class="btn btn-danger btn-sm" id="del-slide">${icon('trash')} 슬라이드 삭제</button>
         </div>
-        <div class="mt">
-          <button class="btn btn-ghost btn-sm" id="import-ppt" style="width:100%;justify-content:center">📥 PPT 이미지 가져오기</button>
+        <div class="card">
+          <h2 style="margin-top:0">슬라이드 추가 <span class="sub">이미지 또는 동영상으로만 만들어집니다</span></h2>
+          <button class="btn btn-primary btn-sm" id="import-ppt" style="width:100%;justify-content:center">📥 PPT 이미지 가져오기</button>
           <input type="file" id="import-files" accept="image/png,image/jpeg,image/webp" multiple style="display:none">
-          <div class="small muted" style="margin-top:7px;line-height:1.6">
+          <div class="small muted" style="margin:7px 0 4px;line-height:1.6">
             PowerPoint에서 <b>파일 → 내보내기 → PNG/JPEG</b>로 저장한 슬라이드 이미지들을
-            한꺼번에 선택하면 순서대로 추가됩니다. (디자인 원본 그대로)
+            한꺼번에 선택하면 순서대로 슬라이드가 됩니다. (디자인 원본 그대로)
           </div>
           <div class="msg" id="import-msg"></div>
+          <hr style="border:none;border-top:1px solid var(--line);margin:14px 0">
+          <div class="field-label" style="margin:0 0 6px">🎬 동영상 슬라이드 추가</div>
+          <div class="small muted" style="margin-bottom:8px;line-height:1.6">
+            이미지 슬라이드 사이에 동영상을 한 장의 슬라이드로 넣습니다.
+            예를 들어 1·2·3번 슬라이드 다음에 동영상 슬라이드를 두면 순서대로 재생됩니다.
+          </div>
+          <div style="display:flex;gap:6px;margin-bottom:8px">
+            <input class="input" id="vid-url" placeholder="유튜브 또는 mp4/webm 주소" style="flex:1">
+            <button class="btn btn-soft btn-sm" id="vid-url-add">URL 추가</button>
+          </div>
+          <button class="btn btn-ghost btn-sm" id="vid-file-btn" style="width:100%;justify-content:center">동영상 파일 업로드</button>
+          <input type="file" id="vid-file" accept="video/mp4,video/webm" style="display:none">
+          <div class="small muted" style="margin-top:6px" id="vid-hint"></div>
+          <div class="msg" id="vid-msg"></div>
         </div>
       </div>
       <div class="col-stack">
         <div class="card">
-          <div class="form-grid">
-            <div style="grid-column:1/-1"><label>슬라이드 제목</label><input id="s-title"></div>
-            <div><label>테마 / 배경</label>
-              <select id="s-bg">
-                <optgroup label="기본 테마">
-                  <option value="theme-navy">네이비</option><option value="theme-white">화이트</option>
-                  <option value="theme-mint">민트</option><option value="theme-sunset">선셋</option>
-                  <option value="theme-violet">바이올렛</option><option value="theme-dark">다크</option>
-                </optgroup>
-                <optgroup label="내 배경" id="bg-group"></optgroup>
-              </select></div>
-            <div id="tone-row" style="display:none"><label>글자색 (내 배경용)</label>
-              <select id="s-tone"><option value="light">밝게 (어두운 배경)</option><option value="dark">어둡게 (밝은 배경)</option></select></div>
-            <div><label>정렬</label>
-              <select id="s-align"><option value="left">왼쪽</option><option value="center">가운데</option></select></div>
-            <div><label>배경 추가</label>
-              <button type="button" class="btn btn-ghost btn-sm" id="upload-bg" style="width:100%;justify-content:center">🖼️ 배경 이미지 업로드</button>
-              <input type="file" id="bg-file" accept="image/png,image/jpeg,image/webp" style="display:none"></div>
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div class="field-label" style="margin:0">미리보기</div>
+            <span class="small muted" id="sel-kind"></span>
           </div>
-          <div class="mt">
-            <div style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:8px">
-              <label class="field-label" style="margin:0">본문 — <code>## 소제목</code> · <code>- 글머리</code> · <code>**굵게</code> · <code>![설명](이미지주소)</code> · <code>!video(유튜브/mp4)</code></label>
-              <div style="display:flex;gap:6px">
-                <button class="btn btn-ghost btn-sm" id="insert-video" type="button">🎬 동영상 파일</button>
-                <button class="btn btn-ghost btn-sm" id="insert-image" type="button">🖼️ 이미지 파일</button>
-                <input type="file" id="media-file" accept="video/mp4,video/webm,image/png,image/jpeg,image/webp" style="display:none">
-              </div>
-            </div>
-            <textarea id="s-body" class="mt"></textarea>
-            <div class="small muted" style="margin-top:5px" id="media-hint">동영상 파일은 커서 위치에 <code>!video(...)</code>로 삽입됩니다.</div>
-          </div>
-          <div class="mt" style="display:flex;align-items:center;gap:10px">
-            <button class="btn btn-primary" id="save-slide">슬라이드 저장</button><span class="msg" id="save-msg"></span></div>
+          <div id="preview" class="mt" style="max-width:780px"></div>
         </div>
-        <div><div class="field-label">미리보기</div><div id="preview" style="max-width:780px"></div></div>
       </div>
     </div>`);
 
   const $ = (s) => document.querySelector(s);
 
-  // ---- 배경 라이브러리: select 옵션 구성 + 값 합성(bg:<id>:<tone>) ----
-  const renderBgOptions = () => {
-    $('#bg-group').innerHTML = backgrounds.map((b) => `<option value="bg:${b.id}">${esc(b.name)}</option>`).join('');
-  };
-  renderBgOptions();
-  const syncToneRow = () => {
-    $('#tone-row').style.display = $('#s-bg').value.startsWith('bg:') ? 'block' : 'none';
-  };
-  const currentBg = () => {
-    const v = $('#s-bg').value;
-    return v.startsWith('bg:') ? `${v}:${$('#s-tone').value}` : v;
-  };
   const loadForm = () => {
     const s = slides[sel];
-    if (!s) { $('#preview').innerHTML = ''; return; }
-    $('#s-title').value = s.title;
-    $('#s-body').value = s.body;
-    const bgm = /^(bg:\d+):(light|dark)$/.exec(s.bg || '');
-    if (bgm && [...$('#s-bg').options].some((o) => o.value === bgm[1])) {
-      $('#s-bg').value = bgm[1];
-      $('#s-tone').value = bgm[2];
-    } else {
-      $('#s-bg').value = bgm ? 'theme-navy' : s.bg;
-    }
-    $('#s-align').value = s.align;
-    syncToneRow();
-    updatePreview();
-  };
-  const updatePreview = () => {
-    $('#preview').innerHTML = slideHtml({
-      title: $('#s-title').value, body: $('#s-body').value, bg: currentBg(), align: $('#s-align').value,
-    });
+    if (!s) { $('#preview').innerHTML = '<p class="empty-note">추가된 슬라이드가 없습니다.</p>'; $('#sel-kind').textContent = ''; return; }
+    $('#sel-kind').textContent = `${sel + 1}번 · ${kindTag[slideKind(s)]} 슬라이드`;
+    $('#preview').innerHTML = slideHtml({ title: s.title, body: s.body, bg: s.bg, align: s.align });
   };
   const refreshList = () => { $('#slide-list').innerHTML = listHtml(); bindList(); };
   const bindList = () => {
@@ -1907,32 +1910,12 @@ route(/^#\/decks\/(\d+)\/edit$/, async (id) => {
   };
   bindList();
   loadForm();
-  for (const sid of ['s-title', 's-body', 's-bg', 's-tone', 's-align']) {
-    $(`#${sid}`).addEventListener('input', () => { syncToneRow(); updatePreview(); });
-  }
 
-  $('#save-slide').onclick = async () => {
-    const s = slides[sel];
-    if (!s) return;
-    Object.assign(s, { title: $('#s-title').value, body: $('#s-body').value, bg: currentBg(), align: $('#s-align').value });
-    await api('PATCH', `/api/slides/${s.id}`, { title: s.title, body: s.body, bg: s.bg, align: s.align });
-    $('#save-msg').textContent = '저장되었습니다.';
-    $('#save-msg').className = 'msg ok';
-    setTimeout(() => { $('#save-msg').textContent = ''; }, 1500);
-    refreshList();
-  };
   $('#save-deck').onclick = async () => {
     await api('PATCH', `/api/decks/${id}`, {
       title: $('#deck-title').value, description: $('#deck-desc').value, subject: $('#deck-subject').value,
     });
     toast('덱 정보가 저장되었습니다.');
-  };
-  $('#add-slide').onclick = async () => {
-    await api('POST', `/api/decks/${id}/slides`, {});
-    const fresh = await api('GET', `/api/decks/${id}`);
-    slides = fresh.slides;
-    sel = slides.length - 1;
-    refreshList(); loadForm();
   };
   $('#del-slide').onclick = async () => {
     const s = slides[sel];
@@ -1953,12 +1936,19 @@ route(/^#\/decks\/(\d+)\/edit$/, async (id) => {
   $('#mv-up').onclick = () => move(-1);
   $('#mv-dn').onclick = () => move(1);
 
+  const reload = async (selectLast = true) => {
+    const fresh = await api('GET', `/api/decks/${id}`);
+    slides = fresh.slides;
+    if (selectLast) sel = slides.length - 1;
+    sel = Math.min(Math.max(0, sel), Math.max(0, slides.length - 1));
+    refreshList(); loadForm();
+  };
+
   // ---- PPT 이미지 가져오기: 클라이언트에서 리사이즈·압축 후 순서대로 업로드 ----
   const compressImage = (file, maxW = 1600) => new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
-      const MAX_W = maxW;
-      const scale = Math.min(1, MAX_W / img.width);
+      const scale = Math.min(1, maxW / img.width);
       const canvas = document.createElement('canvas');
       canvas.width = Math.round(img.width * scale);
       canvas.height = Math.round(img.height * scale);
@@ -1969,80 +1959,6 @@ route(/^#\/decks\/(\d+)\/edit$/, async (id) => {
     img.onerror = () => reject(new Error(`${file.name} 파일을 읽을 수 없습니다.`));
     img.src = URL.createObjectURL(file);
   });
-  // 배경 이미지 업로드 → 라이브러리에 추가 후 바로 선택
-  $('#upload-bg').onclick = () => $('#bg-file').click();
-  $('#bg-file').onchange = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    try {
-      const dataUrl = await compressImage(file, 1920);
-      const name = file.name.replace(/\.[^.]+$/, '').slice(0, 50) || '내 배경';
-      const r = await api('POST', '/api/backgrounds', { data: dataUrl, name });
-      backgrounds.unshift({ id: r.id, name: r.name });
-      renderBgOptions();
-      $('#s-bg').value = `bg:${r.id}`;
-      syncToneRow();
-      updatePreview();
-      toast(`배경 "${r.name}"이(가) 추가되었습니다. 슬라이드를 저장하면 적용됩니다.`);
-    } catch (err) { toast(err.message, true); }
-    e.target.value = '';
-  };
-
-  // 동영상/이미지 파일을 본문 커서 위치에 삽입
-  const fileToDataUrl = (file) => new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(r.result);
-    r.onerror = () => reject(new Error('파일을 읽을 수 없습니다.'));
-    r.readAsDataURL(file);
-  });
-  const insertAtCursor = (text) => {
-    const ta = $('#s-body');
-    const start = ta.selectionStart ?? ta.value.length;
-    const before = ta.value.slice(0, start);
-    const after = ta.value.slice(ta.selectionEnd ?? start);
-    const nl = before && !before.endsWith('\n') ? '\n' : '';
-    ta.value = `${before}${nl}${text}\n${after}`;
-    updatePreview();
-  };
-  // 대용량 스토리지가 설정돼 있으면 동영상은 최대 200MB, 아니면 DB 방식 25MB
-  const bigVideo = () => state.settings && state.settings.media_storage;
-  const mediaHint = $('#media-hint');
-  if (mediaHint) {
-    mediaHint.innerHTML = bigVideo()
-      ? '동영상 파일을 올리면 커서 위치에 <code>!video(...)</code>로 삽입됩니다. 최대 200MB (대용량 저장소 연동됨). 매우 긴 영상은 유튜브 링크를 권장합니다.'
-      : '동영상 파일은 커서 위치에 <code>!video(...)</code>로 삽입됩니다. 25MB 이하 — 긴 영상은 유튜브(일부공개) 링크를 쓰세요.';
-  }
-  let mediaMode = 'video';
-  $('#insert-video').onclick = () => { mediaMode = 'video'; $('#media-file').accept = 'video/mp4,video/webm'; $('#media-file').click(); };
-  $('#insert-image').onclick = () => { mediaMode = 'image'; $('#media-file').accept = 'image/png,image/jpeg,image/webp'; $('#media-file').click(); };
-  $('#media-file').onchange = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const msg = $('#save-msg');
-    const useStorage = mediaMode === 'video' && bigVideo();
-    const limitMB = mediaMode === 'image' ? 8 : (useStorage ? 200 : 25);
-    if (file.size > limitMB * 1024 * 1024) { toast(`파일은 ${limitMB}MB 이하여야 합니다.`, true); e.target.value = ''; return; }
-    msg.textContent = '업로드 중…'; msg.className = 'msg';
-    try {
-      let assetId;
-      if (useStorage) {
-        // 1) 서명 URL 발급 → 2) Supabase에 직접 PUT → 3) 확인
-        const sign = await api('POST', `/api/decks/${id}/media-sign`, { mime: file.type, size: file.size });
-        const put = await fetch(sign.uploadUrl, { method: 'PUT', headers: { 'Content-Type': file.type, 'x-upsert': 'true' }, body: file });
-        if (!put.ok) throw new Error('스토리지 업로드에 실패했습니다.');
-        const conf = await api('POST', `/api/decks/${id}/media-confirm`, { path: sign.path, mime: file.type });
-        assetId = conf.id;
-      } else {
-        const dataUrl = mediaMode === 'image' ? await compressImage(file, 1600) : await fileToDataUrl(file);
-        const r = await api('POST', `/api/decks/${id}/asset`, { data: dataUrl });
-        assetId = r.id;
-      }
-      insertAtCursor(mediaMode === 'video' ? `!video(/api/assets/${assetId})` : `![](/api/assets/${assetId})`);
-      msg.textContent = `${mediaMode === 'video' ? '동영상' : '이미지'}이 삽입되었습니다. 저장을 눌러 반영하세요.`;
-      msg.className = 'msg ok';
-    } catch (err) { msg.textContent = err.message; msg.className = 'msg err'; }
-    e.target.value = '';
-  };
 
   $('#import-ppt').onclick = () => $('#import-files').click();
   $('#import-files').onchange = async (e) => {
@@ -2059,14 +1975,69 @@ route(/^#\/decks\/(\d+)\/edit$/, async (id) => {
       }
       msg.textContent = `${files.length}장을 가져왔습니다.`;
       msg.className = 'msg ok';
-      const fresh = await api('GET', `/api/decks/${id}`);
-      slides = fresh.slides;
-      sel = slides.length - 1;
-      refreshList(); loadForm();
+      await reload();
     } catch (err) {
       msg.textContent = err.message;
       msg.className = 'msg err';
     }
+    e.target.value = '';
+  };
+
+  // ---- 동영상 슬라이드: 빈 슬라이드 생성 후 본문을 !video(...) 한 줄로 지정 ----
+  const fileToDataUrl = (file) => new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = () => reject(new Error('파일을 읽을 수 없습니다.'));
+    r.readAsDataURL(file);
+  });
+  const addVideoSlide = async (src) => {
+    // 새 슬라이드를 만든 뒤 본문을 동영상 한 줄로 채운다 (전체화면 재생)
+    const { id: sid } = await api('POST', `/api/decks/${id}/slides`, {});
+    await api('PATCH', `/api/slides/${sid}`, { title: '', body: `!video(${src})`, bg: 'theme-dark' });
+    await reload();
+  };
+  const bigVideo = () => state.settings && state.settings.media_storage;
+  $('#vid-hint').innerHTML = bigVideo()
+    ? '동영상 파일은 최대 200MB (대용량 저장소 연동됨). 매우 긴 영상은 유튜브(일부공개) 링크를 권장합니다.'
+    : '동영상 파일은 25MB 이하. 긴 영상은 유튜브(일부공개) 링크를 쓰세요.';
+
+  $('#vid-url-add').onclick = async () => {
+    const url = $('#vid-url').value.trim();
+    const msg = $('#vid-msg');
+    if (!/^https?:\/\//.test(url)) { msg.textContent = '올바른 주소(http/https)를 입력하세요.'; msg.className = 'msg err'; return; }
+    msg.textContent = '추가 중…'; msg.className = 'msg';
+    try {
+      await addVideoSlide(url);
+      $('#vid-url').value = '';
+      msg.textContent = '동영상 슬라이드가 추가되었습니다.'; msg.className = 'msg ok';
+    } catch (err) { msg.textContent = err.message; msg.className = 'msg err'; }
+  };
+  $('#vid-file-btn').onclick = () => $('#vid-file').click();
+  $('#vid-file').onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const msg = $('#vid-msg');
+    const useStorage = bigVideo();
+    const limitMB = useStorage ? 200 : 25;
+    if (file.size > limitMB * 1024 * 1024) { msg.textContent = `파일은 ${limitMB}MB 이하여야 합니다.`; msg.className = 'msg err'; e.target.value = ''; return; }
+    msg.textContent = '업로드 중…'; msg.className = 'msg';
+    try {
+      let assetId;
+      if (useStorage) {
+        // 1) 서명 URL 발급 → 2) Supabase에 직접 PUT → 3) 확인
+        const sign = await api('POST', `/api/decks/${id}/media-sign`, { mime: file.type, size: file.size });
+        const put = await fetch(sign.uploadUrl, { method: 'PUT', headers: { 'Content-Type': file.type, 'x-upsert': 'true' }, body: file });
+        if (!put.ok) throw new Error('스토리지 업로드에 실패했습니다.');
+        const conf = await api('POST', `/api/decks/${id}/media-confirm`, { path: sign.path, mime: file.type });
+        assetId = conf.id;
+      } else {
+        const dataUrl = await fileToDataUrl(file);
+        const r = await api('POST', `/api/decks/${id}/asset`, { data: dataUrl });
+        assetId = r.id;
+      }
+      await addVideoSlide(`/api/assets/${assetId}`);
+      msg.textContent = '동영상 슬라이드가 추가되었습니다.'; msg.className = 'msg ok';
+    } catch (err) { msg.textContent = err.message; msg.className = 'msg err'; }
     e.target.value = '';
   };
 });
@@ -2474,6 +2445,135 @@ route(/^#\/settings$/, async () => {
   bindPasswordForm();
 });
 
+/* ---------------- 계약·보안 동의 (강사·관리자 강제) ---------------- */
+route(/^#\/agreement$/, async () => {
+  if (!isStaff()) { location.hash = '#/'; return; }
+  const ag = await api('GET', '/api/agreement');
+  shell('계약 및 보안 동의', `
+    <div class="card" style="max-width:760px;margin:0 auto">
+      <h2>${icon('shield')} 이용·비밀유지 계약 동의 <span class="sub">버전 ${ag.version}</span></h2>
+      <p class="small muted" style="margin-bottom:12px">플랫폼 이용을 위해 아래 계약·보안 조항에 동의해 주세요. 전자적 동의는 서명과 동일한 효력을 가집니다.</p>
+      <div class="agreement-doc">${esc(ag.text).replace(/\n/g, '<br>')}</div>
+      <form id="agree-form" class="mt">
+        <label style="display:flex;gap:9px;align-items:flex-start;cursor:pointer;font-weight:600">
+          <input type="checkbox" name="consent" style="width:17px;height:17px;margin-top:1px;accent-color:var(--blue-600)">
+          <span>위 계약 및 비밀유지·보안 조항을 모두 읽고 이해하였으며 이에 동의합니다.</span>
+        </label>
+        <div class="form-grid mt" style="grid-template-columns:1fr auto;max-width:420px">
+          <div><label>동의자 성명 (서명)</label><input name="name" value="${esc(state.me.name)}" required></div>
+          <div style="align-self:end"><button class="btn btn-primary" type="submit">동의하고 시작</button></div>
+        </div>
+        <div class="msg" id="agree-msg"></div>
+      </form>
+    </div>`);
+  document.getElementById('agree-form').onsubmit = async (e) => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const msg = document.getElementById('agree-msg');
+    if (!f.get('consent')) { msg.textContent = '동의 체크가 필요합니다.'; msg.className = 'msg err'; return; }
+    try {
+      await api('POST', '/api/agree', { consent: true, name: f.get('name') });
+      state.mustAgree = false;
+      state.me.agreedVersion = ag.version;
+      toast('동의가 완료되었습니다.');
+      location.hash = isStaff() ? '#/' : '#/decks';
+    } catch (err) { msg.textContent = err.message; msg.className = 'msg err'; }
+  };
+});
+
+/* ---------------- 계약 관리 (슈퍼관리자) ---------------- */
+route(/^#\/contract$/, async () => {
+  if (!state.me || state.me.role !== 'superadmin') { location.hash = '#/'; return; }
+  const data = await api('GET', '/api/agreement/admin');
+  shell('계약 관리', `
+    <div class="grid main-cols">
+      <div class="card">
+        <h2>계약·보안 동의서 편집 <span class="sub">현재 버전 ${data.version}</span></h2>
+        <textarea id="ct-text" class="input" rows="18" style="line-height:1.7">${esc(data.text)}</textarea>
+        <label style="display:flex;gap:8px;align-items:center;margin-top:10px;font-weight:600;font-size:13px">
+          <input type="checkbox" id="ct-required" ${data.required ? 'checked' : ''} style="width:16px;height:16px;accent-color:var(--blue-600)">
+          강사·관리자 최초 이용 시 동의 요구
+        </label>
+        <label style="display:flex;gap:8px;align-items:center;margin-top:8px;font-weight:600;font-size:13px;color:var(--amber-600)">
+          <input type="checkbox" id="ct-bump" style="width:16px;height:16px;accent-color:var(--amber-600)">
+          개정으로 저장 (버전 올림 → 전원 재동의 요구)
+        </label>
+        <div class="mt"><button class="btn btn-primary" id="ct-save">저장</button> <span class="msg" id="ct-msg"></span></div>
+      </div>
+      <div class="col-stack">
+        <div class="card">
+          <h2>미동의 대상 <span class="sub">${data.pending.length}명</span></h2>
+          ${data.pending.length ? `<div class="log-list">${data.pending.map((p) => `
+            <div class="log-item"><div class="li-main"><div class="li-top"><span class="badge amber">미동의</span>
+              <span class="li-who">${esc(p.name)} (${esc(p.username)})</span></div>
+              <div class="li-det">${esc(ROLE_LABELS[p.role] || p.role)}</div></div></div>`).join('')}</div>`
+            : '<div class="empty-note">모든 대상이 동의했습니다.</div>'}
+        </div>
+        <div class="card">
+          <h2>동의 기록 <span class="sub">최근 ${data.records.length}건</span></h2>
+          ${data.records.length ? `<div class="log-list">${data.records.map((r) => `
+            <div class="log-item"><div class="li-main"><div class="li-top"><span class="badge green">서명 v${r.version}</span>
+              <span class="li-who">${esc(r.signed_name)}</span> <span class="small muted">${esc(r.username)}</span></div></div>
+              <div class="li-meta">${esc(r.agreed_at)}<br>${esc(r.ip || '')}</div></div>`).join('')}</div>`
+            : '<div class="empty-note">동의 기록이 없습니다.</div>'}
+        </div>
+      </div>
+    </div>`);
+  document.getElementById('ct-save').onclick = async () => {
+    const msg = document.getElementById('ct-msg');
+    try {
+      await api('PATCH', '/api/agreement/admin', {
+        text: document.getElementById('ct-text').value,
+        required: document.getElementById('ct-required').checked,
+        bump: document.getElementById('ct-bump').checked,
+      });
+      toast('저장되었습니다.');
+      navigate();
+    } catch (err) { msg.textContent = err.message; msg.className = 'msg err'; }
+  };
+});
+
+/* ---------------- 삭제 요청 승인 (슈퍼관리자) ---------------- */
+route(/^#\/deletions$/, async () => {
+  if (!state.me || state.me.role !== 'superadmin') { location.hash = '#/'; return; }
+  const data = await api('GET', '/api/deletion-requests');
+  shell('삭제 요청 승인', `
+    <div class="page-head"><div><div class="ph-t">자료 삭제 요청</div>
+      <div class="desc">강사·관리자가 본인 자료 삭제를 요청하면 여기서 승인·반려합니다. 승인해야 실제 삭제됩니다.</div></div></div>
+    <div class="card">
+      <div class="tbl-scroll"><table class="tbl resp">
+        <thead><tr><th>자료</th><th>요청자</th><th>사유</th><th>요청 시각</th><th style="width:180px">처리</th></tr></thead>
+        <tbody>
+          ${data.requests.map((r) => `<tr>
+            <td data-label="자료" class="cell-main">${esc(r.title)}</td>
+            <td data-label="요청자">${esc(r.requester_name || '-')} <span class="small muted">${esc(r.requester_username || '')}</span></td>
+            <td data-label="사유">${esc(r.delete_reason) || '<span class="muted">-</span>'}</td>
+            <td data-label="요청 시각" class="small muted">${esc(r.requested_at)}</td>
+            <td><div class="row-actions">
+              <button class="btn btn-danger btn-sm" data-approve="${r.id}">승인(삭제)</button>
+              <button class="btn btn-ghost btn-sm" data-reject="${r.id}">반려</button>
+            </div></td>
+          </tr>`).join('') || '<tr><td colspan="5" class="empty-note">대기 중인 삭제 요청이 없습니다.</td></tr>'}
+        </tbody>
+      </table></div>
+    </div>`);
+  document.querySelectorAll('[data-approve]').forEach((b) => {
+    b.onclick = async () => {
+      if (!confirm('이 자료를 영구 삭제할까요? 되돌릴 수 없습니다.')) return;
+      await api('POST', `/api/decks/${b.dataset.approve}/delete-approve`);
+      toast('삭제되었습니다.');
+      navigate();
+    };
+  });
+  document.querySelectorAll('[data-reject]').forEach((b) => {
+    b.onclick = async () => {
+      await api('POST', `/api/decks/${b.dataset.reject}/delete-reject`);
+      toast('반려되었습니다.');
+      navigate();
+    };
+  });
+});
+
 /* ---------------- 부팅 ---------------- */
 (async function boot() {
   try {
@@ -2482,6 +2582,7 @@ route(/^#\/settings$/, async () => {
     state.access = data.access;
     state.settings = data.settings;
     state.classSession = data.classSession || null;
+    state.mustAgree = !!data.mustAgree;
     Live.start(); // 게스트일 때만 내부에서 동작
   } catch { state.me = null; }
   if (!location.hash) location.hash = state.me ? (isStaff() ? '#/' : '#/decks') : '#/login';
