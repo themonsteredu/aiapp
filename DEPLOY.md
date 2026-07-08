@@ -20,6 +20,20 @@
 | `SUPERADMIN_PASSWORD` | 원하는 값 | 초기 슈퍼관리자 비밀번호 (미설정 시 `ChangeMe123!`) |
 | `TRUST_PROXY` | `1` | 프록시 뒤에서 실제 접속 IP 인식 (Vercel은 자동) |
 | `COOKIE_SECURE` | `1` | HTTPS 세션 쿠키 보호 (Vercel은 자동) |
+| `SUPABASE_URL` | `https://xxx.supabase.co` | (선택) 대용량 동영상 업로드용 — 아래 참고 |
+| `SUPABASE_SERVICE_KEY` | service_role 키 | (선택) 위와 함께 설정 |
+
+### (선택) 대용량 동영상 업로드 — Supabase Storage
+
+동영상 파일을 슬라이드에 올릴 때, 이 두 변수를 설정하면 **최대 200MB** 파일을 브라우저가 Supabase에 직접 업로드합니다(서버·Vercel 4.5MB 제한 우회). 미설정 시에는 25MB 이하 파일만 DB에 저장하는 방식으로 동작합니다.
+
+1. Supabase 대시보드 → **Project Settings → API** 에서 `Project URL`(= `SUPABASE_URL`)과 **`service_role` 키**(= `SUPABASE_SERVICE_KEY`) 복사
+   - ⚠️ `service_role` 키는 관리자 권한 키입니다. **서버 환경변수로만** 넣고 절대 클라이언트/저장소에 노출하지 마세요 (이 앱은 서버에서만 사용).
+2. 두 변수를 배포 환경변수에 추가
+3. 첫 동영상 업로드 시 `media` 버킷(비공개)이 자동 생성됩니다. (수동 생성도 가능: Storage → New bucket → 이름 `media`, Public 해제)
+4. 재생은 로그인·시간표·잠금 규칙 통과 후 단기 서명 URL로만 제공되어, 주소가 유출돼도 곧 만료됩니다.
+
+무료 티어 Storage 용량은 1GB입니다. 그보다 긴/많은 영상은 유튜브(일부공개)를 병행하세요.
 
 ---
 

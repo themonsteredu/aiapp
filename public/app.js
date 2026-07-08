@@ -1116,11 +1116,11 @@ async function openItemsModal(sessionId, session, allDecks) {
 route(/^#\/sessions$/, async () => {
   if (!isStaff()) { location.hash = '#/decks'; return; }
   const [data, decksData] = await Promise.all([api('GET', '/api/class-sessions'), api('GET', '/api/decks')]);
-  // 관리자 이상은 담당 강사를 배정할 수 있음 → 강사 목록 조회
+  // 관리자 이상은 담당자를 배정할 수 있음 → 강사·관리자 목록 조회 (담당은 관리자일 수도 있음)
   let instructors = [];
   if (isAdmin()) {
     instructors = (await api('GET', '/api/users').catch(() => ({ users: [] }))).users
-      .filter((u) => u.role === 'instructor' && u.active);
+      .filter((u) => u.active && ['instructor', 'admin', 'superadmin'].includes(u.role) && u.id !== state.me.id);
   }
   shell('수업 입장 코드', `
     <div class="page-head">
@@ -1135,7 +1135,7 @@ route(/^#\/sessions$/, async () => {
           ${isAdmin() ? `<div><label>담당 강사</label>
             <select name="instructor_id">
               <option value="">나 (${esc(state.me.name)})</option>
-              ${instructors.map((u) => `<option value="${u.id}">${esc(u.name)} (${esc(u.username)})</option>`).join('')}
+              ${instructors.map((u) => `<option value="${u.id}">${esc(u.name)} (${esc(u.username)}·${esc(u.roleLabel)})</option>`).join('')}
             </select></div>` : ''}
           <div><label>유효 시간</label>
             <select name="duration_minutes">
@@ -1799,7 +1799,7 @@ route(/^#\/decks\/(\d+)\/edit$/, async (id) => {
               </div>
             </div>
             <textarea id="s-body" class="mt"></textarea>
-            <div class="small muted" style="margin-top:5px">동영상 파일은 커서 위치에 <code>!video(...)</code>로 삽입됩니다. 25MB 이하 권장 — 긴 영상은 유튜브(일부공개) 링크를 쓰세요.</div>
+            <div class="small muted" style="margin-top:5px" id="media-hint">동영상 파일은 커서 위치에 <code>!video(...)</code>로 삽입됩니다.</div>
           </div>
           <div class="mt" style="display:flex;align-items:center;gap:10px">
             <button class="btn btn-primary" id="save-slide">슬라이드 저장</button><span class="msg" id="save-msg"></span></div>
@@ -1948,22 +1948,40 @@ route(/^#\/decks\/(\d+)\/edit$/, async (id) => {
     ta.value = `${before}${nl}${text}\n${after}`;
     updatePreview();
   };
+  // 대용량 스토리지가 설정돼 있으면 동영상은 최대 200MB, 아니면 DB 방식 25MB
+  const bigVideo = () => state.settings && state.settings.media_storage;
+  const mediaHint = $('#media-hint');
+  if (mediaHint) {
+    mediaHint.innerHTML = bigVideo()
+      ? '동영상 파일을 올리면 커서 위치에 <code>!video(...)</code>로 삽입됩니다. 최대 200MB (대용량 저장소 연동됨). 매우 긴 영상은 유튜브 링크를 권장합니다.'
+      : '동영상 파일은 커서 위치에 <code>!video(...)</code>로 삽입됩니다. 25MB 이하 — 긴 영상은 유튜브(일부공개) 링크를 쓰세요.';
+  }
   let mediaMode = 'video';
   $('#insert-video').onclick = () => { mediaMode = 'video'; $('#media-file').accept = 'video/mp4,video/webm'; $('#media-file').click(); };
   $('#insert-image').onclick = () => { mediaMode = 'image'; $('#media-file').accept = 'image/png,image/jpeg,image/webp'; $('#media-file').click(); };
   $('#media-file').onchange = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    const limitMB = mediaMode === 'video' ? 25 : 8;
-    if (file.size > limitMB * 1024 * 1024) { toast(`파일은 ${limitMB}MB 이하여야 합니다.`, true); e.target.value = ''; return; }
     const msg = $('#save-msg');
+    const useStorage = mediaMode === 'video' && bigVideo();
+    const limitMB = mediaMode === 'image' ? 8 : (useStorage ? 200 : 25);
+    if (file.size > limitMB * 1024 * 1024) { toast(`파일은 ${limitMB}MB 이하여야 합니다.`, true); e.target.value = ''; return; }
     msg.textContent = '업로드 중…'; msg.className = 'msg';
     try {
-      let dataUrl;
-      if (mediaMode === 'image') dataUrl = await compressImage(file, 1600);
-      else dataUrl = await fileToDataUrl(file);
-      const r = await api('POST', `/api/decks/${id}/asset`, { data: dataUrl });
-      insertAtCursor(mediaMode === 'video' ? `!video(/api/assets/${r.id})` : `![](/api/assets/${r.id})`);
+      let assetId;
+      if (useStorage) {
+        // 1) 서명 URL 발급 → 2) Supabase에 직접 PUT → 3) 확인
+        const sign = await api('POST', `/api/decks/${id}/media-sign`, { mime: file.type, size: file.size });
+        const put = await fetch(sign.uploadUrl, { method: 'PUT', headers: { 'Content-Type': file.type, 'x-upsert': 'true' }, body: file });
+        if (!put.ok) throw new Error('스토리지 업로드에 실패했습니다.');
+        const conf = await api('POST', `/api/decks/${id}/media-confirm`, { path: sign.path, mime: file.type });
+        assetId = conf.id;
+      } else {
+        const dataUrl = mediaMode === 'image' ? await compressImage(file, 1600) : await fileToDataUrl(file);
+        const r = await api('POST', `/api/decks/${id}/asset`, { data: dataUrl });
+        assetId = r.id;
+      }
+      insertAtCursor(mediaMode === 'video' ? `!video(/api/assets/${assetId})` : `![](/api/assets/${assetId})`);
       msg.textContent = `${mediaMode === 'video' ? '동영상' : '이미지'}이 삽입되었습니다. 저장을 눌러 반영하세요.`;
       msg.className = 'msg ok';
     } catch (err) { msg.textContent = err.message; msg.className = 'msg err'; }
@@ -2043,7 +2061,8 @@ async function usersPage({ title, description, fixedRole, minLevel }) {
                 <td data-label="상태">${u.active ? '<span class="badge green">활성</span>' : '<span class="badge red">비활성</span>'}</td>
                 <td data-label="생성일" class="small muted">${esc(u.createdAt).slice(0, 10)}</td>
                 <td>
-                  ${u.id === state.me.id ? '<span class="small muted">본인 계정</span>' : `
+                  ${u.id === state.me.id ? '<span class="small muted">본인 계정</span>'
+                    : !u.manageable ? '<span class="small muted">관리 권한 없음</span>' : `
                   <div class="row-actions">
                     <button class="btn btn-ghost btn-sm" data-act="${u.id}" data-val="${u.active ? 0 : 1}">${u.active ? '비활성화' : '활성화'}</button>
                     ${u.role === 'student' ? `<button class="btn btn-ghost btn-sm" data-cls="${u.id}">반 변경</button>` : ''}
