@@ -1371,8 +1371,104 @@ route(/^#\/sessions$/, async () => {
 });
 
 /* ---------------- 웹앱(덱) 관리 ---------------- */
+// 자료 행의 보조 액션(편집/배정/요금/내보내기/공개/삭제) — 표·간략·상세시트 공용
+function deckSecondaryActionsHtml(d) {
+  if (d.editable === false) return '<span class="small muted">배정된 자료 (읽기 전용)</span>';
+  const editBtn = d.kind === 'link'
+    ? `<button class="btn btn-ghost btn-sm" data-linkedit="${d.id}">${icon('edit')} 링크 설정</button>`
+    : d.kind === 'html'
+      ? `<button class="btn btn-ghost btn-sm" data-htmlup="${d.id}">${icon('edit')} HTML 교체</button>`
+      : `<a class="btn btn-ghost btn-sm" href="#/decks/${d.id}/edit">${icon('edit')} 편집</a>`;
+  const exportBtn = isAdmin() && d.kind === 'slides' ? `<a class="btn btn-ghost btn-sm" href="#/export/${d.id}" title="PDF/백업 내보내기">${icon('download')}</a>` : '';
+  const delBtn = d.deletePending
+    ? '<span class="small muted">삭제 승인 대기</span>'
+    : d.canDelete
+      ? `<button class="btn btn-danger btn-sm" data-del="${d.id}">${icon('trash')} ${state.me.role === 'superadmin' ? '삭제' : '삭제 요청'}</button>`
+      : '';
+  return `${editBtn}
+    <button class="btn btn-ghost btn-sm" data-assign="${d.id}">${icon('shield')} 배정</button>
+    <button class="btn btn-ghost btn-sm" data-cost="${d.id}" title="요금 유형 설정">💳 요금</button>
+    ${exportBtn}
+    <button class="btn btn-ghost btn-sm" data-pub="${d.id}" data-val="${d.published ? 0 : 1}">${d.published ? '비공개로' : '공개하기'}</button>
+    ${delBtn}`;
+}
+
+// 위 액션들의 이벤트 바인딩 (root 안에서만) — 표/상세시트 어디서든 재사용
+function bindDeckActions(root, data) {
+  root.querySelectorAll('[data-linkedit]').forEach((b) => {
+    b.onclick = () => { const deck = data.decks.find((d) => d.id === Number(b.dataset.linkedit)); if (deck) openLinkModal(deck); };
+  });
+  root.querySelectorAll('[data-htmlup]').forEach((b) => {
+    b.onclick = () => {
+      const input = document.createElement('input');
+      input.type = 'file'; input.accept = '.html,.htm,text/html';
+      input.onchange = async () => {
+        const file = input.files[0];
+        if (!file) return;
+        if (file.size > 3 * 1024 * 1024) return toast('HTML 파일은 3MB 이하여야 합니다.', true);
+        try { await api('PATCH', `/api/decks/${b.dataset.htmlup}`, { html: await file.text() }); toast('HTML이 교체되었습니다.'); }
+        catch (err) { toast(err.message, true); }
+      };
+      input.click();
+    };
+  });
+  root.querySelectorAll('[data-assign]').forEach((b) => {
+    b.onclick = () => { const deck = data.decks.find((d) => d.id === Number(b.dataset.assign)); if (deck) openAssignModal(deck, navigate); };
+  });
+  root.querySelectorAll('[data-cost]').forEach((b) => {
+    b.onclick = () => { const deck = data.decks.find((d) => d.id === Number(b.dataset.cost)); if (deck) openCostModal(deck, navigate); };
+  });
+  root.querySelectorAll('[data-pub]').forEach((b) => {
+    b.onclick = async () => { await api('PATCH', `/api/decks/${b.dataset.pub}`, { published: b.dataset.val === '1' }); navigate(); };
+  });
+  root.querySelectorAll('[data-del]').forEach((b) => {
+    b.onclick = async () => {
+      const isSuper = state.me.role === 'superadmin';
+      const ok = isSuper ? confirm('이 웹앱과 모든 슬라이드를 삭제할까요?') : confirm('삭제를 요청할까요? 슈퍼관리자 승인 후 실제로 삭제됩니다.');
+      if (!ok) return;
+      let reason = '';
+      if (!isSuper) reason = prompt('삭제 사유(선택)를 입력하세요.', '') || '';
+      const r = await api('DELETE', `/api/decks/${b.dataset.del}`, isSuper ? undefined : { reason });
+      toast(isSuper || (r && r.deleted) ? '삭제되었습니다.' : '삭제 요청이 접수되었습니다. 슈퍼관리자 승인을 기다립니다.');
+      navigate();
+    };
+  });
+}
+
+// 간략 목록에서 "관리 ⋯" → 상세 + 액션 시트
+function openDeckSheet(d, data) {
+  const kindText = d.kind === 'link' ? '외부 체험형 웹앱' : d.kind === 'html' ? '업로드형 HTML 웹앱' : `슬라이드 ${d.slideCount}장`;
+  const rows = [
+    ['유형', kindText],
+    ['과목', d.subject || '미분류'],
+    ['담당 강사', d.ownerName],
+    ['대상 학생', d.target_classes || '전체'],
+    ['권한 기간', periodText(d)],
+    ['상태', (DECK_STATUS[d.status] || DECK_STATUS.private)[0] + (d.deletePending ? ' · 삭제 대기' : '')],
+    ['요금', d.costType === 'api_paid' ? `API 유료${d.apiProvider ? ' (' + d.apiProvider + ')' : ''}` : '무료'],
+    ['갱신', String(d.updated_at || '').slice(0, 16)],
+  ];
+  const back = openModal(`
+    <h3>${esc(d.title)}</h3>
+    ${d.description ? `<div class="m-sub">${esc(d.description)}</div>` : ''}
+    <div class="sheet-detail">
+      ${rows.map(([k, v]) => `<div><span class="sd-k">${k}</span><span class="sd-v">${esc(String(v))}</span></div>`).join('')}
+    </div>
+    <div class="field-label mt" style="margin-bottom:6px">관리</div>
+    <div class="row-actions" id="sheet-actions">
+      <a class="btn btn-primary btn-sm" href="#/view/${d.id}">${icon('play')} ${d.kind === 'slides' ? '재생' : '열기'}</a>
+      ${deckSecondaryActionsHtml(d)}
+    </div>
+    <div class="m-actions"><button class="btn btn-ghost" id="sheet-close">닫기</button></div>`);
+  back.querySelector('#sheet-close').onclick = () => back.remove();
+  bindDeckActions(back, data);
+  // 액션을 누르면(모달 열기/공개/삭제/이동) 시트는 닫는다
+  back.querySelector('#sheet-actions').addEventListener('click', () => back.remove());
+}
+
 let deckSubjectTab = 'all';
 let deckCostTab = 'all';
+let deckView = (typeof localStorage !== 'undefined' && localStorage.getItem('deckView')) || 'compact';
 route(/^#\/decks$/, async () => {
   const data = await api('GET', '/api/decks');
   if (state.me.role === 'student') {
@@ -1420,10 +1516,53 @@ route(/^#\/decks$/, async () => {
   const list = data.decks.filter((d) =>
     (deckSubjectTab === 'all' || (d.subject || '') === deckSubjectTab)
     && (deckCostTab === 'all' || (deckCostTab === 'paid' ? d.costType === 'api_paid' : d.costType !== 'api_paid')));
+  const typeIco = (d) => d.kind === 'link' ? '🧪' : d.kind === 'html' ? '📦' : '📊';
+  const statusLabel = (d) => (DECK_STATUS[d.status] || DECK_STATUS.private)[0];
+  // 간략 보기(기본): 제목 위주, 나머지는 "관리 ⋯" 시트로
+  const compactBody = `<div class="card" style="padding:6px 12px"><div class="deck-list">
+    ${list.map((d) => `
+      <div class="deck-line">
+        <div class="dl-left">
+          <span class="dl-ico">${typeIco(d)}</span>
+          <div class="dl-body">
+            <div class="dl-title">${esc(d.title)}${d.costType === 'api_paid' ? ' <span title="API 유료">💳</span>' : ''}</div>
+            <div class="dl-meta small muted">${d.subject ? `📁 ${esc(d.subject)}` : '미분류'} · ${statusLabel(d)}${d.deletePending ? ' · <span class="amber-text">삭제 대기</span>' : ''}</div>
+          </div>
+        </div>
+        <div class="dl-actions">
+          <a class="btn btn-primary btn-sm" href="#/view/${d.id}">${icon('play')} ${d.kind === 'slides' ? '재생' : '열기'}</a>
+          <button class="btn btn-ghost btn-sm" data-more="${d.id}">관리 ⋯</button>
+        </div>
+      </div>`).join('') || '<p class="empty-note">이 폴더에 웹앱이 없습니다. 새로 만들어 보세요.</p>'}
+  </div></div>`;
+  // 상세 표 보기(토글): 기존 전체 컬럼
+  const detailBody = `<div class="card"><div class="tbl-scroll">
+    <table class="tbl resp">
+      <thead><tr><th>웹앱명</th><th>과목</th><th>담당 강사</th><th>대상 학생</th><th>권한 기간</th><th>상태</th><th style="width:300px">관리</th></tr></thead>
+      <tbody>
+        ${list.map((d) => `
+          <tr>
+            <td data-label="웹앱명"><div class="cell-main">${typeIco(d)} ${esc(d.title)} ${costBadge(d)}</div><div class="cell-sub">${esc(d.description) || ''} · ${d.kind === 'link' ? '외부 체험형 웹앱' : d.kind === 'html' ? '업로드형 HTML 웹앱' : `슬라이드 ${d.slideCount}장`} · ${esc(d.updated_at)}</div></td>
+            <td data-label="과목">${d.subject ? `<span class="badge violet plain">📁 ${esc(d.subject)}</span>` : '<span class="muted small">미분류</span>'}</td>
+            <td data-label="담당 강사">${esc(d.ownerName)}</td>
+            <td data-label="대상 학생">${esc(d.target_classes) || '<span class="muted">전체</span>'}</td>
+            <td data-label="권한 기간" class="small">${esc(periodText(d))}</td>
+            <td data-label="상태">${deckStatusBadge(d)}${d.deletePending ? ' <span class="badge amber">삭제 대기</span>' : ''}</td>
+            <td><div class="row-actions">
+              <a class="btn btn-primary btn-sm" href="#/view/${d.id}">${icon('play')} ${d.kind === 'slides' ? '재생' : '열기'}</a>
+              ${deckSecondaryActionsHtml(d)}
+            </div></td>
+          </tr>`).join('') || '<tr><td colspan="7" class="empty-note">이 폴더에 웹앱이 없습니다. 새로 만들어 보세요.</td></tr>'}
+      </tbody>
+    </table>
+  </div></div>`;
   shell('웹앱/PPT 관리', `
     <div class="page-head">
       <div><div class="ph-t">웹앱 라이브러리</div><div class="desc">PPT처럼 발표할 수 있는 웹앱(슬라이드 덱)을 과목별 폴더로 관리합니다.</div></div>
-      <button class="btn btn-primary" id="btn-new-deck">${icon('plus')} 새 웹앱 만들기</button>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="btn btn-ghost btn-sm" id="deck-view-toggle">${deckView === 'compact' ? '☰ 표로 보기' : '≣ 간략히'}</button>
+        <button class="btn btn-primary" id="btn-new-deck">${icon('plus')} 새 웹앱 만들기</button>
+      </div>
     </div>
     <div class="tabs">
       ${tabs.map(([k, label]) => `<button data-stab="${esc(k)}" class="${deckSubjectTab === k ? 'active' : ''}">${k === 'all' ? '' : '📁 '}${esc(label)}</button>`).join('')}
@@ -1432,56 +1571,22 @@ route(/^#\/decks$/, async () => {
       ${[['all', `요금 전체`], ['free', `🆓 무료 (${data.decks.length - paidCount})`], ['paid', `💳 API 유료 (${paidCount})`]]
         .map(([k, label]) => `<button data-ctab="${k}" class="${deckCostTab === k ? 'active' : ''}">${label}</button>`).join('')}
     </div>
-    <div class="card">
-      <div class="tbl-scroll">
-        <table class="tbl resp">
-          <thead><tr><th>웹앱명</th><th>과목</th><th>담당 강사</th><th>대상 학생</th><th>권한 기간</th><th>상태</th><th style="width:300px">관리</th></tr></thead>
-          <tbody>
-            ${list.map((d) => `
-              <tr>
-                <td data-label="웹앱명"><div class="cell-main">${d.kind === 'link' ? '🧪 ' : d.kind === 'html' ? '📦 ' : ''}${esc(d.title)} ${costBadge(d)}</div><div class="cell-sub">${esc(d.description) || ''} · ${d.kind === 'link' ? '외부 체험형 웹앱' : d.kind === 'html' ? '업로드형 HTML 웹앱' : `슬라이드 ${d.slideCount}장`} · ${esc(d.updated_at)}</div></td>
-                <td data-label="과목">${d.subject ? `<span class="badge violet plain">📁 ${esc(d.subject)}</span>` : '<span class="muted small">미분류</span>'}</td>
-                <td data-label="담당 강사">${esc(d.ownerName)}</td>
-                <td data-label="대상 학생">${esc(d.target_classes) || '<span class="muted">전체</span>'}</td>
-                <td data-label="권한 기간" class="small">${esc(periodText(d))}</td>
-                <td data-label="상태">${deckStatusBadge(d)}${d.deletePending ? ' <span class="badge amber">삭제 대기</span>' : ''}</td>
-                <td>
-                  <div class="row-actions">
-                    <a class="btn btn-primary btn-sm" href="#/view/${d.id}">${icon('play')} ${d.kind === 'slides' ? '재생' : '열기'}</a>
-                    ${d.editable === false ? '<span class="small muted">배정된 자료 (읽기 전용)</span>' : `
-                    ${d.kind === 'link'
-                      ? `<button class="btn btn-ghost btn-sm" data-linkedit="${d.id}">${icon('edit')} 링크 설정</button>`
-                      : d.kind === 'html'
-                        ? `<button class="btn btn-ghost btn-sm" data-htmlup="${d.id}">${icon('edit')} HTML 교체</button>`
-                        : `<a class="btn btn-ghost btn-sm" href="#/decks/${d.id}/edit">${icon('edit')} 편집</a>`}
-                    <button class="btn btn-ghost btn-sm" data-assign="${d.id}">${icon('shield')} 배정</button>
-                    <button class="btn btn-ghost btn-sm" data-cost="${d.id}" title="요금 유형 설정">💳 요금</button>
-                    ${isAdmin() && d.kind === 'slides' ? `<a class="btn btn-ghost btn-sm" href="#/export/${d.id}" title="PDF/백업 내보내기">${icon('download')}</a>` : ''}
-                    <button class="btn btn-ghost btn-sm" data-pub="${d.id}" data-val="${d.published ? 0 : 1}">${d.published ? '비공개로' : '공개하기'}</button>
-                    ${d.deletePending
-                      ? '<span class="small muted">삭제 승인 대기</span>'
-                      : d.canDelete
-                        ? `<button class="btn btn-danger btn-sm" data-del="${d.id}">${icon('trash')} ${state.me.role === 'superadmin' ? '삭제' : '삭제 요청'}</button>`
-                        : ''}`}
-                  </div>
-                </td>
-              </tr>`).join('') || '<tr><td colspan="7" class="empty-note">이 폴더에 웹앱이 없습니다. 새로 만들어 보세요.</td></tr>'}
-          </tbody>
-        </table>
-      </div>
-    </div>`);
+    ${deckView === 'detailed' ? detailBody : compactBody}`);
   document.querySelectorAll('[data-stab]').forEach((b) => {
     b.onclick = () => { deckSubjectTab = b.dataset.stab; navigate(); };
   });
   document.querySelectorAll('[data-ctab]').forEach((b) => {
     b.onclick = () => { deckCostTab = b.dataset.ctab; navigate(); };
   });
-  document.querySelectorAll('[data-cost]').forEach((b) => {
-    b.onclick = () => {
-      const deck = data.decks.find((d) => d.id === Number(b.dataset.cost));
-      if (deck) openCostModal(deck, navigate);
-    };
+  document.getElementById('deck-view-toggle').onclick = () => {
+    deckView = deckView === 'compact' ? 'detailed' : 'compact';
+    try { localStorage.setItem('deckView', deckView); } catch {}
+    navigate();
+  };
+  document.querySelectorAll('[data-more]').forEach((b) => {
+    b.onclick = () => { const deck = data.decks.find((d) => d.id === Number(b.dataset.more)); if (deck) openDeckSheet(deck, data); };
   });
+  bindDeckActions(document, data); // 상세 표 보기의 액션 버튼
   document.getElementById('btn-new-deck').onclick = () => {
     const back = openModal(`
       <h3>새 웹앱 만들기</h3>
@@ -1553,56 +1658,6 @@ route(/^#\/decks$/, async () => {
       } catch (err) { toast(err.message, true); }
     };
   };
-  document.querySelectorAll('[data-linkedit]').forEach((b) => {
-    b.onclick = () => {
-      const deck = data.decks.find((d) => d.id === Number(b.dataset.linkedit));
-      if (deck) openLinkModal(deck);
-    };
-  });
-  // HTML 웹앱 파일 교체
-  document.querySelectorAll('[data-htmlup]').forEach((b) => {
-    b.onclick = () => {
-      const input = document.createElement('input');
-      input.type = 'file';
-      input.accept = '.html,.htm,text/html';
-      input.onchange = async () => {
-        const file = input.files[0];
-        if (!file) return;
-        if (file.size > 3 * 1024 * 1024) return toast('HTML 파일은 3MB 이하여야 합니다.', true);
-        try {
-          await api('PATCH', `/api/decks/${b.dataset.htmlup}`, { html: await file.text() });
-          toast('HTML이 교체되었습니다.');
-        } catch (err) { toast(err.message, true); }
-      };
-      input.click();
-    };
-  });
-  document.querySelectorAll('[data-assign]').forEach((b) => {
-    b.onclick = () => {
-      const deck = data.decks.find((d) => d.id === Number(b.dataset.assign));
-      if (deck) openAssignModal(deck, navigate);
-    };
-  });
-  document.querySelectorAll('[data-pub]').forEach((b) => {
-    b.onclick = async () => {
-      await api('PATCH', `/api/decks/${b.dataset.pub}`, { published: b.dataset.val === '1' });
-      navigate();
-    };
-  });
-  document.querySelectorAll('[data-del]').forEach((b) => {
-    b.onclick = async () => {
-      const isSuper = state.me.role === 'superadmin';
-      const ok = isSuper
-        ? confirm('이 웹앱과 모든 슬라이드를 삭제할까요?')
-        : confirm('삭제를 요청할까요? 슈퍼관리자 승인 후 실제로 삭제됩니다.');
-      if (!ok) return;
-      let reason = '';
-      if (!isSuper) { reason = prompt('삭제 사유(선택)를 입력하세요.', '') || ''; }
-      const r = await api('DELETE', `/api/decks/${b.dataset.del}`, isSuper ? undefined : { reason });
-      toast(isSuper || (r && r.deleted) ? '삭제되었습니다.' : '삭제 요청이 접수되었습니다. 슈퍼관리자 승인을 기다립니다.');
-      navigate();
-    };
-  });
 });
 
 /* ---------------- 내보내기 (관리자 이상: PDF 저장 / JSON 백업) ---------------- */

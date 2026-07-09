@@ -631,6 +631,34 @@ table.matrix { width: 100%; border-collapse: separate; border-spacing: 5px; min-
 .empty-note { color: var(--text-3); font-size: 13px; padding: 18px 0; text-align: center; }
 .side-overlay { display: none; }
 
+/* 자료 간략 목록 — 제목 위주, 시선 피로 최소화 */
+.deck-list { display: flex; flex-direction: column; }
+.deck-line {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 11px 6px; border-bottom: 1px solid var(--line);
+}
+.deck-line:last-child { border-bottom: none; }
+.dl-left { display: flex; align-items: center; gap: 11px; min-width: 0; flex: 1; }
+.dl-ico { font-size: 17px; flex: none; width: 22px; text-align: center; }
+.dl-body { min-width: 0; }
+.dl-title {
+  font-weight: 700; font-size: 15px; color: var(--text-1);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.dl-meta { margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dl-actions { display: flex; gap: 6px; flex: none; }
+.amber-text { color: var(--amber-600, #b45309); font-weight: 600; }
+
+/* 상세 시트 (간략 목록의 "관리 ⋯") */
+.sheet-detail { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 18px; margin: 12px 0 4px; }
+.sheet-detail > div { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.sd-k { color: var(--text-2); flex: none; }
+.sd-v { color: var(--text-1); font-weight: 600; text-align: right; word-break: break-all; }
+@media (max-width: 620px) {
+  .sheet-detail { grid-template-columns: 1fr; }
+  .dl-actions .btn { padding-left: 9px; padding-right: 9px; }
+}
+
 /* 계약·보안 동의서 본문 (스크롤 박스) */
 .agreement-doc {
   max-height: 42vh; overflow-y: auto; padding: 18px 20px;
