@@ -77,8 +77,12 @@ function icon(name) {
   return `<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name] || ''}</svg>`;
 }
 
-/* ---------------- API ---------------- */
-async function api(method, url, body) {
+/* ---------------- API ----------------
+ * opts.noAuthRedirect: 401을 받아도 자동으로 로그아웃/로그인 화면 이동을 하지 않는다.
+ *   3초 간격 라이브 폴링처럼 백그라운드에서 자주 호출되는 요청이, 일시적인 네트워크·
+ *   서버 오류(스치는 401)로 학생을 통째로 튕겨내지 않도록 하기 위한 안전장치.
+ *   이 경우 호출자가 err.status(401 등)를 보고 직접 판단한다. */
+async function api(method, url, body, opts = {}) {
   const res = await fetch(url, {
     method,
     headers: body ? { 'Content-Type': 'application/json' } : undefined,
@@ -86,6 +90,12 @@ async function api(method, url, body) {
   });
   const data = await res.json().catch(() => ({}));
   if (res.status === 401 && !url.endsWith('/api/login')) {
+    if (opts.noAuthRedirect) {
+      const err = new Error(data.error || '로그인이 필요합니다.');
+      err.status = 401;
+      err.data = data;
+      throw err;
+    }
     state.me = null;
     location.hash = '#/login';
     throw new Error(data.error || '로그인이 필요합니다.');
@@ -341,12 +351,20 @@ Protect.init();
 
 /* ---------------- 라이브 발표 따라가기 (게스트 학생) ----------------
  * 3초 간격 폴링: 강사가 라이브를 시작하면 자동으로 라이브 화면에 진입하고,
- * 슬라이드가 넘어가면 함께 넘어가며, 종료되면 자료 목록으로 돌아온다. */
+ * 슬라이드가 넘어가면 함께 넘어가며, 종료되면 자료 목록으로 돌아온다.
+ *
+ * 튕김 방지: 이 폴링은 매우 자주 실행되므로, 스치는 네트워크 오류나 순간적인 서버
+ * 응답 실패(401 포함)로 학생을 즉시 로그아웃시키면 안 된다. 연속으로 여러 번
+ * 401이 확인될 때만 '수업이 실제로 종료된 것'으로 판단해 안내 후 입장 화면으로 보낸다.
+ * 또, 탭이 백그라운드일 때는 폴링을 멈춰 불필요한 부하와 오탐을 줄인다. */
 const Live = {
   timer: null,
   last: null,
+  authFails: 0, // 연속 401 횟수 (일시적 오류와 진짜 수업 종료를 구분)
+  ENDED_AFTER: 3, // 이만큼 연속 401이면 수업 종료로 간주 (약 9초)
   start() {
     if (this.timer || !state.me || !state.me.isGuest || !state.classSession) return;
+    this.authFails = 0;
     this.timer = setInterval(() => this.tick(), 3000);
     this.tick();
   },
@@ -354,25 +372,52 @@ const Live = {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
     this.last = null;
+    this.authFails = 0;
+  },
+  // 수업이 실제로 종료됐을 때만 호출: 안내 후 입장(수업 참여) 화면으로 보낸다.
+  ended() {
+    this.stop();
+    state.me = null;
+    state.classSession = null;
+    toast('수업이 종료되었습니다. 새 입장 코드로 다시 참여해 주세요.');
+    location.hash = '#/login';
   },
   async tick() {
     if (!state.me || !state.me.isGuest) { this.stop(); return; }
+    // 백그라운드 탭에서는 폴링 생략 (다시 보일 때 tick이 즉시 재개된다)
+    if (document.hidden) return;
+    let d;
     try {
-      const d = await api('GET', `/api/class-sessions/${state.classSession.id}/live`);
-      this.last = d.live;
-      const onLive = location.hash === '#/live';
-      if (d.live && !onLive) { location.hash = '#/live'; return; }
-      if (!d.live && onLive) {
-        toast('라이브 발표가 종료되었습니다.');
-        location.hash = '#/decks';
+      d = await api('GET', `/api/class-sessions/${state.classSession.id}/live`, null, { noAuthRedirect: true });
+      this.authFails = 0; // 정상 응답 → 실패 카운터 초기화
+    } catch (err) {
+      if (err && err.status === 401) {
+        // 수업 종료(만료·비활성)면 서버가 세션을 지우고 401을 준다. 다만 스치는 401도
+        // 있으니 연속 임계치를 넘겼을 때만 종료로 확정한다.
+        this.authFails += 1;
+        if (this.authFails >= this.ENDED_AFTER) this.ended();
         return;
       }
-      if (d.live && onLive && window.__liveUpdate) window.__liveUpdate(d.live);
-      // 라이브가 아닐 때는 자료 잠금/해제 변화를 감지해 목록 갱신
-      if (!d.live && window.__deckRefresh) window.__deckRefresh();
-    } catch {}
+      // 그 외 오류(네트워크 끊김·서버 5xx 등)는 조용히 무시하고 다음 주기에 재시도.
+      return;
+    }
+    this.last = d.live;
+    const onLive = location.hash === '#/live';
+    if (d.live && !onLive) { location.hash = '#/live'; return; }
+    if (!d.live && onLive) {
+      toast('라이브 발표가 종료되었습니다.');
+      location.hash = '#/decks';
+      return;
+    }
+    if (d.live && onLive && window.__liveUpdate) window.__liveUpdate(d.live);
+    // 라이브가 아닐 때는 자료 잠금/해제 변화를 감지해 목록 갱신
+    if (!d.live && window.__deckRefresh) window.__deckRefresh();
   },
 };
+// 탭이 다시 보이면 즉시 한 번 폴링해 밀린 상태를 빠르게 반영
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && Live.timer) Live.tick();
+});
 
 /* ---------------- 라우터 ---------------- */
 const routes = [];
