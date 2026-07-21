@@ -2623,6 +2623,80 @@ route(/^#\/settings$/, async () => {
   bindPasswordForm();
 });
 
+/* ---------------- 계약서 인쇄·다운로드 (동의 전 사전 검토용) ---------------- */
+// 계약 본문을 인쇄 친화적인 독립 HTML 문서로 만든다(앱 인쇄 차단과 무관하게 파일/iframe에서 동작).
+function agreementDocHtml(text, version) {
+  const lines = String(text || '').split('\n');
+  const title = (lines[0] || '이용·비밀유지 계약서').trim();
+  const body = lines.slice(1).join('\n').trim();
+  return `<!doctype html>
+<html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${esc(title)} (버전 ${esc(version)})</title>
+<style>
+  @page { margin: 20mm; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+    color: #1a1a1a; line-height: 1.9; font-size: 12pt; max-width: 780px; margin: 32px auto; padding: 0 20px; }
+  h1 { font-size: 17pt; text-align: center; margin: 0 0 4px; }
+  .ver { text-align: center; color: #666; font-size: 10pt; margin-bottom: 28px; }
+  .doc { white-space: pre-wrap; word-break: keep-all; }
+  .sign { margin-top: 40px; border-top: 1px solid #ccc; padding-top: 18px; page-break-inside: avoid; }
+  .sign .note { color: #666; font-size: 10pt; margin: 0 0 14px; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { border: 1px solid #999; padding: 12px 10px; font-size: 11pt; text-align: left; }
+  th { background: #f3f3f3; white-space: nowrap; }
+  td { height: 46px; }
+  .bar { text-align: center; margin-bottom: 24px; }
+  .bar button { font: inherit; padding: 9px 18px; border: 1px solid #2563eb; background: #2563eb;
+    color: #fff; border-radius: 8px; cursor: pointer; }
+  @media print { .bar { display: none; } body { margin: 0; } }
+</style></head>
+<body>
+  <div class="bar"><button onclick="window.print()">인쇄 / PDF로 저장</button></div>
+  <h1>${esc(title)}</h1>
+  <div class="ver">버전 ${esc(version)}</div>
+  <div class="doc">${esc(body)}</div>
+  <div class="sign">
+    <p class="note">※ 본 인쇄본은 사전 검토·보관용입니다. 실제 동의는 플랫폼 로그인 후 전자적 방식으로 이루어지며, 전자 동의는 서명과 동일한 효력을 가집니다.</p>
+    <table>
+      <tr><th>구분</th><th>성명</th><th>날짜</th><th>서명</th></tr>
+      <tr><td>회사(플랫폼)</td><td></td><td></td><td></td></tr>
+      <tr><td>이용자(관리자·강사)</td><td></td><td></td><td></td></tr>
+    </table>
+  </div>
+</body></html>`;
+}
+
+function downloadAgreement(text, version) {
+  const blob = new Blob([agreementDocHtml(text, version)], { type: 'text/html;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `플랫폼_이용계약서_v${version}.html`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+  toast('계약서를 다운로드했습니다. 파일을 열어 인쇄하거나 PDF로 저장하세요.');
+}
+
+function printAgreement(text, version) {
+  const iframe = document.createElement('iframe');
+  iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden';
+  iframe.onload = () => {
+    const w = iframe.contentWindow;
+    let done = false;
+    const cleanup = () => { if (done) return; done = true; setTimeout(() => iframe.remove(), 300); };
+    w.onafterprint = cleanup;
+    w.focus();
+    w.print();
+    setTimeout(cleanup, 60000);
+  };
+  iframe.srcdoc = agreementDocHtml(text, version);
+  document.body.appendChild(iframe);
+}
+
 /* ---------------- 계약·보안 동의 (강사·관리자 강제) ---------------- */
 route(/^#\/agreement$/, async () => {
   if (!isStaff()) { location.hash = '#/'; return; }
@@ -2630,7 +2704,11 @@ route(/^#\/agreement$/, async () => {
   shell('계약 및 보안 동의', `
     <div class="card" style="max-width:760px;margin:0 auto">
       <h2>${icon('shield')} 이용·비밀유지 계약 동의 <span class="sub">버전 ${ag.version}</span></h2>
-      <p class="small muted" style="margin-bottom:12px">플랫폼 이용을 위해 아래 계약·보안 조항에 동의해 주세요. 전자적 동의는 서명과 동일한 효력을 가집니다.</p>
+      <p class="small muted" style="margin-bottom:12px">플랫폼 이용을 위해 아래 계약·보안 조항에 동의해 주세요. 전자적 동의는 서명과 동일한 효력을 가집니다. 동의 전에 계약서를 <b>다운로드하거나 인쇄</b>해 검토하실 수 있습니다.</p>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:8px">
+        <button class="btn btn-ghost btn-sm" type="button" id="ag-download">${icon('download')} 다운로드</button>
+        <button class="btn btn-ghost btn-sm" type="button" id="ag-print">${icon('fileText')} 인쇄 / PDF</button>
+      </div>
       <div class="agreement-doc">${esc(ag.text).replace(/\n/g, '<br>')}</div>
       <form id="agree-form" class="mt">
         <label style="display:flex;gap:9px;align-items:flex-start;cursor:pointer;font-weight:600">
@@ -2644,6 +2722,8 @@ route(/^#\/agreement$/, async () => {
         <div class="msg" id="agree-msg"></div>
       </form>
     </div>`);
+  document.getElementById('ag-download').onclick = () => downloadAgreement(ag.text, ag.version);
+  document.getElementById('ag-print').onclick = () => printAgreement(ag.text, ag.version);
   document.getElementById('agree-form').onsubmit = async (e) => {
     e.preventDefault();
     const f = new FormData(e.target);
@@ -2676,7 +2756,10 @@ route(/^#\/contract$/, async () => {
           <input type="checkbox" id="ct-bump" style="width:16px;height:16px;accent-color:var(--amber-600)">
           개정으로 저장 (버전 올림 → 전원 재동의 요구)
         </label>
-        <div class="mt"><button class="btn btn-primary" id="ct-save">저장</button> <span class="msg" id="ct-msg"></span></div>
+        <div class="mt" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button class="btn btn-primary" id="ct-save">저장</button>
+          <button class="btn btn-ghost" type="button" id="ct-download">${icon('download')} 다운로드</button>
+          <button class="btn btn-ghost" type="button" id="ct-print">${icon('fileText')} 인쇄 / PDF</button>
+          <span class="msg" id="ct-msg"></span></div>
       </div>
       <div class="col-stack">
         <div class="card">
@@ -2697,6 +2780,8 @@ route(/^#\/contract$/, async () => {
         </div>
       </div>
     </div>`);
+  document.getElementById('ct-download').onclick = () => downloadAgreement(document.getElementById('ct-text').value, data.version);
+  document.getElementById('ct-print').onclick = () => printAgreement(document.getElementById('ct-text').value, data.version);
   document.getElementById('ct-save').onclick = async () => {
     const msg = document.getElementById('ct-msg');
     try {
