@@ -2747,7 +2747,8 @@ route(/^#\/contract$/, async () => {
     <div class="grid main-cols">
       <div class="card">
         <h2>계약·보안 동의서 편집 <span class="sub">현재 버전 ${data.version}</span></h2>
-        <textarea id="ct-text" class="input" rows="18" style="line-height:1.7">${esc(data.text)}</textarea>
+        ${data.defaultIsNewer ? `<div class="msg" style="background:var(--amber-50,#fff7ed);border:1px solid var(--amber-300,#fcd34d);color:var(--amber-700,#b45309);padding:9px 12px;border-radius:9px;margin-bottom:10px;font-size:13px;font-weight:600">📢 코드에 최신 기본 계약 문안이 있습니다. 아래 <b>"최신 기본 문안 불러오기"</b>를 누른 뒤 <b>저장</b>하면 사이트에 반영됩니다(전원 재동의).</div>` : ''}
+        <textarea id="ct-text" class="input" rows="22" style="line-height:1.7">${esc(data.text)}</textarea>
         <label style="display:flex;gap:8px;align-items:center;margin-top:10px;font-weight:600;font-size:13px">
           <input type="checkbox" id="ct-required" ${data.required ? 'checked' : ''} style="width:16px;height:16px;accent-color:var(--blue-600)">
           강사·관리자 최초 이용 시 동의 요구
@@ -2757,6 +2758,7 @@ route(/^#\/contract$/, async () => {
           개정으로 저장 (버전 올림 → 전원 재동의 요구)
         </label>
         <div class="mt" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button class="btn btn-primary" id="ct-save">저장</button>
+          <button class="btn btn-ghost" type="button" id="ct-load-default">↻ 최신 기본 문안 불러오기</button>
           <button class="btn btn-ghost" type="button" id="ct-download">${icon('download')} 다운로드</button>
           <button class="btn btn-ghost" type="button" id="ct-print">${icon('fileText')} 인쇄 / PDF</button>
           <span class="msg" id="ct-msg"></span></div>
@@ -2780,6 +2782,15 @@ route(/^#\/contract$/, async () => {
         </div>
       </div>
     </div>`);
+  document.getElementById('ct-load-default').onclick = () => {
+    document.getElementById('ct-text').value = data.default;
+    const bump = document.getElementById('ct-bump');
+    if (bump) bump.checked = true;
+    const msg = document.getElementById('ct-msg');
+    msg.textContent = '최신 기본 문안을 불러왔습니다. 확인 후 [저장]을 누르면 사이트에 반영되고 전원 재동의가 요청됩니다.';
+    msg.className = 'msg';
+    toast('최신 기본 문안을 불러왔습니다.');
+  };
   document.getElementById('ct-download').onclick = () => downloadAgreement(document.getElementById('ct-text').value, data.version);
   document.getElementById('ct-print').onclick = () => printAgreement(document.getElementById('ct-text').value, data.version);
   document.getElementById('ct-save').onclick = async () => {
