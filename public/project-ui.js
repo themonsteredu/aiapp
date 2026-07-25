@@ -322,7 +322,7 @@ export function registerProjectUI(deps) {
             const no = index + 1;
             const open = visibility[index] !== false && no <= project.currentSession;
             return `<button class="${open ? 'open' : ''}" data-open-session="${no}">
-              <i>${open ? '✓' : '🔒'}</i><b>${no}차시</b><span>${esc(title)}</span>
+              <i>${icon(open ? 'check' : 'lock')}</i><b>${no}차시</b><span>${esc(title)}</span>
             </button>`;
           }).join('')}
         </div>
@@ -398,7 +398,7 @@ export function registerProjectUI(deps) {
         ].filter(Boolean).join(' ');
         return open
           ? `<a class="${cls}" href="#/project/${no}"><i>${row?.status === '확정' ? '✓' : no}</i><span>${no}차시</span></a>`
-          : `<span class="${cls}" title="교사가 아직 공개하지 않았습니다"><i>🔒</i><span>${no}차시</span></span>`;
+          : `<span class="${cls}" title="교사가 아직 공개하지 않았습니다"><i>${icon('lock')}</i><span>${no}차시</span></span>`;
       }).join('<b></b>')}
     </div>`;
   }
@@ -726,7 +726,7 @@ export function registerProjectUI(deps) {
       shell('AI 프로젝트', `
         ${projectStepper(current, no)}
         <div class="project-locked">
-          <span>🔒</span><h2>${no}차시는 아직 열리지 않았습니다.</h2>
+          <span class="project-lock-icon">${icon('lock')}</span><h2>${no}차시는 아직 열리지 않았습니다.</h2>
           <p>선생님이 차시를 공개하면 이어서 작업할 수 있습니다.</p>
           <a class="btn btn-primary" href="#/project">현재 차시로 돌아가기</a>
         </div>`);
@@ -941,7 +941,7 @@ export function registerProjectUI(deps) {
                   </div>
                   <div class="public-source-box">
                     <div><b>공식 출처</b><span>자료 확인일 ${esc(selected?.checkedAt || '확인 필요')}</span></div>
-                    <a href="${esc(selected?.sourceUrl || '#')}" target="_blank" rel="noopener noreferrer">공식자료 확인 ↗</a>
+                    <a href="${esc(selected?.sourceUrl || '#')}" target="_blank" rel="noopener noreferrer">공식자료 확인</a>
                   </div>
                   <p class="public-caution">운영시간·요금·예약 여부는 변동될 수 있습니다. 방문 전에 반드시 공식자료를 다시 확인하세요.</p>
                 </div>
