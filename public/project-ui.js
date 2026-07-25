@@ -226,7 +226,7 @@ export function registerProjectUI(deps) {
                   <span>배포 ${project.publishedCount || 0}팀</span>
                 </div>
               </div>
-              <a class="btn btn-ghost" href="#/projects/${project.id}">프로젝트 관리 ${icon('chevRight')}</a>
+              <a class="btn btn-ghost" data-project-open href="#/projects/${project.id}">프로젝트 관리 ${icon('chevRight')}</a>
             </article>`;
         }).join('') : `
           <div class="project-empty project-empty-large">
@@ -235,6 +235,13 @@ export function registerProjectUI(deps) {
           </div>`}
       </div>`);
     document.getElementById('project-create').onclick = openCreateProject;
+    document.querySelectorAll('[data-project-open]').forEach((link) => {
+      link.onclick = () => {
+        link.classList.add('is-loading');
+        link.setAttribute('aria-busy', 'true');
+        link.textContent = '불러오는 중';
+      };
+    });
   });
 
   async function openTeamDetail(projectId, teamId) {
@@ -295,11 +302,33 @@ export function registerProjectUI(deps) {
 
   route(/^#\/projects\/(\d+)$/, async (id) => {
     if (!staffOnly()) return;
-    const data = await api('GET', `/api/projects/${id}`);
+    shell('프로젝트 관리', `
+      <section class="project-section project-route-state" aria-live="polite">
+        <div class="project-route-spinner" aria-hidden="true"></div>
+        <div><h3>프로젝트를 불러오는 중입니다</h3><p>팀별 진행 현황을 확인하고 있습니다.</p></div>
+      </section>`);
+    let data;
+    try {
+      data = await api('GET', `/api/projects/${id}`);
+    } catch (error) {
+      shell('프로젝트 관리', `
+        <section class="project-section project-route-state project-route-error" role="alert">
+          <div>
+            <h3>프로젝트를 열지 못했습니다</h3>
+            <p>${esc(error.message || '잠시 후 다시 시도해 주세요.')}</p>
+          </div>
+          <div class="project-route-actions">
+            <a class="btn btn-ghost" href="#/projects">목록으로</a>
+            <button class="btn btn-primary" id="project-route-retry">다시 시도</button>
+          </div>
+        </section>`);
+      document.getElementById('project-route-retry').onclick = navigate;
+      return;
+    }
     const project = data.project;
     const visibility = Array.isArray(project.sessionVisibility) ? [...project.sessionVisibility] : [true, false, false, false, false, false];
     const teamProgress = new Map();
-    for (const row of data.progress) teamProgress.set(`${row.team_id}:${row.session_no}`, row.status);
+    for (const row of (data.progress || [])) teamProgress.set(`${row.team_id}:${row.session_no}`, row.status);
     shell(project.title, `
       <div class="project-page-head">
         <div>
