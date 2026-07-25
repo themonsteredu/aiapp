@@ -87,7 +87,7 @@ async function api(method, url, body) {
   const data = await res.json().catch(() => ({}));
   if (res.status === 401 && !url.endsWith('/api/login')) {
     state.me = null;
-    location.hash = '#/login';
+    if (!/^#\/p\/[a-z0-9-]+$/.test(location.hash || '')) location.hash = '#/login';
     throw new Error(data.error || '로그인이 필요합니다.');
   }
   if (res.status === 403 && data.error === 'time_blocked') {
@@ -386,7 +386,8 @@ async function navigate() {
   window.__deckRefresh = null;
   document.body.classList.remove('allow-print'); // 내보내기 화면 밖에서는 인쇄 차단 유지
   const hash = location.hash || '#/';
-  if (!state.me && hash !== '#/login') { location.hash = '#/login'; return; }
+  const isPublicProjectApp = /^#\/p\/[a-z0-9-]+$/.test(hash);
+  if (!state.me && hash !== '#/login' && !isPublicProjectApp) { location.hash = '#/login'; return; }
   if (state.me && state.me.mustChangePassword && hash !== '#/password' && hash !== '#/login') {
     location.hash = '#/password';
     return;
@@ -481,6 +482,9 @@ function logListHtml(logs) {
 function menuGroups() {
   const r = state.me.role;
   if (state.me.isGuest) {
+    if (state.me.projectTeamId) {
+      return [['프로젝트', [['#/project', 'briefcase', 'AI 프로젝트']]]];
+    }
     return [['수업', [['#/decks', 'decks', '수업 자료']]]];
   }
   if (r === 'student') {
@@ -497,6 +501,7 @@ function menuGroups() {
         ['#/my-courses', 'layers', '내 과정'],
         ['#/decks', 'decks', '웹앱/PPT 관리'],
         ['#/sessions', 'hash', '수업 입장 코드'],
+        ['#/projects', 'briefcase', 'AI 프로젝트'],
       ]],
       ['사용자', [['#/students', 'users', '학생 관리']]],
       ['운영', [
@@ -510,6 +515,7 @@ function menuGroups() {
       ['#/decks', 'decks', '웹앱/PPT 관리'],
       ['#/courses', 'layers', '과정·강사배정'],
       ['#/sessions', 'hash', '수업 입장 코드'],
+      ['#/projects', 'briefcase', 'AI 프로젝트'],
     ]],
     ['사용자', [
       ['#/permissions', 'shield', '권한 관리'],
@@ -662,6 +668,9 @@ route(/^#\/login$/, () => {
   let tab = 'join'; // 'join' (수업 입장 코드) | 'account' (계정 로그인)
   let otpMode = null; // null | 'otp' | 'setup'
   let secret = '';
+  let joinCode = '';
+  let joinInfo = null;
+  let joinInfoTimer = null;
   const render = (errMsg = '') => {
     $app.innerHTML = `
       <div class="login-wrap">
@@ -675,11 +684,23 @@ route(/^#\/login$/, () => {
           </div>
           ${tab === 'join' ? `
             <label>입장 코드 (6자리)</label>
-            <input class="input" name="code" inputmode="numeric" maxlength="6" placeholder="000000" required
+            <input class="input" id="join-code" name="code" inputmode="numeric" maxlength="6" placeholder="000000" required value="${esc(joinCode)}"
               style="font-size:22px;letter-spacing:8px;text-align:center;font-weight:800">
-            <label>이름</label>
-            <input class="input" name="name" placeholder="예: 김학생" maxlength="30" required>
-            <div class="small muted" style="margin-top:10px;line-height:1.6">선생님이 화면에 보여주는 6자리 코드를 입력하세요.<br>계정·비밀번호 없이 이번 수업 동안만 이용됩니다.</div>
+            ${joinInfo?.isProject ? `
+              <div class="join-project-note">
+                <b>${esc(joinInfo.title)}</b>
+                <span>AI 웹앱 프로젝트 수업입니다.</span>
+              </div>
+              <label>팀코드 (4자리)</label>
+              <input class="input" name="team_code" inputmode="numeric" maxlength="4" placeholder="0000" required>
+              <label>익명번호</label>
+              <input class="input" name="anonymous_no" maxlength="12" placeholder="예: A01" required>
+              <div class="small muted" style="margin-top:10px;line-height:1.6">실명 대신 선생님이 안내한 팀코드와 익명번호를 입력하세요.<br>같은 정보로 다시 들어오면 이전 작업이 복구됩니다.</div>
+            ` : `
+              <label>이름</label>
+              <input class="input" name="name" placeholder="예: 김학생" maxlength="30" required>
+              <div class="small muted" style="margin-top:10px;line-height:1.6">선생님이 화면에 보여주는 6자리 코드를 입력하세요.<br>계정·비밀번호 없이 이번 수업 동안만 이용됩니다.</div>
+            `}
           ` : otpMode === null ? `
             <label>아이디</label>
             <input class="input" name="username" autocomplete="username" required>
@@ -700,6 +721,24 @@ route(/^#\/login$/, () => {
         </form>
       </div>`;
     document.getElementById('login-form').onsubmit = onSubmit;
+    const codeInput = document.getElementById('join-code');
+    if (codeInput) {
+      codeInput.oninput = () => {
+        joinCode = codeInput.value.replace(/\D/g, '').slice(0, 6);
+        codeInput.value = joinCode;
+        joinInfo = null;
+        clearTimeout(joinInfoTimer);
+        if (joinCode.length !== 6) return;
+        joinInfoTimer = setTimeout(async () => {
+          try {
+            joinInfo = await api('GET', `/api/join-info/${joinCode}`);
+            render();
+          } catch {
+            joinInfo = null;
+          }
+        }, 180);
+      };
+    }
     document.querySelectorAll('[data-ltab]').forEach((b) => {
       b.onclick = () => { tab = b.dataset.ltab; otpMode = null; render(); };
     });
@@ -716,6 +755,7 @@ route(/^#\/login$/, () => {
     Live.start(); // 게스트일 때만 내부에서 동작
     location.hash = data.user.mustChangePassword ? '#/password'
       : state.mustAgree ? '#/agreement'
+      : data.user.projectTeamId ? '#/project'
       : (level(data.user.role) >= 1 ? '#/' : '#/decks');
   };
   async function onSubmit(e) {
@@ -723,7 +763,12 @@ route(/^#\/login$/, () => {
     const f = new FormData(e.target);
     if (tab === 'join') {
       try {
-        enter(await api('POST', '/api/join', { code: f.get('code'), name: f.get('name') }));
+        enter(await api('POST', '/api/join', {
+          code: f.get('code'),
+          name: f.get('name'),
+          team_code: f.get('team_code'),
+          anonymous_no: f.get('anonymous_no'),
+        }));
       } catch (err) { render(err.message); }
       return;
     }
@@ -3190,6 +3235,14 @@ route(/^#\/settlement$/, async () => {
     state.mustAgree = !!data.mustAgree;
     Live.start(); // 게스트일 때만 내부에서 동작
   } catch { state.me = null; }
+  try {
+    const { registerProjectUI } = await import('/project-ui.js');
+    registerProjectUI({
+      route, api, shell, state, esc, icon, toast, openModal, navigate, level, isStaff, $app,
+    });
+  } catch (err) {
+    console.error('AI 프로젝트 화면을 불러오지 못했습니다.', err);
+  }
   if (!location.hash) location.hash = state.me ? (isStaff() ? '#/' : '#/decks') : '#/login';
   navigate();
   // 시간제 접근 상태 주기 갱신 (5분)

@@ -4,7 +4,9 @@
   "description": "진로교육 PPT 웹앱 관리 플랫폼 (권한 관리 · 시간제 접근 · 캡처 억제)",
   "main": "server.js",
   "scripts": {
-    "start": "node --no-warnings server.js"
+    "start": "node --no-warnings server.js",
+    "test": "node --test",
+    "check": "node --check server.js && node --check api/index.js && node --check lib/api.js && node --check lib/project-api.js && node --check public/app.js && node --check public/project-ui.js"
   },
   "engines": {
     "node": ">=22.13.0"
@@ -12,6 +14,7 @@
   "license": "UNLICENSED",
   "private": true,
   "dependencies": {
-    "pg": "^8.22.0"
+    "pg": "^8.22.0",
+    "qrcode": "^1.5.4"
   }
 }
