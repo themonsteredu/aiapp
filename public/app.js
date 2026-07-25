@@ -72,9 +72,18 @@ const ICONS = {
   x: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
   hash: '<line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/>',
   folder: '<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>',
+  unlock: '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/>',
+  check: '<polyline points="20 6 9 17 4 12"/>',
+  image: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>',
+  video: '<rect x="2" y="5" width="15" height="14" rx="2"/><polygon points="23 7 17 12 23 17 23 7"/>',
+  radio: '<circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 0 1 0 8.49M7.76 16.24a6 6 0 0 1 0-8.49"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 19.07a10 10 0 0 1 0-14.14"/>',
+  list: '<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>',
 };
 function icon(name) {
   return `<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name] || ''}</svg>`;
+}
+function deckKindIcon(kind) {
+  return icon(kind === 'link' ? 'globe' : kind === 'html' ? 'code' : kind === 'slides' ? 'decks' : 'fileText');
 }
 
 /* ---------------- API ---------------- */
@@ -430,14 +439,14 @@ function periodText(d) {
   if (!d.access_start && !d.access_end) return '상시';
   return `${d.access_start || '…'} ~ ${d.access_end || '…'}`;
 }
-// 요금 유형 배지 (🆓 무료 / 💳 API 유료)
+// 요금 유형 배지
 function costBadge(d) {
   if (d.costType === 'api_paid') {
     const prov = d.apiProvider ? ` ${esc(d.apiProvider)}` : '';
     const unit = d.unitCost ? ` · ${Number(d.unitCost).toLocaleString()}원/회` : '';
-    return `<span class="badge amber plain" title="API 유료 — 사용량만큼 과금">💳 API 유료${prov}${unit}</span>`;
+    return `<span class="badge amber plain" title="API 유료 — 사용량만큼 과금">${icon('creditCard')} API 유료${prov}${unit}</span>`;
   }
-  return '<span class="badge green plain">🆓 무료</span>';
+  return '<span class="badge green plain">무료</span>';
 }
 
 const LOG_LABELS = {
@@ -984,7 +993,7 @@ route(/^#\/$/, async () => {
         <div class="card">
           <h2>웹앱 미리보기</h2>
           <div class="deck-thumb dg-${preview.id % 4}" style="border-radius:13px">
-            <div class="deco">🤖</div><div class="orb"></div>
+            <div class="deco deck-thumb-icon">${deckKindIcon(preview.kind)}</div><div class="orb"></div>
             <div class="dt">${esc(preview.title)}</div>
           </div>
           <div class="preview-kv">
@@ -1203,7 +1212,7 @@ const SESSION_STATUS = { live: ['진행 중', 'green'], expired: ['시간 만료
 
 // 수업 자료 관리 모달: 자료 추가/삭제 + 학생 공개 토글 + 잠금/해제
 async function openItemsModal(sessionId, session, allDecks) {
-  const kindIcon = (k) => (k === 'link' || k === 'html' ? '🧪' : k === 'slides' ? '📑' : '📄');
+  const kindLabel = (k) => (k === 'link' ? '외부 웹앱' : k === 'html' ? 'HTML 웹앱' : k === 'slides' ? '슬라이드' : '자료');
   const back = openModal('<div class="m-sub">불러오는 중…</div>');
   const modal = back.querySelector('.modal');
   const rerender = async () => {
@@ -1216,12 +1225,12 @@ async function openItemsModal(sessionId, session, allDecks) {
       <div class="item-list">
         ${items.map((it) => `
           <div class="item-row">
-            <div class="ir-main"><span class="ir-ic">${kindIcon(it.kind)}</span><span class="ir-title">${esc(it.deck_title)}</span></div>
+            <div class="ir-main"><span class="ir-ic">${deckKindIcon(it.kind)}</span><span class="ir-title">${esc(it.deck_title)}</span></div>
             <label class="ir-toggle" title="학생 목록에 노출">
               <input type="checkbox" data-vis="${it.id}" ${it.student_visible ? 'checked' : ''}><span>학생 공개</span>
             </label>
             <button class="btn btn-sm ${it.unlocked ? 'btn-soft' : 'btn-primary'}" data-lock="${it.id}" data-to="${it.unlocked ? 0 : 1}" ${it.student_visible ? '' : 'disabled title="학생 비공개 자료"'}>
-              ${it.unlocked ? '🔓 열림' : '🔒 잠금'}
+              ${it.unlocked ? icon('unlock') : icon('lock')} ${it.unlocked ? '열림' : '잠금'}
             </button>
             <button class="btn btn-danger btn-sm" data-rm="${it.id}">${icon('trash')}</button>
           </div>`).join('') || '<div class="empty-note">담긴 자료가 없습니다. 아래에서 추가하세요.</div>'}
@@ -1229,7 +1238,7 @@ async function openItemsModal(sessionId, session, allDecks) {
       <div class="mt" style="display:flex;gap:8px">
         <select id="add-deck" class="input" style="flex:1">
           <option value="">+ 자료 추가…</option>
-          ${addable.map((d) => `<option value="${d.id}">${kindIcon(d.kind)} ${esc(d.title)}</option>`).join('')}
+          ${addable.map((d) => `<option value="${d.id}">${kindLabel(d.kind)} · ${esc(d.title)}</option>`).join('')}
         </select>
         <button class="btn btn-ghost" id="add-btn">추가</button>
       </div>
@@ -1301,7 +1310,7 @@ route(/^#\/sessions$/, async () => {
             ${decksData.decks.map((d) => `
               <label class="pick-item">
                 <input type="checkbox" name="deck_ids" value="${d.id}">
-                <span>${d.kind === 'link' || d.kind === 'html' ? '🧪' : d.kind === 'slides' ? '📑' : '📄'} ${esc(d.title)}</span>
+                <span class="pick-item-label">${deckKindIcon(d.kind)} ${esc(d.title)}</span>
               </label>`).join('') || '<span class="small muted">먼저 웹앱/PPT를 만들어 주세요.</span>'}
           </div>
           <div class="small muted" style="margin-top:6px">아무것도 선택하지 않으면 공개 중인 전체 자료가 열립니다.</div>
@@ -1328,7 +1337,7 @@ route(/^#\/sessions$/, async () => {
                 <td><div class="row-actions">
                   ${s.status !== 'ended' ? `<button class="btn btn-ghost btn-sm" data-items="${s.id}">${icon('folder')} 자료 관리</button>` : ''}
                   ${s.status === 'live' ? `
-                    <button class="btn btn-primary btn-sm" data-golive="${s.id}">🔴 라이브</button>
+                    <button class="btn btn-primary btn-sm" data-golive="${s.id}">${icon('radio')} 라이브</button>
                     <button class="btn btn-ghost btn-sm" data-end="${s.id}">종료</button>` : ''}
                   <button class="btn btn-danger btn-sm" data-csdel="${s.id}">${icon('trash')}</button>
                 </div></td>
@@ -1388,7 +1397,7 @@ route(/^#\/sessions$/, async () => {
         <select class="input" id="lv-deck">${slideDecks.map((d) => `<option value="${d.id}">${esc(d.title)}</option>`).join('')}</select>
         <div class="m-actions">
           <button class="btn btn-ghost" id="lv-cancel">취소</button>
-          <button class="btn btn-primary" id="lv-start">🔴 라이브 시작</button>
+          <button class="btn btn-primary" id="lv-start">${icon('radio')} 라이브 시작</button>
         </div>`);
       back.querySelector('#lv-cancel').onclick = () => back.remove();
       back.querySelector('#lv-start').onclick = () => {
@@ -1432,7 +1441,7 @@ function deckSecondaryActionsHtml(d) {
       : '';
   return `${editBtn}
     <button class="btn btn-ghost btn-sm" data-assign="${d.id}">${icon('shield')} 배정</button>
-    <button class="btn btn-ghost btn-sm" data-cost="${d.id}" title="요금 유형 설정">💳 요금</button>
+    <button class="btn btn-ghost btn-sm" data-cost="${d.id}" title="요금 유형 설정">${icon('creditCard')} 요금</button>
     ${exportBtn}
     <button class="btn btn-ghost btn-sm" data-pub="${d.id}" data-val="${d.published ? 0 : 1}">${d.published ? '비공개로' : '공개하기'}</button>
     ${delBtn}`;
@@ -1574,7 +1583,7 @@ route(/^#\/decks$/, async () => {
     // 학생 화면은 과목(폴더) 구분 없이 자료를 평면으로 나열
     const deckCard = (d, i) => `
       <div class="deck-card">
-        <div class="deck-thumb dg-${i % 4}"><div class="deco">${d.kind !== 'slides' ? '🧪' : ['🤖', '💡', '📊', '🚀'][i % 4]}</div><div class="orb"></div><div class="dt">${esc(d.title)}</div></div>
+        <div class="deck-thumb dg-${i % 4}"><div class="deco deck-thumb-icon">${deckKindIcon(d.kind)}</div><div class="orb"></div><div class="dt">${esc(d.title)}</div></div>
         <div class="body">
           <div class="desc">${esc(d.description) || '설명 없음'}</div>
           <div class="meta">
@@ -1582,7 +1591,7 @@ route(/^#\/decks$/, async () => {
             ${d.accessibleNow
               ? `<a href="#/view/${d.id}" class="btn btn-primary btn-sm">${icon('play')} ${d.kind !== 'slides' ? '체험 시작' : '학습 시작'}</a>`
               : d.locked
-                ? '<span class="badge amber">🔒 잠김 — 선생님 대기</span>'
+                ? `<span class="badge amber plain">${icon('lock')} 잠김 — 선생님 대기</span>`
                 : '<span class="badge red">차단 시간</span>'}
           </div>
         </div>
@@ -1612,17 +1621,16 @@ route(/^#\/decks$/, async () => {
   }
   const validSelections = new Set(['all', UNCATEGORIZED_SUBJECT, ...allTreePaths]);
   if (!validSelections.has(deckSubjectTab) || (deckSubjectTab === UNCATEGORIZED_SUBJECT && !hasEtc)) deckSubjectTab = 'all';
-  const paidCount = data.decks.filter((d) => d.costType === 'api_paid').length;
   const inSelectedFolder = (deck) => {
     if (deckSubjectTab === 'all') return true;
     if (deckSubjectTab === UNCATEGORIZED_SUBJECT) return !deck.subject;
     const path = normalizeSubjectPath(deck.subject);
     return path === deckSubjectTab || path.startsWith(`${deckSubjectTab} / `);
   };
-  const list = data.decks.filter((d) =>
-    inSelectedFolder(d)
-    && (deckCostTab === 'all' || (deckCostTab === 'paid' ? d.costType === 'api_paid' : d.costType !== 'api_paid')));
-  const typeIco = (d) => d.kind === 'link' ? '🧪' : d.kind === 'html' ? '📦' : '📊';
+  const folderDecks = data.decks.filter(inSelectedFolder);
+  const paidCount = folderDecks.filter((d) => d.costType === 'api_paid').length;
+  const list = folderDecks.filter((d) =>
+    deckCostTab === 'all' || (deckCostTab === 'paid' ? d.costType === 'api_paid' : d.costType !== 'api_paid'));
   const statusLabel = (d) => (DECK_STATUS[d.status] || DECK_STATUS.private)[0];
   const treeNodeHtml = (node, depth = 0) => {
     const isOpen = deckTreeOpen.has(node.path);
@@ -1632,11 +1640,11 @@ route(/^#\/decks$/, async () => {
     return `
       <div class="subject-tree-node ${isOpen ? 'open' : ''}" style="--tree-indent:${depth * 14}px">
         <div class="subject-tree-row ${deckSubjectTab === node.path ? 'selected' : ''}">
-          <button class="subject-tree-toggle" data-tree-toggle="${esc(node.path)}" aria-label="${isOpen ? '폴더 접기' : '폴더 펼치기'}" ${hasContents ? '' : 'disabled'}>
-            ${hasContents ? (isOpen ? '▾' : '▸') : ''}
+          <button class="subject-tree-toggle ${isOpen ? 'open' : ''}" data-tree-toggle="${esc(node.path)}" aria-label="${isOpen ? '폴더 접기' : '폴더 펼치기'}" aria-expanded="${isOpen}" ${hasContents ? '' : 'disabled'}>
+            <span aria-hidden="true"></span>
           </button>
-          <button class="subject-tree-folder" data-tree-folder="${esc(node.path)}" title="${esc(node.path)}">
-            <span class="subject-folder-icon">${isOpen ? '📂' : '📁'}</span>
+          <button class="subject-tree-folder" data-tree-folder="${esc(node.path)}" title="${esc(node.path)}" ${deckSubjectTab === node.path ? 'aria-current="true"' : ''}>
+            <span class="subject-folder-icon">${icon('folder')}</span>
             <span class="subject-folder-name">${esc(node.name)}</span>
             <span class="subject-folder-count">${node.total}</span>
           </button>
@@ -1645,7 +1653,7 @@ route(/^#\/decks$/, async () => {
           ${children.map((child) => treeNodeHtml(child, depth + 1)).join('')}
           ${directDecks.map((deck) => `
             <a class="subject-tree-deck" href="#/view/${deck.id}" style="--tree-indent:${(depth + 1) * 14}px" title="${esc(deck.title)}">
-              <span>${typeIco(deck)}</span><b>${esc(deck.title)}</b>
+              <span class="subject-deck-icon">${deckKindIcon(deck.kind)}</span><b>${esc(deck.title)}</b>
             </a>`).join('')}
         </div>` : ''}
       </div>`;
@@ -1653,6 +1661,9 @@ route(/^#\/decks$/, async () => {
   const selectedFolderLabel = deckSubjectTab === 'all'
     ? '전체 웹앱'
     : deckSubjectTab === UNCATEGORIZED_SUBJECT ? '미분류' : deckSubjectTab;
+  const selectedFolderTitle = selectedFolderLabel.includes(' / ')
+    ? selectedFolderLabel.split(' / ').at(-1)
+    : selectedFolderLabel;
   const subjectTreeHtml = `
     <aside class="subject-tree-panel">
       <div class="subject-tree-head">
@@ -1662,13 +1673,13 @@ route(/^#\/decks$/, async () => {
           <button id="tree-collapse-all" title="모두 접기">−</button>
         </div>
       </div>
-      <button class="subject-tree-all ${deckSubjectTab === 'all' ? 'selected' : ''}" data-tree-folder="all">
-        <span>🗂️</span><b>전체 웹앱</b><em>${data.decks.length}</em>
+      <button class="subject-tree-all ${deckSubjectTab === 'all' ? 'selected' : ''}" data-tree-folder="all" ${deckSubjectTab === 'all' ? 'aria-current="true"' : ''}>
+        <span class="subject-root-icon">${icon('layers')}</span><b>전체 웹앱</b><em>${data.decks.length}</em>
       </button>
       <div class="subject-tree">
         ${[...subjectTree.children.values()].sort((a, b) => a.name.localeCompare(b.name, 'ko')).map((node) => treeNodeHtml(node)).join('')}
-        ${hasEtc ? `<button class="subject-tree-uncategorized ${deckSubjectTab === UNCATEGORIZED_SUBJECT ? 'selected' : ''}" data-tree-folder="${UNCATEGORIZED_SUBJECT}">
-          <span>📄</span><b>미분류</b><em>${data.decks.filter((deck) => !deck.subject).length}</em>
+        ${hasEtc ? `<button class="subject-tree-uncategorized ${deckSubjectTab === UNCATEGORIZED_SUBJECT ? 'selected' : ''}" data-tree-folder="${UNCATEGORIZED_SUBJECT}" ${deckSubjectTab === UNCATEGORIZED_SUBJECT ? 'aria-current="true"' : ''}>
+          <span class="subject-root-icon">${icon('fileText')}</span><b>미분류</b><em>${data.decks.filter((deck) => !deck.subject).length}</em>
         </button>` : ''}
       </div>
       <div class="subject-tree-help">하위 폴더는 과목명에 <b>/</b>를 넣어 만듭니다.<br>예: 진로교육 / AI 기초</div>
@@ -1678,10 +1689,10 @@ route(/^#\/decks$/, async () => {
     ${list.map((d) => `
       <div class="deck-line">
         <div class="dl-left">
-          <span class="dl-ico">${typeIco(d)}</span>
+          <span class="dl-ico">${deckKindIcon(d.kind)}</span>
           <div class="dl-body">
-            <div class="dl-title">${esc(d.title)}${d.costType === 'api_paid' ? ' <span title="API 유료">💳</span>' : ''}</div>
-            <div class="dl-meta small muted">${d.subject ? `📁 ${esc(d.subject)}` : '미분류'} · ${statusLabel(d)}${d.deletePending ? ' · <span class="amber-text">삭제 대기</span>' : ''}</div>
+            <div class="dl-title">${esc(d.title)}${d.costType === 'api_paid' ? ` <span class="deck-paid-mark" title="API 유료">${icon('creditCard')}</span>` : ''}</div>
+            <div class="dl-meta small muted">${d.subject ? `<span class="deck-subject-path">${icon('folder')} ${esc(normalizeSubjectPath(d.subject))}</span>` : '미분류'} · ${statusLabel(d)}${d.deletePending ? ' · <span class="amber-text">삭제 대기</span>' : ''}</div>
           </div>
         </div>
         <div class="dl-actions">
@@ -1697,8 +1708,8 @@ route(/^#\/decks$/, async () => {
       <tbody>
         ${list.map((d) => `
           <tr>
-            <td data-label="웹앱명"><div class="cell-main">${typeIco(d)} ${esc(d.title)} ${costBadge(d)}</div><div class="cell-sub">${esc(d.description) || ''} · ${d.kind === 'link' ? '외부 체험형 웹앱' : d.kind === 'html' ? '업로드형 HTML 웹앱' : `슬라이드 ${d.slideCount}장`} · ${esc(d.updated_at)}</div></td>
-            <td data-label="과목">${d.subject ? `<span class="badge violet plain">📁 ${esc(d.subject)}</span>` : '<span class="muted small">미분류</span>'}</td>
+            <td data-label="웹앱명"><div class="cell-main cell-main-with-icon">${deckKindIcon(d.kind)} <span>${esc(d.title)}</span> ${costBadge(d)}</div><div class="cell-sub">${esc(d.description) || ''} · ${d.kind === 'link' ? '외부 체험형 웹앱' : d.kind === 'html' ? '업로드형 HTML 웹앱' : `슬라이드 ${d.slideCount}장`} · ${esc(d.updated_at)}</div></td>
+            <td data-label="과목">${d.subject ? `<span class="badge violet plain">${icon('folder')} ${esc(normalizeSubjectPath(d.subject))}</span>` : '<span class="muted small">미분류</span>'}</td>
             <td data-label="담당 강사">${esc(d.ownerName)}</td>
             <td data-label="대상 학생">${esc(d.target_classes) || '<span class="muted">전체</span>'}</td>
             <td data-label="권한 기간" class="small">${esc(periodText(d))}</td>
@@ -1715,7 +1726,7 @@ route(/^#\/decks$/, async () => {
     <div class="page-head">
       <div><div class="ph-t">웹앱 라이브러리</div><div class="desc">PPT처럼 발표할 수 있는 웹앱(슬라이드 덱)을 과목별 폴더로 관리합니다.</div></div>
       <div style="display:flex;gap:8px;align-items:center">
-        <button class="btn btn-ghost btn-sm" id="deck-view-toggle">${deckView === 'compact' ? '☰ 표로 보기' : '≣ 간략히'}</button>
+        <button class="btn btn-ghost btn-sm" id="deck-view-toggle">${icon(deckView === 'compact' ? 'list' : 'layers')} ${deckView === 'compact' ? '표로 보기' : '간략히'}</button>
         <button class="btn btn-primary" id="btn-new-deck">${icon('plus')} 새 웹앱 만들기</button>
       </div>
     </div>
@@ -1725,10 +1736,10 @@ route(/^#\/decks$/, async () => {
         <div class="deck-folder-toolbar">
           <div>
             <div class="deck-folder-breadcrumb">${deckSubjectTab === 'all' ? '라이브러리' : esc(selectedFolderLabel).replaceAll(' / ', ' <span>›</span> ')}</div>
-            <b>${esc(selectedFolderLabel)}</b><small>${list.length}개 표시</small>
+            <b>${esc(selectedFolderTitle)}</b><small>${list.length}개 표시</small>
           </div>
           <div class="tabs deck-cost-tabs">
-            ${[['all', `요금 전체`], ['free', `🆓 무료 (${data.decks.length - paidCount})`], ['paid', `💳 API 유료 (${paidCount})`]]
+            ${[['all', `전체 (${folderDecks.length})`], ['free', `무료 (${folderDecks.length - paidCount})`], ['paid', `API 유료 (${paidCount})`]]
               .map(([k, label]) => `<button data-ctab="${k}" class="${deckCostTab === k ? 'active' : ''}">${label}</button>`).join('')}
           </div>
         </div>
@@ -1802,8 +1813,8 @@ route(/^#\/decks$/, async () => {
         <div><label>설명</label><input id="nd-desc" placeholder="예: 나에게 맞는 미래를 찾는 인터랙티브 수업"></div>
         <div><label>요금 유형</label>
           <select id="nd-cost">
-            <option value="free">🆓 무료</option>
-            <option value="api_paid">💳 API 유료 (종량 과금)</option>
+            <option value="free">무료</option>
+            <option value="api_paid">API 유료 (종량 과금)</option>
           </select></div>
         <div id="nd-paid-row" style="display:none;grid-template-columns:1fr 1fr;gap:10px">
           <div><label>API 제공자</label><input id="nd-provider" placeholder="예: OpenAI"></div>
@@ -1907,7 +1918,7 @@ route(/^#\/live$/, async () => {
 
   shell('라이브 수업', `
     <div class="page-head">
-      <div><div class="ph-t">🔴 라이브 수업 진행 중</div>
+      <div><div class="ph-t ph-t-with-icon">${icon('radio')} 라이브 수업 진행 중</div>
         <div class="desc">선생님이 화면을 넘기면 이 화면도 함께 넘어갑니다.</div></div>
       <span class="badge red">LIVE</span>
     </div>
@@ -1978,8 +1989,8 @@ function openCostModal(deck, onSaved) {
     <div class="form-grid" style="grid-template-columns:1fr">
       <div><label>유형</label>
         <select id="cm-type">
-          <option value="free" ${!paid ? 'selected' : ''}>🆓 무료</option>
-          <option value="api_paid" ${paid ? 'selected' : ''}>💳 API 유료 (종량 과금)</option>
+          <option value="free" ${!paid ? 'selected' : ''}>무료</option>
+          <option value="api_paid" ${paid ? 'selected' : ''}>API 유료 (종량 과금)</option>
         </select></div>
       <div id="cm-paid" style="display:${paid ? 'grid' : 'none'};grid-template-columns:1fr 1fr;gap:10px">
         <div><label>API 제공자</label><input id="cm-provider" value="${esc(deck.apiProvider || '')}" placeholder="예: OpenAI"></div>
@@ -2016,7 +2027,7 @@ function openLinkModal(deck) {
       <div><label>웹앱 주소 (https://)</label><input id="lm-url" value="${esc(deck.external_url)}"></div>
     </div>
     <div class="mt">
-      <div class="field-label">🛡️ 유출 방지 게이트 (강력 권장)</div>
+      <div class="field-label field-label-with-icon">${icon('shield')} 유출 방지 게이트 (강력 권장)</div>
       <div class="small muted" style="line-height:1.7">
         아래 스크립트를 웹앱의 <code>&lt;/body&gt;</code> 바로 앞에 붙여넣으면,
         이 플랫폼이 발급한 <b>15분짜리 서명 토큰 없이는 웹앱이 스스로 접속을 거부</b>합니다.
@@ -2027,7 +2038,7 @@ function openLinkModal(deck) {
       <span class="small muted"> — 스크립트를 넣지 않아도 플랫폼 안에서는 열리지만, 원본 주소가 유출되면 직접 접속을 막을 수 없습니다.</span>
     </div>
     ${deck.costType === 'api_paid' ? `<div class="mt">
-      <div class="field-label">💳 사용량 보고 스니펫 (API 유료 자료)</div>
+      <div class="field-label field-label-with-icon">${icon('creditCard')} 사용량 보고 스니펫 (API 유료 자료)</div>
       <div class="small muted" style="line-height:1.7">
         이 스니펫을 함께 넣고, 웹앱이 <b>API를 호출할 때마다</b> <code>reportApiUsage(1)</code>을 부르면
         실제 호출 수가 <b>수업·강사 단위로</b> 집계되어 "종량 정산"에 반영됩니다.
@@ -2069,7 +2080,7 @@ route(/^#\/view\/(\d+)$/, async (id) => {
   if (data.deck.kind === 'html') {
     shell(data.deck.title, `
       <div class="page-head">
-        <div><div class="ph-t">📦 ${esc(data.deck.title)}</div>
+        <div><div class="ph-t ph-t-with-icon">${icon('code')} ${esc(data.deck.title)}</div>
           <div class="desc">${esc(data.deck.description)} · ${esc(data.deck.ownerName)} 강사 · 업로드형 웹앱</div></div>
         <button class="btn btn-primary" id="btn-embed-full">${icon('play')} 전체화면</button>
       </div>
@@ -2088,7 +2099,7 @@ route(/^#\/view\/(\d+)$/, async (id) => {
     const gate = await api('GET', `/api/gate-token/${id}`);
     shell(data.deck.title, `
       <div class="page-head">
-        <div><div class="ph-t">🧪 ${esc(data.deck.title)}</div>
+        <div><div class="ph-t ph-t-with-icon">${icon('globe')} ${esc(data.deck.title)}</div>
           <div class="desc">${esc(data.deck.description)} · ${esc(data.deck.ownerName)} 강사 · 체험형 웹앱</div></div>
         <div style="display:flex;gap:8px">
           ${data.canEdit ? `<button class="btn btn-ghost" id="btn-linkedit">${icon('edit')} 링크 설정</button>` : ''}
@@ -2153,7 +2164,7 @@ function present(slides, title, live = null) {
       <div class="stage">${slideHtml(slides[idx], { watermark: wm })}</div>
       <div class="progress"><div class="fill" style="width:${((idx + 1) / slides.length) * 100}%"></div></div>
       <div class="present-bar">
-        <span>${live ? '🔴 라이브 — 학생 화면이 함께 넘어갑니다 · ' : ''}${esc(title)}</span>
+        <span>${live ? `<span class="live-status">${icon('radio')} 라이브</span> 학생 화면이 함께 넘어갑니다 · ` : ''}${esc(title)}</span>
         <span>${idx + 1} / ${slides.length} — 방향키·클릭으로 이동</span>
         <button id="exit-present">${live ? '라이브 종료' : '종료'} (ESC)</button>
       </div>`;
@@ -2200,7 +2211,7 @@ route(/^#\/decks\/(\d+)\/edit$/, async (id) => {
     if (/^!\[[^\]]*\]\(/.test(b) && !String(s.title || '').trim()) return 'image';
     return 'text';
   };
-  const kindTag = { image: '🖼️ 이미지', video: '🎬 동영상', text: '📝 텍스트' };
+  const kindTag = { image: '이미지', video: '동영상', text: '텍스트' };
 
   const listHtml = () => slides.map((s, i) => `
     <div class="slide-item ${i === sel ? 'active' : ''}" data-i="${i}">
@@ -2230,7 +2241,7 @@ route(/^#\/decks\/(\d+)\/edit$/, async (id) => {
         </div>
         <div class="card">
           <h2 style="margin-top:0">슬라이드 추가 <span class="sub">이미지 또는 동영상으로만 만들어집니다</span></h2>
-          <button class="btn btn-primary btn-sm" id="import-ppt" style="width:100%;justify-content:center">📥 PPT 이미지 가져오기</button>
+          <button class="btn btn-primary btn-sm" id="import-ppt" style="width:100%;justify-content:center">${icon('download')} PPT 이미지 가져오기</button>
           <input type="file" id="import-files" accept="image/png,image/jpeg,image/webp" multiple style="display:none">
           <div class="small muted" style="margin:7px 0 4px;line-height:1.6">
             PowerPoint에서 <b>파일 → 내보내기 → PNG/JPEG</b>로 저장한 슬라이드 이미지들을
@@ -2238,7 +2249,7 @@ route(/^#\/decks\/(\d+)\/edit$/, async (id) => {
           </div>
           <div class="msg" id="import-msg"></div>
           <hr style="border:none;border-top:1px solid var(--line);margin:14px 0">
-          <div class="field-label" style="margin:0 0 6px">🎬 동영상 슬라이드 추가</div>
+          <div class="field-label field-label-with-icon" style="margin:0 0 6px">${icon('video')} 동영상 슬라이드 추가</div>
           <div class="small muted" style="margin-bottom:8px;line-height:1.6">
             이미지 슬라이드 사이에 동영상을 한 장의 슬라이드로 넣습니다.
             예를 들어 1·2·3번 슬라이드 다음에 동영상 슬라이드를 두면 순서대로 재생됩니다.
@@ -2939,7 +2950,7 @@ route(/^#\/contract$/, async () => {
     <div class="grid main-cols">
       <div class="card">
         <h2>계약·보안 동의서 편집 <span class="sub">현재 버전 ${data.version}</span></h2>
-        ${data.defaultIsNewer ? `<div class="msg" style="background:var(--amber-50,#fff7ed);border:1px solid var(--amber-300,#fcd34d);color:var(--amber-700,#b45309);padding:9px 12px;border-radius:9px;margin-bottom:10px;font-size:13px;font-weight:600">📢 코드에 최신 기본 계약 문안이 있습니다. 아래 <b>"최신 기본 문안 불러오기"</b>를 누른 뒤 <b>저장</b>하면 사이트에 반영됩니다(전원 재동의).</div>` : ''}
+        ${data.defaultIsNewer ? `<div class="msg notice-with-icon" style="background:var(--amber-50,#fff7ed);border:1px solid var(--amber-300,#fcd34d);color:var(--amber-700,#b45309);padding:9px 12px;border-radius:9px;margin-bottom:10px;font-size:13px;font-weight:600">${icon('alert')}<span>코드에 최신 기본 계약 문안이 있습니다. 아래 <b>"최신 기본 문안 불러오기"</b>를 누른 뒤 <b>저장</b>하면 사이트에 반영됩니다(전원 재동의).</span></div>` : ''}
         <textarea id="ct-text" class="input" rows="22" style="line-height:1.7">${esc(data.text)}</textarea>
         <label style="display:flex;gap:8px;align-items:center;margin-top:10px;font-weight:600;font-size:13px">
           <input type="checkbox" id="ct-required" ${data.required ? 'checked' : ''} style="width:16px;height:16px;accent-color:var(--blue-600)">
@@ -3060,7 +3071,7 @@ route(/^#\/courses$/, async () => {
     return `
     <div class="card" data-course="${c.id}" style="margin-bottom:16px">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
-        <div><h2 style="margin:0">📚 ${esc(c.name)}</h2><div class="small muted">${esc(c.description) || '설명 없음'}</div></div>
+        <div><h2 class="heading-with-icon" style="margin:0">${icon('layers')} ${esc(c.name)}</h2><div class="small muted">${esc(c.description) || '설명 없음'}</div></div>
         <button class="btn btn-ghost btn-sm" data-course-del="${c.id}">${icon('trash')} 과정 삭제</button>
       </div>
 
@@ -3070,7 +3081,7 @@ route(/^#\/courses$/, async () => {
           <div class="tbl-scroll"><table class="tbl">
             <tbody>
               ${c.items.map((it) => `<tr>
-                <td>${it.costType === 'api_paid' ? '💳 ' : '🆓 '}${esc(it.title)}</td>
+                <td><span class="cell-main-with-icon">${it.costType === 'api_paid' ? icon('creditCard') : icon('fileText')}<span>${esc(it.title)}</span></span></td>
                 <td style="width:150px">
                   <select data-req-course="${c.id}" data-req-deck="${it.deckId}" class="input">
                     <option value="1" ${it.required ? 'selected' : ''}>필수</option>
@@ -3082,7 +3093,7 @@ route(/^#\/courses$/, async () => {
           </table></div>
           ${addable.length ? `<div style="display:flex;gap:6px;margin-top:8px">
             <select class="input" data-add-deck="${c.id}" style="flex:1">
-              ${addable.map((d) => `<option value="${d.id}">${d.costType === 'api_paid' ? '💳 ' : '🆓 '}${esc(d.title)}</option>`).join('')}
+              ${addable.map((d) => `<option value="${d.id}">${d.costType === 'api_paid' ? '[API 유료]' : '[무료]'} ${esc(d.title)}</option>`).join('')}
             </select>
             <select class="input" data-add-req="${c.id}" style="width:90px"><option value="1">필수</option><option value="0">선택</option></select>
             <button class="btn btn-soft btn-sm" data-add-item="${c.id}">추가</button>
@@ -3099,8 +3110,8 @@ route(/^#\/courses$/, async () => {
             </select>
             <button class="btn btn-soft btn-sm" data-do-assign="${c.id}">배정</button>
           </div>` : ''}
-          <div class="small muted" style="margin-top:8px;line-height:1.6">
-            💡 API 유료 자료가 포함된 과정은 사용량이 <b>종량 정산</b>에 집계됩니다.
+          <div class="small muted notice-with-icon" style="margin-top:8px;line-height:1.6">
+            ${icon('creditCard')}<span>API 유료 자료가 포함된 과정은 사용량이 <b>종량 정산</b>에 집계됩니다.</span>
           </div>
         </div>
       </div>
@@ -3178,7 +3189,7 @@ route(/^#\/my-courses$/, async () => {
   const data = await api('GET', '/api/my-courses');
   const itemRow = (it, extra = '') => `
     <div class="log-item"><div class="li-main"><div class="li-top">
-      <span class="badge ${it.costType === 'api_paid' ? 'amber' : 'green'} plain">${it.costType === 'api_paid' ? '💳 유료' : '🆓 무료'}</span>
+      <span class="badge ${it.costType === 'api_paid' ? 'amber' : 'green'} plain">${it.costType === 'api_paid' ? `${icon('creditCard')} 유료` : '무료'}</span>
       <span class="li-who">${esc(it.title)}</span></div>
       ${it.costType === 'api_paid' && it.unitCost ? `<div class="li-det small muted">사용 시 약 ${Number(it.unitCost).toLocaleString()}원/회 과금</div>` : ''}</div>
       <div class="li-meta">${extra}</div></div>`;
@@ -3187,7 +3198,7 @@ route(/^#\/my-courses$/, async () => {
       <div class="desc">필수 자료는 자동으로 제공되고, 선택 자료는 "담기"로 추가하면 웹앱/PPT 관리에 나타납니다.</div></div></div>
     ${data.courses.map((c) => `
       <div class="card" style="margin-bottom:16px">
-        <h2 style="margin-top:0">📚 ${esc(c.name)}</h2>
+        <h2 class="heading-with-icon" style="margin-top:0">${icon('layers')} ${esc(c.name)}</h2>
         <div class="small muted">${esc(c.description) || ''}</div>
         <div class="grid main-cols mt">
           <div>
@@ -3232,7 +3243,7 @@ route(/^#\/billing$/, async () => {
     : `<th>${firstCol}</th><th>${G === 'instructor' ? '아이디' : '담당 강사'}</th><th>자료 수</th><th>호출수(실호출)</th><th>이용 학생</th><th>예상 비용</th>`;
   const rowHtml = (i) => G === 'deck'
     ? `<tr>
-        <td data-label="${firstCol}" class="cell-main">💳 ${esc(i.title)}</td>
+        <td data-label="${firstCol}" class="cell-main cell-main-with-icon">${icon('creditCard')}<span>${esc(i.title)}</span></td>
         <td data-label="제공자">${esc(i.subtitle) || '<span class="muted">-</span>'}</td>
         <td data-label="예상 단가">${i.unitCost ? `${Number(i.unitCost).toLocaleString()}원/회` : '<span class="muted">미설정</span>'}</td>
         <td data-label="호출수">${i.calls.toLocaleString()} <span class="small muted">(${i.apiCalls.toLocaleString()})</span></td>
@@ -3240,7 +3251,7 @@ route(/^#\/billing$/, async () => {
         <td data-label="예상 비용"><b>${Number(i.estCost).toLocaleString()}원</b></td>
       </tr>`
     : `<tr>
-        <td data-label="${firstCol}" class="cell-main">${G === 'instructor' ? '👤 ' : '📆 '}${esc(i.title)}</td>
+        <td data-label="${firstCol}" class="cell-main cell-main-with-icon">${icon(G === 'instructor' ? 'users' : 'calendar')}<span>${esc(i.title)}</span></td>
         <td data-label="${G === 'instructor' ? '아이디' : '담당'}">${esc(i.subtitle) || '<span class="muted">-</span>'}</td>
         <td data-label="자료 수">${(i.decks ?? 0).toLocaleString()}개</td>
         <td data-label="호출수">${i.calls.toLocaleString()} <span class="small muted">(${i.apiCalls.toLocaleString()})</span></td>
@@ -3270,7 +3281,7 @@ route(/^#\/billing$/, async () => {
       <div class="small muted" style="margin-top:10px;line-height:1.7">
         ${billingMonth ? `<b>${esc(billingMonth)}</b> 기준` : '<b>전체 기간</b> 기준'} 집계입니다.
         정확한 호출량 집계를 위해서는 외부 웹앱에 "링크 설정 → 사용량 보고 스니펫"을 넣어 API 호출 시마다 보고하도록 하세요.
-        단가 미설정 자료는 "💳 요금"에서 1회 원가를 입력하면 예상 비용이 계산됩니다.
+        단가 미설정 자료는 "요금"에서 1회 원가를 입력하면 예상 비용이 계산됩니다.
       </div>
     </div>`);
   document.getElementById('bm').onchange = (e) => { billingMonth = e.target.value; navigate(); };
@@ -3291,7 +3302,7 @@ route(/^#\/settlement$/, async () => {
     <div class="card" data-prov="${esc(p.provider)}" style="margin-bottom:16px">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
         <div>
-          <h2 style="margin:0">🧾 ${esc(p.providerLabel)}</h2>
+          <h2 class="heading-with-icon" style="margin:0">${icon('receipt')} ${esc(p.providerLabel)}</h2>
           <div class="small muted">${settleMonth} · 총 호출 ${p.totalCalls.toLocaleString()}회
             ${p.confirmed ? '<span class="badge green">정산 확정</span>' : p.invoiceAmount != null ? '<span class="badge amber">미확정</span>' : '<span class="badge gray">청구액 미입력</span>'}</div>
         </div>
@@ -3310,7 +3321,7 @@ route(/^#\/settlement$/, async () => {
         <thead><tr><th>${gLabel}</th><th>${settleGroup === 'instructor' ? '아이디' : settleGroup === 'session' ? '담당' : ''}</th><th>호출수(실호출)</th><th>비율</th><th>배분액</th></tr></thead>
         <tbody>
           ${p.rows.map((r) => `<tr>
-            <td class="cell-main">${settleGroup === 'instructor' ? '👤 ' : settleGroup === 'session' ? '📆 ' : '💳 '}${esc(r.title)}</td>
+            <td class="cell-main cell-main-with-icon">${icon(settleGroup === 'instructor' ? 'users' : settleGroup === 'session' ? 'calendar' : 'creditCard')}<span>${esc(r.title)}</span></td>
             <td>${esc(r.subtitle) || '<span class="muted">-</span>'}</td>
             <td>${r.calls.toLocaleString()} <span class="small muted">(${r.apiCalls.toLocaleString()})</span></td>
             <td>${(r.ratio * 100).toFixed(1)}%</td>
