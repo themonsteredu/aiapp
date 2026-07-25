@@ -1212,6 +1212,38 @@ table.matrix { width: 100%; border-collapse: separate; border-spacing: 5px; min-
   border-radius: 16px; background: rgba(255, 255, 255, .7);
 }
 .project-empty-large b { color: var(--text); font-size: 16px; }
+.project-card .btn.is-loading {
+  pointer-events: none;
+  color: var(--text-2);
+  background: var(--bg);
+}
+.project-route-state {
+  display: flex;
+  min-height: 150px;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  text-align: left;
+}
+.project-route-state h3 { margin-bottom: 5px; }
+.project-route-state p { color: var(--text-2); }
+.project-route-spinner {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  border: 3px solid var(--line-strong);
+  border-top-color: var(--blue-600);
+  border-radius: 50%;
+  animation: project-route-spin .75s linear infinite;
+}
+.project-route-error {
+  flex-direction: column;
+  border-color: #fecaca;
+  background: var(--red-50);
+  text-align: center;
+}
+.project-route-actions { display: flex; gap: 8px; }
+@keyframes project-route-spin { to { transform: rotate(360deg); } }
 
 .project-form-grid {
   display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 15px; align-items: start;
