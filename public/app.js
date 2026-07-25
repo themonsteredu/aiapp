@@ -1511,6 +1511,49 @@ function openDeckSheet(d, data) {
   back.querySelector('#sheet-actions').addEventListener('click', () => back.remove());
 }
 
+const UNCATEGORIZED_SUBJECT = '__uncategorized__';
+
+function normalizeSubjectPath(subject) {
+  return String(subject || '')
+    .split(/\s*(?:\/|>|›)\s*/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .join(' / ');
+}
+
+function buildSubjectTree(decks) {
+  const root = { name: '', path: '', total: 0, decks: [], children: new Map() };
+  for (const deck of decks) {
+    const normalized = normalizeSubjectPath(deck.subject);
+    if (!normalized) continue;
+    const parts = normalized.split(' / ');
+    let node = root;
+    root.total += 1;
+    for (const part of parts) {
+      const path = node.path ? `${node.path} / ${part}` : part;
+      if (!node.children.has(part)) {
+        node.children.set(part, { name: part, path, total: 0, decks: [], children: new Map() });
+      }
+      node = node.children.get(part);
+      node.total += 1;
+    }
+    node.decks.push(deck);
+  }
+  return root;
+}
+
+let deckTreeOpen = new Set();
+let deckTreeWasSaved = false;
+try {
+  const saved = localStorage.getItem('deckTreeOpen');
+  deckTreeWasSaved = saved !== null;
+  if (saved) deckTreeOpen = new Set(JSON.parse(saved));
+} catch {}
+
+function saveDeckTreeOpen() {
+  try { localStorage.setItem('deckTreeOpen', JSON.stringify([...deckTreeOpen])); } catch {}
+}
+
 let deckSubjectTab = 'all';
 let deckCostTab = 'all';
 let deckView = (typeof localStorage !== 'undefined' && localStorage.getItem('deckView')) || 'compact';
@@ -1550,19 +1593,86 @@ route(/^#\/decks$/, async () => {
       </div>`);
     return;
   }
-  // 과목(폴더) 탭
-  const subjects = [...new Set(data.decks.map((d) => d.subject || ''))].filter(Boolean).sort();
+  // 과목 폴더 트리. "대분류 / 중분류 / 소분류" 형식은 자동으로 계층화한다.
+  const subjects = [...new Set(data.decks.map((d) => normalizeSubjectPath(d.subject)).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ko'));
   const hasEtc = data.decks.some((d) => !d.subject);
-  const tabs = [['all', `전체 (${data.decks.length})`],
-    ...subjects.map((s) => [s, `${s} (${data.decks.filter((d) => d.subject === s).length})`]),
-    ...(hasEtc && subjects.length ? [['', `미분류 (${data.decks.filter((d) => !d.subject).length})`]] : [])];
-  if (deckSubjectTab !== 'all' && !tabs.some(([k]) => k === deckSubjectTab)) deckSubjectTab = 'all';
+  const subjectTree = buildSubjectTree(data.decks);
+  const allTreePaths = [];
+  const collectTreePaths = (node) => {
+    for (const child of node.children.values()) {
+      allTreePaths.push(child.path);
+      collectTreePaths(child);
+    }
+  };
+  collectTreePaths(subjectTree);
+  if (!deckTreeWasSaved) {
+    for (const child of subjectTree.children.values()) deckTreeOpen.add(child.path);
+    deckTreeWasSaved = true;
+    saveDeckTreeOpen();
+  }
+  const validSelections = new Set(['all', UNCATEGORIZED_SUBJECT, ...allTreePaths]);
+  if (!validSelections.has(deckSubjectTab) || (deckSubjectTab === UNCATEGORIZED_SUBJECT && !hasEtc)) deckSubjectTab = 'all';
   const paidCount = data.decks.filter((d) => d.costType === 'api_paid').length;
+  const inSelectedFolder = (deck) => {
+    if (deckSubjectTab === 'all') return true;
+    if (deckSubjectTab === UNCATEGORIZED_SUBJECT) return !deck.subject;
+    const path = normalizeSubjectPath(deck.subject);
+    return path === deckSubjectTab || path.startsWith(`${deckSubjectTab} / `);
+  };
   const list = data.decks.filter((d) =>
-    (deckSubjectTab === 'all' || (d.subject || '') === deckSubjectTab)
+    inSelectedFolder(d)
     && (deckCostTab === 'all' || (deckCostTab === 'paid' ? d.costType === 'api_paid' : d.costType !== 'api_paid')));
   const typeIco = (d) => d.kind === 'link' ? '🧪' : d.kind === 'html' ? '📦' : '📊';
   const statusLabel = (d) => (DECK_STATUS[d.status] || DECK_STATUS.private)[0];
+  const treeNodeHtml = (node, depth = 0) => {
+    const isOpen = deckTreeOpen.has(node.path);
+    const children = [...node.children.values()].sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+    const directDecks = [...node.decks].sort((a, b) => a.title.localeCompare(b.title, 'ko'));
+    const hasContents = children.length > 0 || directDecks.length > 0;
+    return `
+      <div class="subject-tree-node ${isOpen ? 'open' : ''}" style="--tree-indent:${depth * 14}px">
+        <div class="subject-tree-row ${deckSubjectTab === node.path ? 'selected' : ''}">
+          <button class="subject-tree-toggle" data-tree-toggle="${esc(node.path)}" aria-label="${isOpen ? '폴더 접기' : '폴더 펼치기'}" ${hasContents ? '' : 'disabled'}>
+            ${hasContents ? (isOpen ? '▾' : '▸') : ''}
+          </button>
+          <button class="subject-tree-folder" data-tree-folder="${esc(node.path)}" title="${esc(node.path)}">
+            <span class="subject-folder-icon">${isOpen ? '📂' : '📁'}</span>
+            <span class="subject-folder-name">${esc(node.name)}</span>
+            <span class="subject-folder-count">${node.total}</span>
+          </button>
+        </div>
+        ${isOpen ? `<div class="subject-tree-children">
+          ${children.map((child) => treeNodeHtml(child, depth + 1)).join('')}
+          ${directDecks.map((deck) => `
+            <a class="subject-tree-deck" href="#/view/${deck.id}" style="--tree-indent:${(depth + 1) * 14}px" title="${esc(deck.title)}">
+              <span>${typeIco(deck)}</span><b>${esc(deck.title)}</b>
+            </a>`).join('')}
+        </div>` : ''}
+      </div>`;
+  };
+  const selectedFolderLabel = deckSubjectTab === 'all'
+    ? '전체 웹앱'
+    : deckSubjectTab === UNCATEGORIZED_SUBJECT ? '미분류' : deckSubjectTab;
+  const subjectTreeHtml = `
+    <aside class="subject-tree-panel">
+      <div class="subject-tree-head">
+        <div><b>과목 폴더</b><span>${subjects.length}개 경로</span></div>
+        <div>
+          <button id="tree-expand-all" title="모두 펼치기">＋</button>
+          <button id="tree-collapse-all" title="모두 접기">−</button>
+        </div>
+      </div>
+      <button class="subject-tree-all ${deckSubjectTab === 'all' ? 'selected' : ''}" data-tree-folder="all">
+        <span>🗂️</span><b>전체 웹앱</b><em>${data.decks.length}</em>
+      </button>
+      <div class="subject-tree">
+        ${[...subjectTree.children.values()].sort((a, b) => a.name.localeCompare(b.name, 'ko')).map((node) => treeNodeHtml(node)).join('')}
+        ${hasEtc ? `<button class="subject-tree-uncategorized ${deckSubjectTab === UNCATEGORIZED_SUBJECT ? 'selected' : ''}" data-tree-folder="${UNCATEGORIZED_SUBJECT}">
+          <span>📄</span><b>미분류</b><em>${data.decks.filter((deck) => !deck.subject).length}</em>
+        </button>` : ''}
+      </div>
+      <div class="subject-tree-help">하위 폴더는 과목명에 <b>/</b>를 넣어 만듭니다.<br>예: 진로교육 / AI 기초</div>
+    </aside>`;
   // 간략 보기(기본): 제목 위주, 나머지는 "관리 ⋯" 시트로
   const compactBody = `<div class="card" style="padding:6px 12px"><div class="deck-list">
     ${list.map((d) => `
@@ -1609,17 +1719,54 @@ route(/^#\/decks$/, async () => {
         <button class="btn btn-primary" id="btn-new-deck">${icon('plus')} 새 웹앱 만들기</button>
       </div>
     </div>
-    <div class="tabs">
-      ${tabs.map(([k, label]) => `<button data-stab="${esc(k)}" class="${deckSubjectTab === k ? 'active' : ''}">${k === 'all' ? '' : '📁 '}${esc(label)}</button>`).join('')}
+    <div class="deck-library-tree-layout">
+      ${subjectTreeHtml}
+      <section class="deck-folder-content">
+        <div class="deck-folder-toolbar">
+          <div>
+            <div class="deck-folder-breadcrumb">${deckSubjectTab === 'all' ? '라이브러리' : esc(selectedFolderLabel).replaceAll(' / ', ' <span>›</span> ')}</div>
+            <b>${esc(selectedFolderLabel)}</b><small>${list.length}개 표시</small>
+          </div>
+          <div class="tabs deck-cost-tabs">
+            ${[['all', `요금 전체`], ['free', `🆓 무료 (${data.decks.length - paidCount})`], ['paid', `💳 API 유료 (${paidCount})`]]
+              .map(([k, label]) => `<button data-ctab="${k}" class="${deckCostTab === k ? 'active' : ''}">${label}</button>`).join('')}
+          </div>
+        </div>
+        ${deckView === 'detailed' ? detailBody : compactBody}
+      </section>
     </div>
-    <div class="tabs" style="margin-top:-4px">
-      ${[['all', `요금 전체`], ['free', `🆓 무료 (${data.decks.length - paidCount})`], ['paid', `💳 API 유료 (${paidCount})`]]
-        .map(([k, label]) => `<button data-ctab="${k}" class="${deckCostTab === k ? 'active' : ''}">${label}</button>`).join('')}
-    </div>
-    ${deckView === 'detailed' ? detailBody : compactBody}`);
-  document.querySelectorAll('[data-stab]').forEach((b) => {
-    b.onclick = () => { deckSubjectTab = b.dataset.stab; navigate(); };
+  `);
+  document.querySelectorAll('[data-tree-folder]').forEach((b) => {
+    b.onclick = () => {
+      deckSubjectTab = b.dataset.treeFolder;
+      if (deckSubjectTab !== 'all' && deckSubjectTab !== UNCATEGORIZED_SUBJECT) {
+        const parts = deckSubjectTab.split(' / ');
+        for (let index = 1; index <= parts.length; index += 1) deckTreeOpen.add(parts.slice(0, index).join(' / '));
+        saveDeckTreeOpen();
+      }
+      navigate();
+    };
   });
+  document.querySelectorAll('[data-tree-toggle]').forEach((b) => {
+    b.onclick = (event) => {
+      event.stopPropagation();
+      const path = b.dataset.treeToggle;
+      if (deckTreeOpen.has(path)) deckTreeOpen.delete(path);
+      else deckTreeOpen.add(path);
+      saveDeckTreeOpen();
+      navigate();
+    };
+  });
+  document.getElementById('tree-expand-all').onclick = () => {
+    deckTreeOpen = new Set(allTreePaths);
+    saveDeckTreeOpen();
+    navigate();
+  };
+  document.getElementById('tree-collapse-all').onclick = () => {
+    deckTreeOpen.clear();
+    saveDeckTreeOpen();
+    navigate();
+  };
   document.querySelectorAll('[data-ctab]').forEach((b) => {
     b.onclick = () => { deckCostTab = b.dataset.ctab; navigate(); };
   });
@@ -1650,7 +1797,7 @@ route(/^#\/decks$/, async () => {
           <input id="nd-html" type="file" accept=".html,.htm,text/html">
           <div class="small muted" style="margin-top:5px">CSS·자바스크립트가 파일 안에 포함된 단일 HTML이어야 합니다. (AI로 만든 웹앱 파일 그대로 OK)</div></div>
         <div><label>과목 (폴더)</label>
-          <input id="nd-subject" list="subject-list" placeholder="예: AI 진로교육 — 기존 과목을 고르거나 새로 입력">
+          <input id="nd-subject" list="subject-list" placeholder="예: 진로교육 / AI 기초 — / 로 하위 폴더 구분">
           <datalist id="subject-list">${subjects.map((s) => `<option value="${esc(s)}">`).join('')}</datalist></div>
         <div><label>설명</label><input id="nd-desc" placeholder="예: 나에게 맞는 미래를 찾는 인터랙티브 수업"></div>
         <div><label>요금 유형</label>
@@ -2064,7 +2211,7 @@ route(/^#\/decks\/(\d+)\/edit$/, async (id) => {
     <div class="page-head">
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <input class="input" id="deck-title" value="${esc(data.deck.title)}" style="font-weight:800;width:250px">
-        <input class="input" id="deck-subject" value="${esc(data.deck.subject || '')}" placeholder="과목 (폴더)" style="width:150px">
+        <input class="input" id="deck-subject" value="${esc(data.deck.subject || '')}" placeholder="과목 / 하위 폴더" style="width:190px">
         <input class="input" id="deck-desc" value="${esc(data.deck.description)}" placeholder="설명" style="width:250px">
         <button class="btn btn-ghost btn-sm" id="save-deck">덱 정보 저장</button>
       </div>
