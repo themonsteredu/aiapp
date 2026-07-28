@@ -557,7 +557,7 @@ function shell(title, contentHtml) {
       <div class="side-overlay" id="side-overlay"></div>
       <aside class="sidebar">
         <div class="brand">
-          <div class="mark"><img src="/brand/moalab-symbol.png" alt=""></div>
+          <div class="mark"><img src="/brand/moakit-symbol.svg" alt=""></div>
           <div><div class="bt">모아랩</div><div class="bs">AI 수업·진로교육 플랫폼</div></div>
         </div>
         <nav>
@@ -684,7 +684,7 @@ route(/^#\/login$/, () => {
     $app.innerHTML = `
       <div class="login-wrap">
         <form class="login-card" id="login-form">
-          <div class="lmark"><img src="/brand/moalab-symbol.png" alt=""></div>
+          <div class="lmark"><img src="/brand/moakit-symbol.svg" alt=""></div>
           <div class="logo">모아랩</div>
           <div class="sub">AI 수업·진로교육 플랫폼</div>
           <div class="tabs" style="margin-bottom:4px">
