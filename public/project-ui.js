@@ -605,7 +605,7 @@ export function registerProjectUI(deps) {
           <span>우리 팀 최종 웹앱</span>
           <h3>${esc(current.config.serviceName || '광주픽')}</h3>
           <p>${esc(current.config.tagline || '')}</p>
-          ${published ? `<a target="_blank" rel="noopener" href="#/p/${esc(published.slug)}">${esc(`${location.origin}/#/p/${published.slug}`)}</a>` : '<em>아직 배포하지 않았습니다.</em>'}
+          ${published ? `<a target="_blank" rel="noopener" href="#/p/${esc(published.slug)}">${esc(`${location.origin}/class#/p/${published.slug}`)}</a>` : '<em>아직 배포하지 않았습니다.</em>'}
         </div>
         ${published ? `<img src="/api/public/apps/${esc(published.slug)}/qr" alt="배포 앱 QR 코드">` : ''}
         <button class="btn btn-primary" type="button" id="publish-project-app">${published ? '새 버전 다시 배포' : '최종 버전 배포'}</button>

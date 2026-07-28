@@ -17,10 +17,13 @@ const MIME = {
 };
 
 function serveStatic(res, pathname) {
-  let file = pathname === '/' ? '/index.html' : pathname;
+  // '/' 는 AI연구소 홈페이지(index.html), '/class' 이하는 플랫폼 SPA(app.html).
+  // vercel.json 의 rewrites 와 같은 규칙을 로컬·타 호스팅에서도 그대로 재현한다.
+  const isClass = pathname === '/class' || pathname.startsWith('/class/');
+  let file = pathname === '/' ? '/index.html' : isClass ? '/app.html' : pathname;
   const full = path.join(PUBLIC_DIR, path.normalize(file));
   if (!full.startsWith(PUBLIC_DIR) || !fs.existsSync(full) || !fs.statSync(full).isFile()) {
-    // SPA 라우팅: 알 수 없는 경로는 index.html로
+    // 알 수 없는 경로는 홈페이지로
     const index = path.join(PUBLIC_DIR, 'index.html');
     res.writeHead(200, { 'Content-Type': MIME['.html'], 'Cache-Control': 'no-store' });
     return res.end(fs.readFileSync(index));
