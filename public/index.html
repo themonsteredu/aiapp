@@ -304,6 +304,13 @@
   .scard figcaption{margin-top:10px;font-size:.82rem;font-weight:700;color:var(--muted);letter-spacing:-.01em}
   @keyframes showcase-roll{from{transform:translateX(0)}to{transform:translateX(calc(-50% - 9px))}}
   @media(prefers-reduced-motion:reduce){.showcase-track{animation:none}}
+  /* 사업 주체 표기 — 모아랩은 모아킷의 사업 분야다 */
+  .brandlink .byline{font-size:.72rem;font-weight:600;color:var(--muted);margin-left:2px;white-space:nowrap}
+  footer .legal{margin-top:18px;padding-top:16px;border-top:1px solid var(--line);
+    color:var(--muted);font-size:.82rem;line-height:1.9}
+  footer .legal .biz{display:flex;flex-wrap:wrap;gap:2px 18px}
+  footer .legal .copy{margin-top:6px}
+  footer .links a:hover{color:var(--magenta)}
 </style>
 </head>
 <body>
@@ -610,9 +617,22 @@
 
 <footer>
   <div class="wrap ft">
-    <div class="brandlink"><img class="logo" src="/brand/moakit-symbol.svg" alt="모아랩" /><span class="wordmark">모아랩</span></div>
-    <div class="info">【주소를 입력하세요】 &nbsp;|&nbsp; 【전화번호】 &nbsp;|&nbsp; 【이메일】<br>© 2026 모아랩. All rights reserved.</div>
-    <div class="links"><span>개인정보처리방침</span><span>이용약관</span></div>
+    <div class="brandlink"><img class="logo" src="/brand/moakit-symbol.svg" alt="모아랩" /><span class="wordmark">모아랩</span><span class="byline">by MoaKit</span></div>
+    <div class="links">
+      <a href="https://moakit.ai">모아킷 홈</a>
+      <a href="https://hub.moakit.ai">수업자료 허브</a>
+      <a href="https://moakit.ai/academy">학원 앱</a>
+      <a href="/class#/login">플랫폼 로그인</a>
+    </div>
+  </div>
+  <div class="wrap legal">
+    <p class="biz">
+      <span>상호 모아킷</span>
+      <span>대표 강양희</span>
+      <span>사업자등록번호 443-05-03835</span>
+      <span>이메일 <a href="mailto:cuteheea0@gmail.com">cuteheea0@gmail.com</a></span>
+    </p>
+    <p class="copy">© 2026 모아킷. All rights reserved.</p>
   </div>
 </footer>
 
