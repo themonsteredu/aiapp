@@ -557,7 +557,7 @@ function shell(title, contentHtml) {
       <div class="side-overlay" id="side-overlay"></div>
       <aside class="sidebar">
         <div class="brand">
-          <div class="mark">AI</div>
+          <div class="mark"><img src="/brand/moalab-symbol.png" alt=""></div>
           <div><div class="bt">모아랩</div><div class="bs">AI 수업·진로교육 플랫폼</div></div>
         </div>
         <nav>
@@ -684,7 +684,7 @@ route(/^#\/login$/, () => {
     $app.innerHTML = `
       <div class="login-wrap">
         <form class="login-card" id="login-form">
-          <div class="lmark">AI</div>
+          <div class="lmark"><img src="/brand/moalab-symbol.png" alt=""></div>
           <div class="logo">모아랩</div>
           <div class="sub">AI 수업·진로교육 플랫폼</div>
           <div class="tabs" style="margin-bottom:4px">
@@ -1371,7 +1371,7 @@ route(/^#\/sessions$/, async () => {
     openModal(`
       <h3 style="text-align:center">${esc(title || '수업 입장 코드')}</h3>
       <div class="m-sub" style="text-align:center">학생들에게 이 코드를 보여주세요 — 로그인 화면의 "수업 참여"에서 입력합니다</div>
-      <div style="text-align:center;font-size:64px;font-weight:800;letter-spacing:14px;color:var(--navy-800);padding:24px 0">${esc(code)}</div>
+      <div style="text-align:center;font-size:64px;font-weight:800;letter-spacing:14px;color:var(--brand-800);padding:24px 0">${esc(code)}</div>
       <div class="m-actions"><button class="btn btn-primary" onclick="this.closest('.modal-back').remove()">닫기</button></div>`);
   };
   document.querySelectorAll('[data-big]').forEach((b) => {
@@ -2679,7 +2679,7 @@ route(/^#\/report$/, async () => {
             </div>`).join('')}
         </div>
         <div class="legend">
-          <span><span class="sw" style="background:var(--blue-600)"></span>정상 접속</span>
+          <span><span class="sw" style="background:var(--brand-600)"></span>정상 접속</span>
           <span><span class="sw" style="background:var(--red-600)"></span>차단</span>
           <span><span class="sw" style="background:var(--amber-600)"></span>캡처 시도</span>
         </div>
@@ -2915,7 +2915,7 @@ route(/^#\/agreement$/, async () => {
       <div class="agreement-doc">${esc(ag.text).replace(/\n/g, '<br>')}</div>
       <form id="agree-form" class="mt">
         <label style="display:flex;gap:9px;align-items:flex-start;cursor:pointer;font-weight:600">
-          <input type="checkbox" name="consent" style="width:17px;height:17px;margin-top:1px;accent-color:var(--blue-600)">
+          <input type="checkbox" name="consent" style="width:17px;height:17px;margin-top:1px;accent-color:var(--brand-600)">
           <span>위 계약 및 비밀유지·보안 조항을 모두 읽고 이해하였으며 이에 동의합니다.</span>
         </label>
         <div class="form-grid mt" style="grid-template-columns:1fr auto;max-width:420px">
@@ -2953,7 +2953,7 @@ route(/^#\/contract$/, async () => {
         ${data.defaultIsNewer ? `<div class="msg notice-with-icon" style="background:var(--amber-50,#fff7ed);border:1px solid var(--amber-300,#fcd34d);color:var(--amber-700,#b45309);padding:9px 12px;border-radius:9px;margin-bottom:10px;font-size:13px;font-weight:600">${icon('alert')}<span>코드에 최신 기본 계약 문안이 있습니다. 아래 <b>"최신 기본 문안 불러오기"</b>를 누른 뒤 <b>저장</b>하면 사이트에 반영됩니다(전원 재동의).</span></div>` : ''}
         <textarea id="ct-text" class="input" rows="22" style="line-height:1.7">${esc(data.text)}</textarea>
         <label style="display:flex;gap:8px;align-items:center;margin-top:10px;font-weight:600;font-size:13px">
-          <input type="checkbox" id="ct-required" ${data.required ? 'checked' : ''} style="width:16px;height:16px;accent-color:var(--blue-600)">
+          <input type="checkbox" id="ct-required" ${data.required ? 'checked' : ''} style="width:16px;height:16px;accent-color:var(--brand-600)">
           강사·관리자 최초 이용 시 동의 요구
         </label>
         <label style="display:flex;gap:8px;align-items:center;margin-top:8px;font-weight:600;font-size:13px;color:var(--amber-600)">
