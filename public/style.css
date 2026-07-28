@@ -1,6 +1,6 @@
 /* =====================================================
  * 모아랩(MoaLab) — 디자인 시스템
- * 라이트 SaaS 대시보드: 화이트/그레이 기반 + 모아랩 브랜드(로즈·마젠타·퍼플) 포인트
+ * 라이트 SaaS 대시보드: 화이트/그레이 기반 + 모아킷 브랜드(티일) 포인트
  * 상태색(초록·빨강·주황·앰버)은 의미 전달용이라 브랜드색과 분리해 유지한다.
  * ===================================================== */
 /* Pretendard가 설치된 환경에서는 자동 적용되고, 없으면 시스템 한글 폰트로 대체됩니다.
@@ -10,16 +10,16 @@
 
 :root {
   /* 색상 시스템 */
-  --brand-900: #171019;
-  --brand-800: #251A2C;
-  --brand-700: #37243F;
-  --brand-600: #D91479;
-  --brand-500: #F23E63;
-  --brand-50: #FDEBF3;
+  --brand-900: #0c1210;
+  --brand-800: #12302c;
+  --brand-700: #1b4038;
+  --brand-600: #0e8f7e;
+  --brand-500: #17b6a0;
+  --brand-50: #e6f7f4;
   --mint-600: #0d9488;
   --mint-50: #ecfdf7;
-  --accent-600: #8E35C7;
-  --accent-50: #F4E9FB;
+  --accent-600: #5b8def;
+  --accent-50: #eaf1fd;
   --orange-600: #ea8a0c;
   --orange-50: #fff5e6;
   --green-600: #16a34a;
@@ -39,7 +39,7 @@
 
   --shadow-sm: 0 1px 2px rgba(15, 23, 42, .05);
   --shadow-md: 0 1px 2px rgba(15, 23, 42, .04), 0 12px 32px -16px rgba(15, 23, 42, .14);
-  --shadow-lg: 0 24px 60px -12px rgba(23, 16, 25, .35);
+  --shadow-lg: 0 24px 60px -12px rgba(12, 18, 16, .35);
 
   --r-lg: 16px;
   --r-md: 12px;
@@ -94,8 +94,8 @@ svg.ic { width: 18px; height: 18px; stroke: currentColor; stroke-width: 1.8; fil
 }
 .btn:active { transform: translateY(1px); }
 .btn-primary {
-  background: linear-gradient(135deg, var(--brand-600), var(--accent-600));
-  color: #fff; box-shadow: 0 6px 16px -6px rgba(217, 20, 121, .45);
+  background: linear-gradient(135deg, var(--brand-500), var(--brand-600));
+  color: #fff; box-shadow: 0 6px 16px -6px rgba(14, 143, 126, .45);
 }
 .btn-primary:hover { background: linear-gradient(135deg, #1d4fd7, #2f66e6); }
 .btn-ghost { background: #fff; border-color: var(--line-strong); color: var(--text); }
@@ -114,7 +114,7 @@ svg.ic { width: 18px; height: 18px; stroke: currentColor; stroke-width: 1.8; fil
 .sidebar {
   width: var(--sidebar-w); flex-shrink: 0; position: sticky; top: 0; height: 100vh;
   background: linear-gradient(180deg, var(--brand-900) 0%, var(--brand-800) 55%, var(--brand-700) 100%);
-  color: #CDC0D4; display: flex; flex-direction: column; z-index: 60;
+  color: #b6ccc7; display: flex; flex-direction: column; z-index: 60;
 }
 .sidebar .brand {
   display: flex; align-items: center; gap: 11px; padding: 20px 20px 18px;
@@ -123,25 +123,25 @@ svg.ic { width: 18px; height: 18px; stroke: currentColor; stroke-width: 1.8; fil
   width: 36px; height: 36px; border-radius: 11px; flex-shrink: 0;
   background: #fff;
   display: flex; align-items: center; justify-content: center;
-  box-shadow: 0 6px 14px -4px rgba(217, 20, 121, .45);
+  box-shadow: 0 6px 14px -4px rgba(14, 143, 126, .45);
 }
 .sidebar .brand .mark img { width: 26px; height: auto; }
 .sidebar .brand .bt { color: #fff; font-weight: 800; font-size: 14.5px; line-height: 1.3; }
-.sidebar .brand .bs { font-size: 11px; color: #A18FAB; }
+.sidebar .brand .bs { font-size: 11px; color: #89a49e; }
 .sidebar nav { padding: 6px 12px; flex: 1; overflow-y: auto; }
 .sidebar .nav-label {
   font-size: 10.5px; font-weight: 800; letter-spacing: .08em; color: #6478ad;
   padding: 16px 12px 7px;
 }
 .sidebar nav a {
-  display: flex; align-items: center; gap: 11px; color: #CDC0D4; padding: 10px 12px;
+  display: flex; align-items: center; gap: 11px; color: #b6ccc7; padding: 10px 12px;
   border-radius: 10px; margin-bottom: 2px; font-weight: 600; font-size: 13.5px;
 }
 .sidebar nav a svg.ic { width: 17px; height: 17px; opacity: .85; }
 .sidebar nav a:hover { background: rgba(255, 255, 255, .06); color: #fff; }
 .sidebar nav a.active {
-  background: linear-gradient(135deg, var(--brand-600), #3d6ef0);
-  color: #fff; box-shadow: 0 8px 18px -8px rgba(37, 99, 235, .8);
+  background: linear-gradient(135deg, var(--brand-500), var(--brand-600));
+  color: #fff; box-shadow: 0 8px 18px -8px rgba(14, 143, 126, .75);
 }
 .sidebar .side-foot {
   margin: 12px; padding: 13px 14px; border-radius: 12px;
@@ -186,7 +186,7 @@ svg.ic { width: 18px; height: 18px; stroke: currentColor; stroke-width: 1.8; fil
 .profile-chip .rl { font-size: 11.5px; color: var(--text-3); }
 .avatar {
   width: 36px; height: 36px; border-radius: 50%; color: #fff; font-weight: 800; font-size: 14px;
-  background: linear-gradient(135deg, var(--brand-500), var(--accent-600));
+  background: linear-gradient(135deg, #41e3ce, var(--brand-600));
   display: flex; align-items: center; justify-content: center;
 }
 
@@ -440,7 +440,7 @@ table.matrix { width: 100%; border-collapse: separate; border-spacing: 5px; min-
   font-size: 11.5px; font-weight: 800; display: flex; align-items: center; justify-content: center;
 }
 .rank-row .rn2 { flex: 1; font-weight: 600; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.rank-row .rbar { height: 7px; border-radius: 99px; background: linear-gradient(90deg, var(--brand-500), var(--accent-600)); }
+.rank-row .rbar { height: 7px; border-radius: 99px; background: linear-gradient(90deg, #41e3ce, var(--brand-600)); }
 .rank-row .rv { font-size: 12px; color: var(--text-2); font-weight: 700; width: 42px; text-align: right; }
 
 /* ============ 로그인 ============ */
@@ -462,7 +462,7 @@ table.matrix { width: 100%; border-collapse: separate; border-spacing: 5px; min-
   width: 46px; height: 46px; border-radius: 14px; margin-bottom: 18px;
   background: #fff; border: 1px solid var(--line);
   display: flex; align-items: center; justify-content: center;
-  box-shadow: 0 10px 22px -8px rgba(217, 20, 121, .5);
+  box-shadow: 0 10px 22px -8px rgba(14, 143, 126, .5);
 }
 .login-card .lmark img { width: 34px; height: auto; }
 .login-card .logo { font-size: 21px; font-weight: 800; color: var(--brand-800); letter-spacing: -.02em; }
@@ -555,7 +555,7 @@ table.matrix { width: 100%; border-collapse: separate; border-spacing: 5px; min-
     linear-gradient(150deg, #0a1230 0%, #14295e 55%, #1c3d80 100%);
 }
 .theme-white {
-  color: #241C2E; --sl-accent: #D91479; --sl-strong: #A80E5D; --sl-glow: rgba(217, 20, 121, .10);
+  color: #12302c; --sl-accent: #0e8f7e; --sl-strong: #0b7566; --sl-glow: rgba(14, 143, 126, .10);
   background:
     radial-gradient(110% 85% at -8% 112%, rgba(13, 148, 136, .07), transparent 55%),
     linear-gradient(160deg, #ffffff 0%, #f2f6fd 100%);
@@ -617,7 +617,7 @@ table.matrix { width: 100%; border-collapse: separate; border-spacing: 5px; min-
 .present-bar button { background: #1c2740; color: #dbe4f5; border: none; border-radius: 8px; padding: 7px 14px; font-weight: 700; }
 .present-bar button:hover { background: #2a3a5e; }
 .progress { height: 4px; background: var(--brand-800); }
-.progress .fill { height: 100%; background: linear-gradient(90deg, var(--brand-500), var(--accent-600)); transition: width .2s; }
+.progress .fill { height: 100%; background: linear-gradient(90deg, #41e3ce, var(--brand-600)); transition: width .2s; }
 
 /* 워터마크 / 블랙아웃 / 보호 */
 .watermark { position: absolute; inset: 0; pointer-events: none; z-index: 50; background-repeat: repeat; }
@@ -783,7 +783,7 @@ table.matrix { width: 100%; border-collapse: separate; border-spacing: 5px; min-
   background: #f0f3f8;
   color: var(--text-2);
 }
-.selected .subject-root-icon { background: #FBDCEB; color: var(--brand-600); }
+.selected .subject-root-icon { background: #d8f2ed; color: var(--brand-600); }
 .subject-root-icon .ic { width: 14px; height: 14px; }
 .subject-tree-all b,
 .subject-tree-uncategorized b {
@@ -867,7 +867,7 @@ table.matrix { width: 100%; border-collapse: separate; border-spacing: 5px; min-
   background: #f1f4f9;
   color: var(--text-2);
 }
-.subject-tree-row.selected .subject-folder-icon { background: #FBDCEB; color: var(--brand-600); }
+.subject-tree-row.selected .subject-folder-icon { background: #d8f2ed; color: var(--brand-600); }
 .subject-folder-icon .ic { width: 14px; height: 14px; }
 .subject-folder-name {
   min-width: 0;
@@ -1082,7 +1082,7 @@ table.matrix { width: 100%; border-collapse: separate; border-spacing: 5px; min-
   text-shadow: 0 1px 16px rgba(0, 0, 0, .55);
 }
 .slide-frame.tone-dark {
-  color: #241C2E; --sl-accent: #D91479; --sl-strong: #A80E5D; --sl-glow: transparent;
+  color: #12302c; --sl-accent: #0e8f7e; --sl-strong: #0b7566; --sl-glow: transparent;
   text-shadow: 0 1px 12px rgba(255, 255, 255, .6);
 }
 
@@ -1163,7 +1163,7 @@ table.matrix { width: 100%; border-collapse: separate; border-spacing: 5px; min-
 /* ============ AI 프로젝트 모듈 ============ */
 .join-project-note {
   display: flex; flex-direction: column; gap: 3px; margin: 10px 0 2px; padding: 12px 14px;
-  border: 1px solid #d9d2ff; border-radius: 11px; background: #f7f5ff; color: #4d2dad;
+  border: 1px solid #cfeae5; border-radius: 11px; background: #f2fbf9; color: #0b7566;
 }
 .join-project-note b { font-size: 14px; }
 .join-project-note span { font-size: 12px; color: #6d5d9b; }
@@ -1208,7 +1208,7 @@ table.matrix { width: 100%; border-collapse: separate; border-spacing: 5px; min-
   background: var(--line-strong); vertical-align: middle;
 }
 .project-progress { height: 6px; margin: 15px 0 8px; border-radius: 99px; background: #edf1f7; overflow: hidden; }
-.project-progress i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--brand-500), var(--accent-600)); }
+.project-progress i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #41e3ce, var(--brand-600)); }
 .project-empty { padding: 24px; color: var(--text-3); text-align: center; }
 .project-empty-large {
   display: flex; flex-direction: column; gap: 7px; padding: 60px; border: 1px dashed var(--line-strong);
@@ -1272,10 +1272,10 @@ table.matrix { width: 100%; border-collapse: separate; border-spacing: 5px; min-
 
 .project-code-box {
   display: grid; grid-template-columns: auto auto; gap: 3px 12px; align-items: center;
-  padding: 14px 17px; border: 1px solid #d9d2ff; border-radius: 13px; background: var(--accent-50);
+  padding: 14px 17px; border: 1px solid #cfeae5; border-radius: 13px; background: var(--accent-50);
 }
 .project-code-box span { color: #6d5d9b; font-size: 11px; font-weight: 750; }
-.project-code-box strong { grid-row: 2; color: #4d2dad; font-size: 24px; letter-spacing: .12em; }
+.project-code-box strong { grid-row: 2; color: #0b7566; font-size: 24px; letter-spacing: .12em; }
 .project-code-box .btn { grid-row: 1 / 3; grid-column: 2; }
 
 .project-section {
@@ -1302,7 +1302,7 @@ table.matrix { width: 100%; border-collapse: separate; border-spacing: 5px; min-
   background: #eef2f7;
   font-style: normal;
 }
-.project-session-control button.open i { background: #FBDCEB; }
+.project-session-control button.open i { background: #d8f2ed; }
 .project-session-control button i .ic { width: 14px; height: 14px; }
 .project-session-control button b { color: inherit; font-size: 12px; }
 .project-session-control button span { color: var(--text-2); font-size: 11px; line-height: 1.4; }
@@ -1438,7 +1438,7 @@ table.matrix { width: 100%; border-collapse: separate; border-spacing: 5px; min-
     linear-gradient(180deg, color-mix(in srgb, var(--project-color) 7%, white), #fff 48%);
 }
 .project-phone-chip { padding: 5px 7px; border-radius: 99px; background: color-mix(in srgb, var(--project-color) 12%, white); color: var(--project-color); font-size: 8px; font-weight: 800; }
-.project-phone-screen h3 { margin-top: 23px; color: #241C2E; font-size: 27px; letter-spacing: -.06em; }
+.project-phone-screen h3 { margin-top: 23px; color: #12302c; font-size: 27px; letter-spacing: -.06em; }
 .project-phone-screen p { min-height: 50px; margin-top: 8px; color: #66728a; font-size: 10px; line-height: 1.55; }
 .project-phone-cards { display: flex; gap: 5px; margin: 25px 0 22px; }
 .project-phone-cards i { flex: 1; height: 63px; border: 1px solid #e4e9f1; border-radius: 8px; background: #fff; box-shadow: var(--shadow-sm); }
@@ -1461,7 +1461,7 @@ table.matrix { width: 100%; border-collapse: separate; border-spacing: 5px; min-
 
 .project-publish-card {
   display: grid; grid-template-columns: 1fr 128px; gap: 18px; align-items: center; margin-bottom: 20px; padding: 19px;
-  border: 1px solid #d9d2ff; border-radius: 15px; background: linear-gradient(135deg, #f9f7ff, #fff);
+  border: 1px solid #cfeae5; border-radius: 15px; background: linear-gradient(135deg, #f4fbfa, #fff);
 }
 .project-publish-card > div { min-width: 0; }
 .project-publish-card span { color: var(--accent-600); font-size: 10px; font-weight: 800; }
@@ -1473,13 +1473,13 @@ table.matrix { width: 100%; border-collapse: separate; border-spacing: 5px; min-
 
 /* 공개 광주픽 */
 .public-project-app {
-  min-height: 100vh; background: #f8fafc; color: #241C2E; font-family: 'Pretendard', 'Noto Sans KR', sans-serif;
+  min-height: 100vh; background: #f8fafc; color: #12302c; font-family: 'Pretendard', 'Noto Sans KR', sans-serif;
 }
 .public-project-app > header {
   display: flex; height: 68px; align-items: center; justify-content: space-between; gap: 20px; padding: 0 max(24px, calc((100vw - 1120px) / 2));
   border-bottom: 1px solid #e8edf4; background: rgba(255,255,255,.92); backdrop-filter: blur(14px);
 }
-.public-project-app > header a { display: flex; align-items: baseline; gap: 9px; color: #241C2E; }
+.public-project-app > header a { display: flex; align-items: baseline; gap: 9px; color: #12302c; }
 .public-project-app > header b { color: var(--project-color); font-size: 19px; letter-spacing: -.05em; }
 .public-project-app > header a span, .public-project-app > header > span { color: #8792a8; font-size: 10px; }
 .public-project-app > main { min-height: calc(100vh - 134px); }
