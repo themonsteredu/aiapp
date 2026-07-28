@@ -13,7 +13,7 @@
     font-weight:700; font-display:swap;}
   :root{
     /* 모아킷 팔레트 — 토큰 이름은 초기 시안 잔재 */
-    --red:#ff8a3d; --rose:#17b6a0; --pink:#0a6f61; --purple:#17b6a0;
+    --red:#b04a12; --rose:#17b6a0; --pink:#0a6f61; --purple:#17b6a0;
     --ink:#12302c; --muted:#5d706c; --line:#e4ecea; --soft:#f4f9f8;
     --maxw:1080px; --shadow:0 16px 38px -20px rgba(35,39,46,.32);
   }
@@ -127,7 +127,7 @@
 </style>
 <style>
   @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
-  :root{--coral:#ff8a3d;--magenta:#0a6f61;--purple:#17b6a0;--ink:#12302c;--muted:#5d706c;--line:#e4ecea;--soft:#f4f9f8;--maxw:1280px;--radius:8px;--shadow:0 24px 60px rgba(25,27,31,.12)}
+  :root{--coral:#b04a12;--magenta:#0a6f61;--purple:#17b6a0;--ink:#12302c;--muted:#5d706c;--line:#e4ecea;--soft:#f4f9f8;--maxw:1280px;--radius:8px;--shadow:0 24px 60px rgba(25,27,31,.12)}
   body{font-family:'Pretendard',system-ui,-apple-system,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;font-weight:400;line-height:1.65;letter-spacing:0;color:var(--ink)}
   h1,h2,h3,.sec-title,.eyebrow,.hero .sub,.lead,.stats .big{font-family:'Maplestory','Pretendard',system-ui,-apple-system,'Apple SD Gothic Neo','Malgun Gothic',sans-serif}
   h1,h2,h3{font-weight:750;letter-spacing:0}button{font:inherit}section{scroll-margin-top:82px}
@@ -141,7 +141,7 @@
   .btn:focus-visible,.hamb:focus-visible,a:focus-visible{outline:3px solid rgba(14,143,126,.22);outline-offset:3px}
   .btn-dark{background:var(--ink)}.btn-dark:hover{box-shadow:0 12px 26px rgba(23,24,27,.2)}
   /* 주 행동 버튼은 티일로 통일 — 오렌지는 배지·아이콘 강조에만 */
-  .btn-rose{background:var(--magenta);box-shadow:0 12px 28px rgba(14,143,126,.24)}
+  .btn-rose{background:var(--coral);color:#fff;box-shadow:0 12px 28px rgba(176,74,18,.26)}
   .btn-out{background:#fff;color:var(--ink);border:1px solid #cfdcd9}.btn-out:hover{border-color:var(--magenta);color:var(--magenta)}
   .hamb{border:1px solid var(--line);border-radius:6px;background:#fff}
   .hero{border-bottom:1px solid var(--line)}
@@ -207,8 +207,8 @@
   .price{display:flex;align-items:baseline;gap:8px;margin:16px 0 18px}
   .price .now{font-size:1.35rem;font-weight:750;color:var(--ink)}
   .price .unit{font-size:.85rem;color:var(--muted)}
-  .kbtn{display:inline-flex;align-items:center;justify-content:center;gap:6px;width:100%;min-height:46px;padding:0 20px;border:none;border-radius:6px;background:var(--magenta);color:#fff;font-weight:750;font-size:.95rem;cursor:pointer;transition:transform .15s,box-shadow .15s}
-  .kbtn:hover{transform:translateY(-2px);box-shadow:0 10px 22px rgba(14,143,126,.24)}
+  .kbtn{display:inline-flex;align-items:center;justify-content:center;gap:6px;width:100%;min-height:46px;padding:0 20px;border:none;border-radius:6px;background:var(--coral);color:#fff;font-weight:750;font-size:.95rem;cursor:pointer;transition:transform .15s,box-shadow .15s}
+  .kbtn:hover{transform:translateY(-2px);box-shadow:0 10px 22px rgba(176,74,18,.26)}
   .kbtn.alt2{background:#fff;color:var(--magenta);border:1px solid var(--magenta)}
   .kbtn.alt2:hover{box-shadow:0 10px 22px rgba(14,143,126,.18)}
   .clist{margin-top:52px;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;background:#fff}
@@ -270,8 +270,8 @@
   .hero .row{margin-top:28px}
   .hero .trust{margin:20px 0 0;font-size:13px;color:var(--muted)}
   .hero .pic{height:clamp(300px,36vw,440px);border-radius:16px;box-shadow:var(--shadow)}
-  .btn-hero{background:var(--magenta);color:#fff}
-  .btn-hero:hover{transform:translateY(-2px);box-shadow:0 12px 28px rgba(14,143,126,.26)}
+  .btn-hero{background:var(--coral);color:#fff}
+  .btn-hero:hover{transform:translateY(-2px);box-shadow:0 12px 28px rgba(176,74,18,.26)}
   .btn-hero-out{background:#fff;color:var(--ink);border:1px solid var(--line)}
   .btn-hero-out:hover{border-color:var(--magenta);color:var(--magenta)}
 
@@ -447,7 +447,7 @@
     <p class="lead">손으로 만들고 AI로 완성하는 키트입니다. 가정·학교 어디서나 활용할 수 있어요. (가격은 준비 중입니다.)</p>
     <div class="cards">
       <div class="pcard reveal">
-        <div class="ph tile t-rose"><svg viewBox="0 0 320 220" xmlns="http://www.w3.org/2000/svg"><path d="M160 156c-34-23-54-43-54-67a29 29 0 0 1 54-15 29 29 0 0 1 54 15c0 24-20 44-54 67z" fill="#fff" stroke="#ff8a3d" stroke-width="4" stroke-linejoin="round"/><circle cx="144" cy="96" r="4.5" fill="#ff8a3d"/><circle cx="176" cy="96" r="4.5" fill="#ff8a3d"/><path d="M149 112c7 6 15 6 22 0" stroke="#ff8a3d" stroke-width="3.5" stroke-linecap="round" fill="none"/></svg></div>
+        <div class="ph tile t-rose"><svg viewBox="0 0 320 220" xmlns="http://www.w3.org/2000/svg"><path d="M160 156c-34-23-54-43-54-67a29 29 0 0 1 54-15 29 29 0 0 1 54 15c0 24-20 44-54 67z" fill="#fff" stroke="#b04a12" stroke-width="4" stroke-linejoin="round"/><circle cx="144" cy="96" r="4.5" fill="#b04a12"/><circle cx="176" cy="96" r="4.5" fill="#b04a12"/><path d="M149 112c7 6 15 6 22 0" stroke="#b04a12" stroke-width="3.5" stroke-linecap="round" fill="none"/></svg></div>
         <div class="body">
           <span class="tag rose">정서 돌봄</span>
           <h3>AI 애착 인형</h3>
@@ -457,7 +457,7 @@
         </div>
       </div>
       <div class="pcard reveal">
-        <div class="ph tile t-green"><svg viewBox="0 0 320 220" xmlns="http://www.w3.org/2000/svg"><g stroke="#17b6a0" stroke-width="4" stroke-linecap="round"><circle cx="120" cy="86" r="12" fill="#fff"/><circle cx="180" cy="86" r="12" fill="#fff"/><rect x="131" y="100" width="38" height="17" rx="6" fill="#fff"/><path d="M120 98v4M180 98v4"/></g><circle cx="196" cy="132" r="19" fill="none" stroke="#ff8a3d" stroke-width="4"/><path d="M210 146l16 16" stroke="#ff8a3d" stroke-width="4" stroke-linecap="round"/></svg></div>
+        <div class="ph tile t-green"><svg viewBox="0 0 320 220" xmlns="http://www.w3.org/2000/svg"><g stroke="#17b6a0" stroke-width="4" stroke-linecap="round"><circle cx="120" cy="86" r="12" fill="#fff"/><circle cx="180" cy="86" r="12" fill="#fff"/><rect x="131" y="100" width="38" height="17" rx="6" fill="#fff"/><path d="M120 98v4M180 98v4"/></g><circle cx="196" cy="132" r="19" fill="none" stroke="#b04a12" stroke-width="4"/><path d="M210 146l16 16" stroke="#b04a12" stroke-width="4" stroke-linecap="round"/></svg></div>
         <div class="body">
           <span class="tag purple">환경</span>
           <h3>쓰레기 탐정 드론</h3>
@@ -521,7 +521,7 @@
         </div>
       </div>
       <div class="pcard reveal">
-        <div class="ph tile t-rose"><svg viewBox="0 0 320 220" xmlns="http://www.w3.org/2000/svg"><circle cx="160" cy="110" r="46" fill="#fff"/><path d="M150 88 L150 132 L189 110 Z" fill="#ff8a3d"/></svg></div>
+        <div class="ph tile t-rose"><svg viewBox="0 0 320 220" xmlns="http://www.w3.org/2000/svg"><circle cx="160" cy="110" r="46" fill="#fff"/><path d="M150 88 L150 132 L189 110 Z" fill="#b04a12"/></svg></div>
         <div class="body">
           <span class="tag rose">초급</span>
           <h3>드론 코딩 베이직</h3>
