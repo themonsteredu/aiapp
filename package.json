@@ -1,7 +1,7 @@
 {
   "name": "career-edu-webapp",
   "version": "1.0.0",
-  "description": "진로교육 PPT 웹앱 관리 플랫폼 (권한 관리 · 시간제 접근 · 캡처 억제)",
+  "description": "모아랩(MoaLab) — 진로교육 PPT 웹앱 플랫폼 (권한 관리 · 시간제 접근 · 캡처 억제)",
   "main": "server.js",
   "scripts": {
     "start": "node --no-warnings server.js",

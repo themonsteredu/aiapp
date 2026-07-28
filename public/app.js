@@ -1,7 +1,7 @@
 'use strict';
 
 /* =====================================================
- * AI 온라인 플랫폼 관리자 — SPA
+ * 모아랩(MoaLab) — SPA
  * SaaS형 관리자 대시보드: 권한 체계 / 시간표 접근 제어 / 웹앱 배정 / 보안 / 리포트
  * ===================================================== */
 
@@ -558,7 +558,7 @@ function shell(title, contentHtml) {
       <aside class="sidebar">
         <div class="brand">
           <div class="mark">AI</div>
-          <div><div class="bt">AI 온라인 플랫폼</div><div class="bs">진로교육 관리 시스템</div></div>
+          <div><div class="bt">모아랩</div><div class="bs">AI 수업·진로교육 플랫폼</div></div>
         </div>
         <nav>
           ${menuGroups().map(([label, items]) => `
@@ -617,7 +617,7 @@ function shell(title, contentHtml) {
   document.getElementById('btn-help').onclick = () => {
     openModal(`
       <h3>도움말</h3>
-      <div class="m-sub">AI 온라인 플랫폼 관리자 사용 안내</div>
+      <div class="m-sub">모아랩 사용 안내</div>
       <div style="font-size:13px;line-height:2">
         · <b>웹앱/PPT 관리</b>에서 슬라이드 웹앱을 만들고 반·기간을 배정합니다.<br>
         · <b>시간표 접근 설정</b>의 허용 시간에만 학생이 접속할 수 있습니다.<br>
@@ -685,8 +685,8 @@ route(/^#\/login$/, () => {
       <div class="login-wrap">
         <form class="login-card" id="login-form">
           <div class="lmark">AI</div>
-          <div class="logo">AI 온라인 플랫폼 관리자</div>
-          <div class="sub">진로교육 웹앱 · 권한 및 접근 관리 시스템</div>
+          <div class="logo">모아랩</div>
+          <div class="sub">AI 수업·진로교육 플랫폼</div>
           <div class="tabs" style="margin-bottom:4px">
             <button type="button" data-ltab="join" class="${tab === 'join' ? 'active' : ''}">수업 참여</button>
             <button type="button" data-ltab="account" class="${tab === 'account' ? 'active' : ''}">계정 로그인</button>
@@ -2813,7 +2813,7 @@ route(/^#\/settings$/, async () => {
       <div class="card">
         <h2>서비스 정보</h2>
         <div class="preview-kv" style="grid-template-columns:110px 1fr">
-          <span class="k">서비스</span><span class="v">AI 온라인 플랫폼 관리자</span>
+          <span class="k">서비스</span><span class="v">모아랩 (MoaLab)</span>
           <span class="k">기준 시간대</span><span class="v">${esc(state.access?.now.timezone || 'Asia/Seoul')}</span>
           <span class="k">접근 상태</span><span>${state.access?.allowed ? '<span class="badge green">허용 시간</span>' : '<span class="badge red">차단 시간</span>'}</span>
         </div>
