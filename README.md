@@ -13,7 +13,9 @@ npm install
 DATABASE_URL='postgresql://...' npm start   # Supabase 연결 문자열 (DEPLOY.md 0단계 참고)
 ```
 
-브라우저에서 `http://localhost:3000` 접속. 첫 실행 시 스키마·초기 계정이 자동 생성됩니다.
+브라우저에서 `http://localhost:3000` 접속 — 루트는 **AI연구소 홈페이지**이고, 플랫폼은 **`/class`** 이하입니다 (`http://localhost:3000/class#/login`). 첫 실행 시 스키마·초기 계정이 자동 생성됩니다.
+
+학생에게 배포되는 프로젝트 웹앱 주소도 `/class#/p/<slug>` 형태입니다. 홈페이지에는 예전 주소(`/#/...`)로 들어온 방문자를 `/class`로 넘기는 스크립트가 있어, 이미 뿌린 링크·QR도 그대로 열립니다.
 
 - 포트 변경: `PORT=8080`
 - 기준 시간대: `Asia/Seoul` — `APP_TIMEZONE` 환경변수로 변경 가능
@@ -146,7 +148,9 @@ lib/totp.js        # RFC 6238 TOTP (2단계 인증)
 lib/schedule.js    # 요일·시간 접근 판정 (타임존 인식)
 lib/storage.js     # Supabase Storage 연동 (대용량 동영상, 선택)
 lib/api.js         # REST API (인증/사용자/시간표/덱/배정/보안/리포트/로그)
-public/            # SPA (index.html, app.js, style.css)
+public/index.html  # AI연구소 홈페이지 (루트 `/`, 정적 단일 파일)
+public/app.html    # 플랫폼 SPA 셸 (`/class` 이하)
+public/            # app.js, project-ui.js, style.css
 ```
 
 ## 운영 참고

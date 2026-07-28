@@ -3,6 +3,7 @@
   "regions": ["icn1"],
   "rewrites": [
     { "source": "/api/:path*", "destination": "/api/index" },
-    { "source": "/((?!api/).*)", "destination": "/index.html" }
+    { "source": "/class", "destination": "/app.html" },
+    { "source": "/class/:path*", "destination": "/app.html" }
   ]
 }
