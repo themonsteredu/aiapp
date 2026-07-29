@@ -27,6 +27,7 @@
   --red-600: #dc2626;
   --red-50: #feecec;
   --amber-600: #d97706;
+  --amber-700: #b45309; /* 흰 글자를 얹는 경고 배경용 (5.02:1) — amber-600 은 흰 글자에 3.1:1 로 부족 */
   --amber-50: #fef3c7;
 
   --bg: #f6f8fb;
@@ -470,6 +471,13 @@ table.matrix { width: 100%; border-collapse: separate; border-spacing: 5px; min-
 .login-card label { display: block; font-weight: 700; margin: 15px 0 6px; font-size: 12.5px; color: var(--text-2); }
 .login-card .btn-primary { width: 100%; margin-top: 24px; justify-content: center; padding: 12px; font-size: 14px; }
 .login-error { color: var(--red-600); margin-top: 12px; font-size: 13px; min-height: 18px; }
+/* 로그아웃 사유 안내 — 왜 로그인 화면으로 왔는지 알려준다 */
+.login-notice {
+  background: var(--brand-50); border: 1px solid var(--brand-500);
+  color: var(--brand-800); border-radius: 10px; padding: 10px 12px;
+  font-size: 12.5px; line-height: 1.6; text-align: left; margin-bottom: 14px;
+  word-break: keep-all;
+}
 .otp-secret {
   background: var(--bg); border: 1px dashed var(--line-strong); border-radius: 10px; padding: 12px;
   font-family: ui-monospace, monospace; font-size: 13px; word-break: break-all; margin: 8px 0;
@@ -650,6 +658,17 @@ table.matrix { width: 100%; border-collapse: separate; border-spacing: 5px; min-
 }
 .toast.warn { background: var(--red-600); }
 @keyframes toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+/* 연결 끊김 배너 — 화면이 말없이 죽는 대신 이유를 보여주고, 복구되면 사라진다 */
+.net-banner {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 600;
+  background: var(--amber-700); color: #fff;
+  padding: 9px 16px; text-align: center; font-size: 13px; font-weight: 600;
+  word-break: keep-all; box-shadow: var(--shadow-md);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .net-banner { animation: toast-in .18s ease-out; }
+}
 
 /* ============ 기타 ============ */
 .page-head { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 18px; flex-wrap: wrap; gap: 12px; }

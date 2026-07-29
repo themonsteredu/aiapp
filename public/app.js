@@ -86,17 +86,120 @@ function deckKindIcon(kind) {
   return icon(kind === 'link' ? 'globe' : kind === 'html' ? 'code' : kind === 'slides' ? 'decks' : 'fileText');
 }
 
-/* ---------------- API ---------------- */
+/* ---------------- API ----------------
+ * 튕김 방지 3원칙:
+ *  1) 순간적인 네트워크 끊김·서버 콜드스타트는 조용히 재시도한다 (읽기 요청만).
+ *  2) 401 한 번으로 로그아웃시키지 않는다 — /api/me 로 한 번 더 확인한 뒤에 판단한다.
+ *  3) 진짜 로그아웃일 때도 보던 화면을 기억해 두고, 다시 로그인하면 그 자리로 돌려보낸다. */
+
+const RETRY_DELAYS = [400, 1200, 2500]; // 읽기 요청 재시도 간격
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/* 연결 상태 배너 — 끊겼을 때 화면이 말없이 죽는 대신 이유를 보여준다 */
+const Net = {
+  offline: false,
+  markOffline() {
+    if (this.offline) return;
+    this.offline = true;
+    this.render();
+  },
+  markOnline() {
+    if (!this.offline) return;
+    this.offline = false;
+    this.render();
+  },
+  render() {
+    let el = document.getElementById('net-banner');
+    if (!this.offline) { el?.remove(); return; }
+    if (el) return;
+    el = document.createElement('div');
+    el.id = 'net-banner';
+    el.className = 'net-banner';
+    el.textContent = '인터넷 연결이 끊겼습니다. 연결되면 자동으로 이어집니다.';
+    document.body.appendChild(el);
+  },
+};
+
+// 401 이 진짜인지 한 번 더 확인한다. 여전히 로그인 상태면 true.
+// 한 화면에서 여러 요청이 동시에 401 을 받을 수 있으므로, 확인은 한 번만 하고 결과를 나눠 쓴다.
+let signInCheck = null;
+function stillSignedIn() {
+  if (signInCheck) return signInCheck;
+  signInCheck = (async () => {
+    for (let i = 0; i < 2; i++) {
+      try {
+        const res = await fetch('/api/me', { method: 'GET' });
+        if (res.ok) return true;
+        if (res.status === 401) return false;
+      } catch {}
+      await sleep(RETRY_DELAYS[i]);
+    }
+    // 확인 자체가 안 되면(네트워크 문제) 로그아웃시키지 않는다 — 끊는 쪽보다 두는 쪽이 안전하다
+    return true;
+  })().finally(() => { signInCheck = null; });
+  return signInCheck;
+}
+
+// 재시도해도 안전한 요청인가 (부작용 없는 조회만)
+function isRetriable(method) { return method === 'GET' || method === 'HEAD'; }
+
+function isPublicAppView() { return /^#\/p\/[a-z0-9-]+$/.test(location.hash || ''); }
+
+// 로그아웃 처리: 이유를 남기고, 돌아올 화면을 기억한다
+function signOut(reason) {
+  // 쓰던 도중에 쿠키가 사라진 것과, 애초에 로그인한 적 없는 것은 다르다.
+  // 전자만 "로그인이 풀렸다"고 안내한다.
+  if (reason === 'no_session' && state.me) reason = 'session_expired';
+  state.me = null;
+  state.classSession = null;
+  Live.stop();
+  if (isPublicAppView()) return; // 학생 배포용 웹앱 화면은 로그인 화면으로 보내지 않는다
+  const here = location.hash || '';
+  if (here && here !== '#/login' && here !== '#/') {
+    try { sessionStorage.setItem('returnTo', here); } catch {}
+  }
+  try { sessionStorage.setItem('signOutReason', reason || ''); } catch {}
+  if (here !== '#/login') location.hash = '#/login';
+  else navigate();
+}
+
 async function api(method, url, body) {
-  const res = await fetch(url, {
-    method,
-    headers: body ? { 'Content-Type': 'application/json' } : undefined,
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  const attempts = isRetriable(method) ? RETRY_DELAYS.length + 1 : 1;
+  let res = null;
+  let netErr = null;
+
+  for (let i = 0; i < attempts; i++) {
+    try {
+      netErr = null;
+      res = await fetch(url, {
+        method,
+        headers: body ? { 'Content-Type': 'application/json' } : undefined,
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      // 502/503/504 는 서버가 잠깐 못 받는 상태 — 실패로 확정하지 말고 다시 시도
+      if (![502, 503, 504].includes(res.status)) break;
+    } catch (err) {
+      netErr = err; // 오프라인·끊김
+    }
+    if (i < attempts - 1) {
+      Net.markOffline();
+      await sleep(RETRY_DELAYS[i]);
+    }
+  }
+
+  if (netErr) {
+    Net.markOffline();
+    throw new Error('네트워크 연결이 불안정합니다. 연결을 확인한 뒤 다시 시도해 주세요.');
+  }
+  Net.markOnline();
+
   const data = await res.json().catch(() => ({}));
-  if (res.status === 401 && !url.endsWith('/api/login')) {
-    state.me = null;
-    if (!/^#\/p\/[a-z0-9-]+$/.test(location.hash || '')) location.hash = '#/login';
+  if (res.status === 401 && !url.endsWith('/api/login') && !url.endsWith('/api/join')) {
+    // 한 번 더 확인한다. 여기서 통과하면 방금 401 은 일시적인 것이므로 화면을 건드리지 않는다.
+    if (url !== '/api/me' && await stillSignedIn()) {
+      throw new Error(data.error || '요청을 처리하지 못했습니다. 다시 시도해 주세요.');
+    }
+    signOut(data.reason || 'session_expired');
     throw new Error(data.error || '로그인이 필요합니다.');
   }
   if (res.status === 403 && data.error === 'time_blocked') {
@@ -366,6 +469,9 @@ const Live = {
   },
   async tick() {
     if (!state.me || !state.me.isGuest) { this.stop(); return; }
+    // 안 보는 탭·끊긴 상태에서는 두드리지 않는다 (배터리·서버 부담 + 불필요한 오류 유발)
+    if (document.hidden || navigator.onLine === false) return;
+    if (!state.classSession) return;
     try {
       const d = await api('GET', `/api/class-sessions/${state.classSession.id}/live`);
       this.last = d.live;
@@ -391,6 +497,8 @@ let presentExit = null; // 발표 모드 정리 함수 (라우팅 이동 시 잔
 
 async function navigate() {
   if (presentExit) presentExit();
+  clearInterval(blockedTimer);
+  blockedTimer = null;
   window.__liveUpdate = null;
   window.__deckRefresh = null;
   document.body.classList.remove('allow-print'); // 내보내기 화면 밖에서는 인쇄 차단 유지
@@ -673,6 +781,12 @@ async function fetchDash(force = false) {
 }
 
 /* ---------------- 로그인 ---------------- */
+const SIGN_OUT_NOTICE = {
+  session_expired: '오래 사용하지 않아 로그인이 풀렸습니다. 다시 로그인하면 보던 화면으로 돌아갑니다.',
+  class_ended: '수업이 종료되어 연결이 끊겼습니다. 새 입장 코드로 다시 접속하세요.',
+  account_disabled: '계정이 비활성화되었습니다. 관리자에게 문의하세요.',
+};
+
 route(/^#\/login$/, () => {
   let tab = 'join'; // 'join' (수업 입장 코드) | 'account' (계정 로그인)
   let otpMode = null; // null | 'otp' | 'setup'
@@ -680,6 +794,15 @@ route(/^#\/login$/, () => {
   let joinCode = '';
   let joinInfo = null;
   let joinInfoTimer = null;
+  // 왜 로그인 화면으로 왔는지 알려준다. 아무 설명 없이 튕기는 게 가장 답답하다.
+  let notice = '';
+  try {
+    const reason = sessionStorage.getItem('signOutReason');
+    sessionStorage.removeItem('signOutReason');
+    notice = SIGN_OUT_NOTICE[reason] || '';
+    // 수업이 끝나서 나온 학생은 '수업 참여' 탭이 맞다
+    if (reason === 'session_expired' && sessionStorage.getItem('returnTo')) tab = 'account';
+  } catch {}
   const render = (errMsg = '') => {
     $app.innerHTML = `
       <div class="login-wrap">
@@ -687,6 +810,7 @@ route(/^#\/login$/, () => {
           <div class="lmark"><img src="/brand/moakit-symbol.svg" alt=""></div>
           <div class="logo">모아랩</div>
           <div class="sub">AI 수업·진로교육 플랫폼</div>
+          ${notice ? `<div class="login-notice">${esc(notice)}</div>` : ''}
           <div class="tabs" style="margin-bottom:4px">
             <button type="button" data-ltab="join" class="${tab === 'join' ? 'active' : ''}">수업 참여</button>
             <button type="button" data-ltab="account" class="${tab === 'account' ? 'active' : ''}">계정 로그인</button>
@@ -762,10 +886,21 @@ route(/^#\/login$/, () => {
     state.dash = null;
     Live.stop();
     Live.start(); // 게스트일 때만 내부에서 동작
-    location.hash = data.user.mustChangePassword ? '#/password'
+
+    // 세션이 풀리기 직전에 보던 화면이 있으면 그 자리로 돌려보낸다
+    let back = '';
+    try {
+      back = sessionStorage.getItem('returnTo') || '';
+      sessionStorage.removeItem('returnTo');
+    } catch {}
+    const blocked = data.user.mustChangePassword || state.mustAgree;
+    const target = data.user.mustChangePassword ? '#/password'
       : state.mustAgree ? '#/agreement'
       : data.user.projectTeamId ? '#/project'
       : (level(data.user.role) >= 1 ? '#/' : '#/decks');
+    const next = (!blocked && /^#\/[\w/?&=.%-]*$/.test(back) && back !== '#/login') ? back : target;
+    if (location.hash === next) navigate();
+    else location.hash = next;
   };
   async function onSubmit(e) {
     e.preventDefault();
@@ -798,6 +933,7 @@ route(/^#\/login$/, () => {
 });
 
 /* ---------------- 학생 차단 화면 ---------------- */
+let blockedTimer = null;
 function renderBlocked() {
   const acc = state.access;
   shell('접근 제한', `
@@ -808,18 +944,39 @@ function renderBlocked() {
       <div class="card" style="text-align:left">${scheduleMatrixHtml(acc.windows)}</div>
       <p class="mt small muted">이 화면은 30초마다 자동으로 새로고침됩니다.</p>
     </div>`);
-  setTimeout(refreshMe, 30000);
+  // 허용 시간이 되면 스스로 빠져나가도록 계속 확인한다 (navigate() 진입 시 정리됨)
+  clearInterval(blockedTimer);
+  blockedTimer = setInterval(refreshMe, 30000);
+}
+
+// 화면 다시 그리기가 필요한 상태만 뽑아낸다.
+// 이게 그대로면 굳이 navigate() 를 부르지 않는다 — 5분마다 화면을 다시 그리면
+// 폼에 입력 중이던 내용이 통째로 날아간다.
+function meSignature(data) {
+  return JSON.stringify([
+    data.user?.id ?? null,
+    data.user?.role ?? null,
+    !!data.user?.mustChangePassword,
+    !!data.mustAgree,
+    data.access?.allowed !== false,
+    data.classSession?.id ?? null,
+  ]);
 }
 
 async function refreshMe() {
+  if (!state.me) return;       // 로그인 화면에서는 갱신할 것이 없다
+  if (document.hidden) return; // 안 보는 탭은 굳이 두드리지 않는다
   try {
+    const before = meSignature({
+      user: state.me, mustAgree: state.mustAgree, access: state.access, classSession: state.classSession,
+    });
     const data = await api('GET', '/api/me');
     state.me = data.user;
     state.access = data.access;
     state.settings = data.settings;
     state.classSession = data.classSession || null;
     state.mustAgree = !!data.mustAgree;
-    navigate();
+    if (meSignature(data) !== before) navigate();
   } catch {}
 }
 
@@ -3380,6 +3537,29 @@ route(/^#\/settlement$/, async () => {
       await api('DELETE', `/api/settlements/${delBtn.dataset.invDel}`); toast('삭제되었습니다.'); navigate();
     };
   });
+});
+
+/* ---------------- 전역 안전망 ----------------
+ * 예외 하나가 화면 전체를 죽이고 "튕긴 것처럼" 보이는 걸 막는다.
+ * 화면은 그대로 두고 안내만 띄운 뒤, 사용자가 하던 걸 이어갈 수 있게 한다. */
+let lastCrashAt = 0;
+function reportCrash(err) {
+  console.error(err);
+  const now = Date.now();
+  if (now - lastCrashAt < 4000) return; // 같은 오류가 연달아 터질 때 토스트 폭탄 방지
+  lastCrashAt = now;
+  toast('일시적인 오류가 발생했습니다. 방금 동작만 취소되었으니 다시 시도해 주세요.', true);
+}
+window.addEventListener('error', (e) => reportCrash(e.error || e.message));
+window.addEventListener('unhandledrejection', (e) => reportCrash(e.reason));
+
+// 연결이 돌아오거나 탭으로 되돌아오면 즉시 상태를 맞춘다 (자동 복구)
+window.addEventListener('online', () => { Net.markOnline(); refreshMe(); Live.tick(); });
+window.addEventListener('offline', () => Net.markOffline());
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden || !state.me) return;
+  refreshMe();
+  Live.tick();
 });
 
 /* ---------------- 부팅 ---------------- */
