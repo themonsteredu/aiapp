@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node --no-warnings server.js",
     "test": "node --test",
-    "check": "node --check server.js && node --check api/index.js && node --check lib/api.js && node --check lib/project-api.js && node --check lib/auth.js && node --check lib/class-session-policy.js && node --check public/app.js && node --check public/project-ui.js"
+    "check": "node --check server.js && node --check api/index.js && node --check lib/api.js && node --check lib/project-api.js && node --check lib/auth.js && node --check lib/class-session-policy.js && node --check lib/db.js && node --check lib/project-schema.js && node --check public/app.js && node --check public/project-ui.js"
   },
   "engines": {
     "node": ">=22.13.0"

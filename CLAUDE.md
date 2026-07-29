@@ -38,6 +38,15 @@
 - 폴링(라이브 3초·상태 5분)은 **안 보는 탭·오프라인에서는 멈춘다.** 탭으로 돌아오거나 연결이 복구되면 즉시 한 번 맞춘다
 - 전역 `error`·`unhandledrejection` 핸들러가 있다. 예외 하나로 화면이 백지가 되지 않게 하는 안전망이므로 지우지 않는다
 
+## 스키마 초기화 — 콜드스타트
+
+`handleApi`는 매 요청 `ready()`를 부른다. 예전엔 새 인스턴스마다 DDL·시드를 전부 실행해서 **콜드스타트 1회에 DB 왕복 76회**가 들었고, 동시에 뜨면 `CREATE TABLE` 경합으로 500이 났다(6개 동시 실행 시 5개 실패).
+
+- `lib/db.js`의 **`SCHEMA_VERSION`을 올려야** 스키마·시드 변경이 반영된다. `SCHEMA`/`MIGRATIONS`/시드를 건드렸으면 이 값을 같이 올린다 — 안 올리면 기존 DB에 영원히 적용되지 않는다
+- 버전이 같으면 확인 1회로 끝난다(왕복 76 → 2)
+- 초기화는 `pg_advisory_lock`으로 직렬화한다. **잠금을 잡은 뒤에는 `pool.query`를 쓰면 안 된다** — Vercel은 풀 크기가 1이라 자기 자신을 기다리다 멈춘다. 반드시 잠금을 잡은 커넥션(`exec`/`cq`)으로 질의한다
+- 설정은 `getSettings()`가 15초 캐시한다. `setSetting()`이 무효화하므로 같은 인스턴스에선 즉시 반영되고, 다른 인스턴스에는 최대 15초 늦게 퍼진다. **settings 를 직접 UPDATE 하지 말고 `setSetting()`을 쓴다**
+
 ## 브랜드
 
 - 심볼: `public/brand/moakit-symbol.svg` — pinpoint의 `apps/portal/public/brand/moakit-symbol.svg`와 같은 파일. 랜딩·사이드바·로그인 마크가 공유한다
