@@ -43,9 +43,11 @@
 
   <main id="main">
     <section class="hero" aria-labelledby="hero-title">
+      <canvas class="data-pixel-arc" id="data-pixel-arc" aria-hidden="true"></canvas>
+      <div class="hero-atmosphere" aria-hidden="true"></div>
       <div class="wrap hero-inner">
         <div class="hero-copy reveal">
-          <span class="eyebrow">MoaKit Education AI</span>
+          <span class="eyebrow">Chapter 01 — MoaKit Education AI</span>
           <h1 id="hero-title">학생이 직접 만들고 경험하는 <em>AI 진로수업</em></h1>
           <p>학교 방문 진로 프로그램부터 교과연계 프로젝트와 교사·강사 연수까지, 모아랩은 수업 현장에서 쓰이는 교육 AI를 만듭니다.</p>
           <div class="hero-actions">
@@ -58,29 +60,33 @@
         <div class="hero-media reveal" id="outputs" data-delay="100" role="region" aria-labelledby="product-slider-title">
           <h2 class="sr-only" id="product-slider-title">모아랩 수업용 웹앱 결과물</h2>
           <div class="product-slider" id="product-slider" role="group" aria-roledescription="캐러셀">
-            <canvas class="emerald-horizon" id="emerald-horizon" aria-hidden="true"></canvas>
-            <div class="product-atmosphere" aria-hidden="true"></div>
+            <div class="showcase-meta" aria-hidden="true">
+              <span>Live Class / Selected Work</span>
+              <span>01—04</span>
+            </div>
 
             <div class="product-shell">
-              <div class="product-bar">
-                <span class="product-brand"><i aria-hidden="true"></i>MoaLab / Live Class</span>
-                <span class="product-status"><i aria-hidden="true"></i>수업에서 바로 실행</span>
-              </div>
+              <div class="product-window">
+                <div class="product-bar">
+                  <span class="product-brand"><i aria-hidden="true"></i>MoaLab / Live Class</span>
+                  <span class="product-status"><i aria-hidden="true"></i>수업에서 바로 실행</span>
+                </div>
 
-              <div class="product-viewport">
-                <div class="product-track" id="product-track">
-                  <figure class="product-slide is-active" data-label="AI 과학수사" data-kicker="Interactive Class 01" role="group" aria-roledescription="슬라이드" aria-label="1 / 4" aria-hidden="false">
-                    <img src="/brand/showcase/ai-forensics.jpg" alt="AI 과학수사 수업 웹앱 화면" fetchpriority="high">
-                  </figure>
-                  <figure class="product-slide" data-label="역사 인물 추리" data-kicker="Interactive Class 02" role="group" aria-roledescription="슬라이드" aria-label="2 / 4" aria-hidden="true">
-                    <img src="/brand/showcase/history-detective.jpg" alt="역사 인물 추리 수업 웹앱 화면">
-                  </figure>
-                  <figure class="product-slide" data-label="AI 윤리탐정단" data-kicker="Interactive Class 03" role="group" aria-roledescription="슬라이드" aria-label="3 / 4" aria-hidden="true">
-                    <img src="/brand/showcase/ai-ethics.jpg" alt="AI 윤리탐정단 수업 웹앱 화면">
-                  </figure>
-                  <figure class="product-slide" data-label="마음결 교실" data-kicker="Interactive Class 04" role="group" aria-roledescription="슬라이드" aria-label="4 / 4" aria-hidden="true">
-                    <img src="/brand/showcase/mind-class.jpg" alt="마음결 교실 수업 웹앱 화면">
-                  </figure>
+                <div class="product-viewport">
+                  <div class="product-track" id="product-track">
+                    <figure class="product-slide is-active" data-label="AI 과학수사" data-kicker="Interactive Class 01" role="group" aria-roledescription="슬라이드" aria-label="1 / 4" aria-hidden="false">
+                      <img src="/brand/showcase/ai-forensics.jpg" alt="AI 과학수사 수업 웹앱 화면" fetchpriority="high">
+                    </figure>
+                    <figure class="product-slide" data-label="역사 인물 추리" data-kicker="Interactive Class 02" role="group" aria-roledescription="슬라이드" aria-label="2 / 4" aria-hidden="true">
+                      <img src="/brand/showcase/history-detective.jpg" alt="역사 인물 추리 수업 웹앱 화면">
+                    </figure>
+                    <figure class="product-slide" data-label="AI 윤리탐정단" data-kicker="Interactive Class 03" role="group" aria-roledescription="슬라이드" aria-label="3 / 4" aria-hidden="true">
+                      <img src="/brand/showcase/ai-ethics.jpg" alt="AI 윤리탐정단 수업 웹앱 화면">
+                    </figure>
+                    <figure class="product-slide" data-label="마음결 교실" data-kicker="Interactive Class 04" role="group" aria-roledescription="슬라이드" aria-label="4 / 4" aria-hidden="true">
+                      <img src="/brand/showcase/mind-class.jpg" alt="마음결 교실 수업 웹앱 화면">
+                    </figure>
+                  </div>
                 </div>
               </div>
 
@@ -99,7 +105,7 @@
               <div class="product-progress" aria-hidden="true"><span id="product-progress"></span></div>
             </div>
 
-            <span class="showcase-index" aria-hidden="true">CLASS EXPERIENCE / 01—04</span>
+            <span class="showcase-index" aria-hidden="true">MOALAB</span>
           </div>
         </div>
       </div>

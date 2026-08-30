@@ -55,6 +55,8 @@
   var productCurrent = document.getElementById('product-current');
   var productToggle = document.getElementById('product-toggle');
   var productProgress = document.getElementById('product-progress');
+  var productWindow = document.querySelector('.product-window');
+  var productSwitchTimer = null;
   var swipeStartX = null;
   var swipePointerId = null;
 
@@ -70,6 +72,7 @@
   }
 
   function showProduct(nextIndex) {
+    var previousIndex = productIndex;
     productIndex = (nextIndex + productSlides.length) % productSlides.length;
     productTrack.style.transform = 'translate3d(-' + (productIndex * 100) + '%, 0, 0)';
     productSlides.forEach(function (slide, index) {
@@ -82,6 +85,17 @@
     productLabel.textContent = currentSlide.dataset.label;
     productKicker.textContent = currentSlide.dataset.kicker;
     productCurrent.textContent = String(productIndex + 1).padStart(2, '0');
+
+    if (productWindow && productIndex !== previousIndex && !motionQuery.matches) {
+      window.clearTimeout(productSwitchTimer);
+      productWindow.classList.remove('is-switching');
+      void productWindow.offsetWidth;
+      productWindow.classList.add('is-switching');
+      productSwitchTimer = window.setTimeout(function () {
+        productWindow.classList.remove('is-switching');
+      }, 850);
+    }
+
     restartProductProgress();
   }
 
@@ -187,129 +201,103 @@
   updateProductToggle();
   syncProductSlider();
 
-  var horizonCanvas = document.getElementById('emerald-horizon');
-  var horizonContext = horizonCanvas ? horizonCanvas.getContext('2d') : null;
+  var pixelCanvas = document.getElementById('data-pixel-arc');
+  var pixelContext = pixelCanvas ? pixelCanvas.getContext('2d') : null;
+  var heroElement = document.querySelector('.hero');
 
-  if (horizonContext) {
-    var horizonWidth = 0;
-    var horizonHeight = 0;
-    var horizonVisible = true;
-    var horizonFrame = 0;
-    var horizonLastDraw = 0;
+  if (pixelContext && heroElement) {
+    var pixelWidth = 0;
+    var pixelHeight = 0;
+    var pixelArcVisible = true;
+    var pixelArcFrame = 0;
+    var pixelArcLastDraw = 0;
 
-    function resizeHorizon() {
-      var bounds = horizonCanvas.getBoundingClientRect();
+    function resizePixelArc() {
+      var bounds = pixelCanvas.getBoundingClientRect();
       if (!bounds.width || !bounds.height) return;
       var pixelRatio = Math.min(window.devicePixelRatio || 1, window.innerWidth < 680 ? 1.25 : 1.5);
-      horizonWidth = bounds.width;
-      horizonHeight = bounds.height;
-      horizonCanvas.width = Math.round(horizonWidth * pixelRatio);
-      horizonCanvas.height = Math.round(horizonHeight * pixelRatio);
-      horizonContext.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
-      drawHorizon(0);
+      pixelWidth = bounds.width;
+      pixelHeight = bounds.height;
+      pixelCanvas.width = Math.round(pixelWidth * pixelRatio);
+      pixelCanvas.height = Math.round(pixelHeight * pixelRatio);
+      pixelContext.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+      drawPixelArc(0);
     }
 
-    function curvePoints(base, amplitude, phase, offset) {
-      var points = [];
-      var count = window.innerWidth < 680 ? 48 : 64;
-      for (var point = 0; point <= count; point += 1) {
-        var x = horizonWidth * point / count;
-        var wave = Math.sin((point / count) * Math.PI * 2.1 + phase + offset) * amplitude;
-        var detail = Math.sin((point / count) * Math.PI * 4.4 - phase * .55 + offset) * amplitude * .28;
-        points.push([x, base + wave + detail]);
-      }
-      return points;
-    }
-
-    function traceCurve(points) {
-      horizonContext.beginPath();
-      horizonContext.moveTo(points[0][0], points[0][1]);
-      for (var index = 1; index < points.length; index += 1) {
-        horizonContext.lineTo(points[index][0], points[index][1]);
-      }
-    }
-
-    function drawBand(points, opacity) {
-      var gradient = horizonContext.createLinearGradient(0, horizonHeight * .55, 0, horizonHeight);
-      gradient.addColorStop(0, 'rgba(42, 204, 163, 0)');
-      gradient.addColorStop(.2, 'rgba(42, 204, 163, ' + (opacity * .55) + ')');
-      gradient.addColorStop(1, 'rgba(5, 59, 49, 0)');
-
-      traceCurve(points);
-      horizonContext.lineTo(horizonWidth, horizonHeight);
-      horizonContext.lineTo(0, horizonHeight);
-      horizonContext.closePath();
-      horizonContext.fillStyle = gradient;
-      horizonContext.fill();
-
-      traceCurve(points);
-      horizonContext.strokeStyle = 'rgba(66, 224, 184, ' + (opacity * .2) + ')';
-      horizonContext.lineWidth = 16;
-      horizonContext.stroke();
-      traceCurve(points);
-      horizonContext.strokeStyle = 'rgba(91, 234, 197, ' + (opacity * .42) + ')';
-      horizonContext.lineWidth = 5;
-      horizonContext.stroke();
-      traceCurve(points);
-      horizonContext.strokeStyle = 'rgba(150, 245, 221, ' + opacity + ')';
-      horizonContext.lineWidth = 1;
-      horizonContext.stroke();
-    }
-
-    function drawHorizon(time) {
-      horizonContext.clearRect(0, 0, horizonWidth, horizonHeight);
-      var phase = time * .00012;
+    function drawPixelArc(time) {
+      pixelContext.clearRect(0, 0, pixelWidth, pixelHeight);
       var compact = window.innerWidth < 680;
-      var bandCount = compact ? 2 : 3;
+      var spacing = compact ? 9 : 10;
+      var squareSize = compact ? 5.5 : 6.5;
+      var centerX = pixelWidth * (compact ? .58 : .66);
+      var arcSpan = pixelWidth * (compact ? .78 : .72);
+      var arcTop = pixelHeight * (compact ? .46 : .26);
+      var arcDepth = pixelHeight * (compact ? .52 : .68);
+      var bandWidth = pixelHeight * (compact ? .095 : .12);
+      var phase = time * .00022 + productIndex * .48;
 
-      horizonContext.save();
-      horizonContext.globalCompositeOperation = 'screen';
-      for (var band = bandCount - 1; band >= 0; band -= 1) {
-        var base = horizonHeight * (.63 + band * .09);
-        var amplitude = horizonHeight * (.026 + band * .008);
-        var points = curvePoints(base, amplitude, phase * (1 + band * .16), band * 1.7);
-        drawBand(points, .2 + band * .07);
+      pixelContext.save();
+      pixelContext.globalCompositeOperation = 'screen';
+      pixelContext.fillStyle = '#61e2ba';
+
+      for (var x = -spacing; x <= pixelWidth + spacing; x += spacing) {
+        var normalizedX = (x - centerX) / arcSpan;
+        var curveY = arcTop + normalizedX * normalizedX * arcDepth;
+        curveY += Math.sin(normalizedX * 4.2 + phase) * pixelHeight * .012;
+        var edgeFade = Math.max(0, 1 - Math.abs(normalizedX) * .68);
+
+        for (var y = curveY - bandWidth; y <= curveY + bandWidth; y += spacing) {
+          if (y < -spacing || y > pixelHeight + spacing) continue;
+          var distance = Math.abs(y - curveY) / bandWidth;
+          var bandFade = Math.max(0, 1 - distance);
+          var breathing = .72 + Math.sin(phase * 1.6 + x * .012 + y * .006) * .18;
+          var alpha = bandFade * bandFade * edgeFade * breathing * .56;
+          if (alpha < .025) continue;
+          pixelContext.globalAlpha = alpha;
+          pixelContext.fillRect(x, y, squareSize, squareSize);
+        }
       }
-      horizonContext.restore();
+
+      pixelContext.restore();
     }
 
-    function horizonCanMove() {
-      return horizonVisible && !document.hidden && !motionQuery.matches;
+    function pixelArcCanMove() {
+      return pixelArcVisible && !document.hidden && !motionQuery.matches;
     }
 
-    function renderHorizon(time) {
-      if (!horizonCanMove()) {
-        horizonFrame = 0;
+    function renderPixelArc(time) {
+      if (!pixelArcCanMove()) {
+        pixelArcFrame = 0;
         return;
       }
-      var interval = window.innerWidth < 680 ? 33 : 24;
-      if (time - horizonLastDraw >= interval) {
-        drawHorizon(time);
-        horizonLastDraw = time;
+      var interval = window.innerWidth < 680 ? 38 : 30;
+      if (time - pixelArcLastDraw >= interval) {
+        drawPixelArc(time);
+        pixelArcLastDraw = time;
       }
-      horizonFrame = window.requestAnimationFrame(renderHorizon);
+      pixelArcFrame = window.requestAnimationFrame(renderPixelArc);
     }
 
-    function syncHorizon() {
-      window.cancelAnimationFrame(horizonFrame);
-      horizonFrame = 0;
-      if (horizonCanMove()) horizonFrame = window.requestAnimationFrame(renderHorizon);
-      else drawHorizon(0);
+    function syncPixelArc() {
+      window.cancelAnimationFrame(pixelArcFrame);
+      pixelArcFrame = 0;
+      if (pixelArcCanMove()) pixelArcFrame = window.requestAnimationFrame(renderPixelArc);
+      else drawPixelArc(0);
     }
 
-    if ('ResizeObserver' in window) new ResizeObserver(resizeHorizon).observe(productSlider);
-    else window.addEventListener('resize', resizeHorizon);
+    if ('ResizeObserver' in window) new ResizeObserver(resizePixelArc).observe(heroElement);
+    else window.addEventListener('resize', resizePixelArc);
 
     if ('IntersectionObserver' in window) {
       new IntersectionObserver(function (entries) {
-        horizonVisible = entries[0].isIntersecting;
-        syncHorizon();
-      }, { threshold: .05 }).observe(productSlider);
+        pixelArcVisible = entries[0].isIntersecting;
+        syncPixelArc();
+      }, { threshold: .05 }).observe(heroElement);
     }
 
-    document.addEventListener('visibilitychange', syncHorizon);
-    motionQuery.addEventListener('change', syncHorizon);
-    resizeHorizon();
-    syncHorizon();
+    document.addEventListener('visibilitychange', syncPixelArc);
+    motionQuery.addEventListener('change', syncPixelArc);
+    resizePixelArc();
+    syncPixelArc();
   }
 }());

@@ -16,7 +16,7 @@ test('랜딩은 핵심 접근성 랜드마크와 모션 감축 설정을 갖는�
   assert.match(html, /aria-label="주요 메뉴"/);
   assert.match(html, /id="product-slider"/);
   assert.match(html, /id="product-toggle"/);
-  assert.match(html, /id="emerald-horizon"/);
+  assert.match(html, /id="data-pixel-arc"/);
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
   assert.match(js, /prefers-reduced-motion: reduce/);
 });
@@ -63,7 +63,7 @@ test('웹앱 슬라이더는 한 화면씩 표시하며 접근 가능한 조작 
   });
 
   assert.match(html, /id="product-toggle"[^>]*aria-pressed="false"/);
-  assert.match(css, /\.product-slider\s*\{[^}]*overflow:\s*hidden/s);
+  assert.match(css, /\.product-window\s*\{[^}]*overflow:\s*hidden/s);
   assert.match(css, /\.product-track\s*\{[^}]*display:\s*flex/s);
   assert.match(css, /\.product-slide\s*\{[^}]*flex:\s*0\s+0\s+100%/s);
 });
@@ -81,8 +81,8 @@ test('웹앱 슬라이더는 자동 전환과 사용자 제어를 지원한다',
   assert.match(js, /setAttribute\('aria-pressed'/);
 });
 
-test('Emerald Horizon은 장식용 경량 캔버스로 동작한다', () => {
-  const canvas = html.match(/<canvas\b[^>]*id="emerald-horizon"[^>]*>/);
+test('Data Pixel Arc는 장식용 경량 캔버스로 동작한다', () => {
+  const canvas = html.match(/<canvas\b[^>]*id="data-pixel-arc"[^>]*>/);
 
   assert.ok(canvas);
   assert.match(canvas[0], /aria-hidden="true"/);
@@ -90,6 +90,8 @@ test('Emerald Horizon은 장식용 경량 캔버스로 동작한다', () => {
   assert.match(js, /requestAnimationFrame/);
   assert.match(js, /IntersectionObserver/);
   assert.match(js, /Math\.min\(window\.devicePixelRatio/);
+  assert.match(js, /drawPixelArc/);
+  assert.match(css, /\.product-window\.is-switching::after/);
 });
 
 test('이전 수동 결과물 뷰어와 사진 갤러리는 제거됐다', () => {
