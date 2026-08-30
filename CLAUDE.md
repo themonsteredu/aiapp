@@ -15,7 +15,7 @@
 
 | 주소 | 내용 |
 |---|---|
-| `/` | 랜딩 (`public/index.html` — 단일 파일, CSS·스크립트 인라인) |
+| `/` | 랜딩 (`public/index.html` + `public/landing.css` + `public/landing.js`) |
 | `/class`, `/class/*` | 플랫폼 SPA (`public/app.html` + `public/app.js`) |
 | `/class#/p/<슬러그>` | 학생에게 배포되는 프로젝트 웹앱 |
 | `/api/*` | 서버리스 (`api/index.js` → `lib/api.js`) |
@@ -33,13 +33,12 @@
 - **상태색(초록·빨강·주황·앰버)은 허용/차단/경고를 뜻하는 의미색이라 브랜드색으로 덮지 않는다.** 슬라이드 발표 테마(`.theme-violet` 등)도 사용자가 고르는 영역이라 그대로 둔다
 - 한글은 `word-break: keep-all` 필수 — 없으면 헤드라인이 어절 중간에서 잘린다
 
-## 히어로 쇼케이스
+## 랜딩 이미지와 모션
 
-랜딩 히어로 우측은 실제 수업 웹앱 첫 화면이 가로로 흐르는 띠다.
-
-- 이미지: `public/brand/showcase/*.jpg` — **800×500 (16:10) 통일**, JPEG q80. 세로 캡처는 헤드라인이 살아 있는 구간으로 창을 잡아 자른다
-- 카드 목록은 `index.html`의 `.showcase-track`에 **같은 세트를 두 벌** 넣어 이음매 없이 순환시킨다(두 번째 벌은 `aria-hidden`). 장수를 늘리면 `showcase-roll` 애니메이션 시간도 같이 늘린다
-- 마우스 오버 시 정지, `prefers-reduced-motion`이면 애니메이션 없음
+- 히어로는 `public/brand/programs/*.jpg` 수업 사진을 한 장씩 전환한다. 여러 창을 겹치거나 무한 가로 띠를 다시 만들지 않는다
+- 수업 웹앱 화면은 `public/brand/showcase/*.jpg`를 `수업 결과물` 영역에서 한 장씩 선택해 보여준다
+- 자동 전환은 마우스 오버·키보드 포커스·탭 비활성화 시 정지하고, `prefers-reduced-motion`에서는 자동 재생하지 않는다
+- 랜딩 한글 폰트는 jsDelivr의 S-Core Dream 고정 버전(`noonfonts_six@1.2`)을 사용한다
 
 ## 문구 원칙
 
