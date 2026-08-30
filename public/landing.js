@@ -51,7 +51,6 @@
   var productFocused = false;
   var productVisible = true;
   var productLabel = document.getElementById('product-label');
-  var productKicker = document.getElementById('product-kicker');
   var productCurrent = document.getElementById('product-current');
   var productToggle = document.getElementById('product-toggle');
   var productProgress = document.getElementById('product-progress');
@@ -93,7 +92,6 @@
     var currentSlide = productSlides[productIndex];
     var currentTone = productTones[productIndex];
     productLabel.textContent = currentSlide.dataset.label;
-    productKicker.textContent = currentSlide.dataset.kicker;
     productCurrent.textContent = String(productIndex + 1).padStart(2, '0');
     productSlider.style.setProperty('--showcase-accent', currentTone.color);
     productSlider.style.setProperty('--showcase-accent-rgb', currentTone.rgb);

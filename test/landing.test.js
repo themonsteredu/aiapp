@@ -109,10 +109,15 @@ test('메인 문구에는 강제 줄바꿈이나 준비 중 판매 CTA가 없다
   assert.doesNotMatch(html, /<br\s*\/?\s*>/i);
   assert.doesNotMatch(html, /가격 준비 중|국비지원 과정|수강 신청/);
   assert.doesNotMatch(html, /【이메일】/);
+  assert.match(html, /직접 만들 때, <em>진로는 경험이 됩니다\.<\/em>/);
+  assert.doesNotMatch(html, /hero-note|showcase-meta|product-bar|product-kicker/);
 });
 
 test('랜딩 전용 한글 폰트는 S-Core Dream을 사용한다', () => {
   assert.match(css, /font-family: 'S-Core Dream'/);
   assert.match(css, /S-CoreDream-4Regular\.woff/);
+  assert.match(css, /S-CoreDream-5Medium\.woff/);
+  assert.match(css, /S-CoreDream-7ExtraBold\.woff/);
+  assert.match(css, /\.hero h1\s*\{[^}]*font-weight:\s*700/s);
   assert.match(css, /word-break: keep-all/);
 });
