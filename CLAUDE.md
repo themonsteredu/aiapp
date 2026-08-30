@@ -35,9 +35,10 @@
 
 ## 랜딩 이미지와 모션
 
-- 히어로와 프로그램 카드는 `public/brand/landing/*.jpg`의 고해상도 에디토리얼 수업 사진 7장을 중복 없이 사용한다. 여러 창을 겹치거나 무한 가로 띠를 다시 만들지 않는다
-- 수업 웹앱 화면은 `public/brand/showcase/*.jpg`를 `수업 결과물` 영역에서 한 장씩 선택해 보여준다
-- 자동 전환은 마우스 오버·키보드 포커스·탭 비활성화 시 정지하고, `prefers-reduced-motion`에서는 자동 재생하지 않는다
+- 프로그램 카드는 `public/brand/landing/program-*.jpg`의 고해상도 에디토리얼 수업 사진 3장을 중복 없이 사용한다
+- 히어로는 ThreeUI Community의 `Structure Flow / Emerald Horizon`을 시각적으로 참고한 경량 Canvas2D 배경 위에서 `public/brand/showcase/*.jpg` 웹앱 4개를 한 화면씩 보여준다. 외부 런타임 의존성은 추가하지 않는다
+- 웹앱은 5초마다 옆으로 자동 전환한다. 여러 창을 겹치거나 무한 가로 띠를 다시 만들지 않는다
+- 자동 전환은 마우스 오버·키보드 포커스·화면 밖·탭 비활성화 시 정지하고, `prefers-reduced-motion`에서는 자동 재생하지 않는다. 캔버스 모션도 같은 조건에서 멈춘다
 - 랜딩 한글 폰트는 jsDelivr의 S-Core Dream 고정 버전(`noonfonts_six@1.2`)을 사용한다
 
 ## 문구 원칙

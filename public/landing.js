@@ -1,7 +1,7 @@
 'use strict';
 
 (function () {
-  var reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
 
   var revealObserver = 'IntersectionObserver' in window ? new IntersectionObserver(function (entries, observer) {
     entries.forEach(function (entry) {
@@ -41,99 +41,275 @@
     if (event.key === 'Escape') closeMenu();
   });
 
-  var gallery = document.getElementById('hero-gallery');
-  var frames = Array.prototype.slice.call(gallery.querySelectorAll('.hero-frame'));
-  var galleryIndex = 0;
-  var galleryTimer = null;
-  var galleryPausedByUser = false;
-  var heroStep = document.getElementById('hero-step');
-  var heroLabel = document.getElementById('hero-label');
-  var galleryCurrent = document.getElementById('gallery-current');
-  var galleryToggle = document.getElementById('gallery-toggle');
-  var progress = document.getElementById('hero-progress');
+  var productSlider = document.getElementById('product-slider');
+  var productTrack = document.getElementById('product-track');
+  var productSlides = Array.prototype.slice.call(document.querySelectorAll('.product-slide'));
+  var productIndex = 0;
+  var productTimer = null;
+  var productPausedByUser = false;
+  var productHovered = false;
+  var productFocused = false;
+  var productVisible = true;
+  var productLabel = document.getElementById('product-label');
+  var productKicker = document.getElementById('product-kicker');
+  var productCurrent = document.getElementById('product-current');
+  var productToggle = document.getElementById('product-toggle');
+  var productProgress = document.getElementById('product-progress');
+  var swipeStartX = null;
+  var swipePointerId = null;
 
-  function restartProgress() {
-    if (reducedMotion || galleryPausedByUser) return;
-    progress.classList.remove('is-running');
-    void progress.offsetWidth;
-    progress.classList.add('is-running');
+  function canAutoPlay() {
+    return !motionQuery.matches && !productPausedByUser && !productHovered && !productFocused && productVisible && !document.hidden;
   }
 
-  function showFrame(nextIndex) {
-    galleryIndex = (nextIndex + frames.length) % frames.length;
-    frames.forEach(function (frame, index) {
-      var active = index === galleryIndex;
-      frame.classList.toggle('is-active', active);
-      frame.setAttribute('aria-hidden', String(!active));
+  function restartProductProgress() {
+    productProgress.classList.remove('is-running');
+    if (!canAutoPlay()) return;
+    void productProgress.offsetWidth;
+    productProgress.classList.add('is-running');
+  }
+
+  function showProduct(nextIndex) {
+    productIndex = (nextIndex + productSlides.length) % productSlides.length;
+    productTrack.style.transform = 'translate3d(-' + (productIndex * 100) + '%, 0, 0)';
+    productSlides.forEach(function (slide, index) {
+      var active = index === productIndex;
+      slide.classList.toggle('is-active', active);
+      slide.setAttribute('aria-hidden', String(!active));
     });
-    var currentFrame = frames[galleryIndex];
-    heroStep.textContent = currentFrame.dataset.step;
-    heroLabel.textContent = currentFrame.dataset.label;
-    galleryCurrent.textContent = String(galleryIndex + 1).padStart(2, '0');
-    restartProgress();
+
+    var currentSlide = productSlides[productIndex];
+    productLabel.textContent = currentSlide.dataset.label;
+    productKicker.textContent = currentSlide.dataset.kicker;
+    productCurrent.textContent = String(productIndex + 1).padStart(2, '0');
+    restartProductProgress();
   }
 
-  function startGallery() {
-    if (reducedMotion || galleryPausedByUser) return;
-    window.clearInterval(galleryTimer);
-    galleryTimer = window.setInterval(function () { showFrame(galleryIndex + 1); }, 5200);
-    restartProgress();
+  function stopProductSlider() {
+    window.clearInterval(productTimer);
+    productTimer = null;
+    productProgress.classList.remove('is-running');
   }
 
-  function pauseGallery() {
-    window.clearInterval(galleryTimer);
-    progress.classList.remove('is-running');
+  function syncProductSlider() {
+    stopProductSlider();
+    if (!canAutoPlay()) return;
+    productTimer = window.setInterval(function () { showProduct(productIndex + 1); }, 5000);
+    restartProductProgress();
   }
 
-  document.getElementById('gallery-prev').addEventListener('click', function () {
-    showFrame(galleryIndex - 1);
-    startGallery();
+  function updateProductToggle() {
+    if (motionQuery.matches) {
+      productToggle.disabled = true;
+      productToggle.textContent = '▶';
+      productToggle.setAttribute('aria-label', '모션 감축 설정으로 자동 전환 꺼짐');
+      return;
+    }
+
+    productToggle.disabled = false;
+    productToggle.textContent = productPausedByUser ? '▶' : 'Ⅱ';
+    productToggle.setAttribute('aria-pressed', String(productPausedByUser));
+    productToggle.setAttribute('aria-label', productPausedByUser ? '웹앱 자동 전환 시작하기' : '웹앱 자동 전환 멈추기');
+  }
+
+  document.getElementById('product-prev').addEventListener('click', function () {
+    showProduct(productIndex - 1);
+    syncProductSlider();
   });
 
-  document.getElementById('gallery-next').addEventListener('click', function () {
-    showFrame(galleryIndex + 1);
-    startGallery();
+  document.getElementById('product-next').addEventListener('click', function () {
+    showProduct(productIndex + 1);
+    syncProductSlider();
   });
 
-  galleryToggle.addEventListener('click', function () {
-    galleryPausedByUser = !galleryPausedByUser;
-    galleryToggle.setAttribute('aria-pressed', String(galleryPausedByUser));
-    galleryToggle.setAttribute('aria-label', galleryPausedByUser ? '사진 자동 전환 시작하기' : '사진 자동 전환 멈추기');
-    galleryToggle.textContent = galleryPausedByUser ? '▶' : 'Ⅱ';
-    if (galleryPausedByUser) pauseGallery();
-    else startGallery();
+  productToggle.addEventListener('click', function () {
+    productPausedByUser = !productPausedByUser;
+    updateProductToggle();
+    syncProductSlider();
   });
 
-  gallery.addEventListener('mouseenter', pauseGallery);
-  gallery.addEventListener('mouseleave', startGallery);
-  gallery.addEventListener('focusin', pauseGallery);
-  gallery.addEventListener('focusout', function (event) {
-    if (!gallery.contains(event.relatedTarget)) startGallery();
+  productSlider.addEventListener('mouseenter', function () {
+    productHovered = true;
+    syncProductSlider();
   });
 
-  document.addEventListener('visibilitychange', function () {
-    if (document.hidden) pauseGallery();
-    else startGallery();
+  productSlider.addEventListener('mouseleave', function () {
+    productHovered = false;
+    syncProductSlider();
   });
 
-  showFrame(0);
-  startGallery();
-
-  var outputImage = document.getElementById('output-image');
-  var outputCaption = document.getElementById('output-caption');
-  var outputOptions = document.querySelectorAll('.output-option');
-
-  outputOptions.forEach(function (option) {
-    option.addEventListener('click', function () {
-      if (option.getAttribute('aria-pressed') === 'true') return;
-      outputOptions.forEach(function (item) { item.setAttribute('aria-pressed', String(item === option)); });
-      outputImage.classList.add('is-changing');
-      window.setTimeout(function () {
-        outputImage.src = option.dataset.src;
-        outputImage.alt = option.dataset.alt;
-        outputCaption.textContent = option.dataset.caption;
-        window.requestAnimationFrame(function () { outputImage.classList.remove('is-changing'); });
-      }, reducedMotion ? 0 : 170);
-    });
+  productSlider.addEventListener('focusin', function () {
+    productFocused = true;
+    syncProductSlider();
   });
+
+  productSlider.addEventListener('focusout', function (event) {
+    if (productSlider.contains(event.relatedTarget)) return;
+    productFocused = false;
+    syncProductSlider();
+  });
+
+  productTrack.addEventListener('pointerdown', function (event) {
+    if (!event.isPrimary) return;
+    swipeStartX = event.clientX;
+    swipePointerId = event.pointerId;
+  });
+
+  productTrack.addEventListener('pointerup', function (event) {
+    if (swipeStartX === null || event.pointerId !== swipePointerId) return;
+    var distance = event.clientX - swipeStartX;
+    swipeStartX = null;
+    swipePointerId = null;
+    if (Math.abs(distance) < 45) return;
+    showProduct(productIndex + (distance < 0 ? 1 : -1));
+    syncProductSlider();
+  });
+
+  productTrack.addEventListener('pointercancel', function () {
+    swipeStartX = null;
+    swipePointerId = null;
+  });
+
+  if ('IntersectionObserver' in window) {
+    new IntersectionObserver(function (entries) {
+      productVisible = entries[0].isIntersecting;
+      syncProductSlider();
+    }, { threshold: .05 }).observe(productSlider);
+  }
+
+  document.addEventListener('visibilitychange', syncProductSlider);
+  motionQuery.addEventListener('change', function () {
+    updateProductToggle();
+    syncProductSlider();
+  });
+
+  showProduct(0);
+  updateProductToggle();
+  syncProductSlider();
+
+  var horizonCanvas = document.getElementById('emerald-horizon');
+  var horizonContext = horizonCanvas ? horizonCanvas.getContext('2d') : null;
+
+  if (horizonContext) {
+    var horizonWidth = 0;
+    var horizonHeight = 0;
+    var horizonVisible = true;
+    var horizonFrame = 0;
+    var horizonLastDraw = 0;
+
+    function resizeHorizon() {
+      var bounds = horizonCanvas.getBoundingClientRect();
+      if (!bounds.width || !bounds.height) return;
+      var pixelRatio = Math.min(window.devicePixelRatio || 1, window.innerWidth < 680 ? 1.25 : 1.5);
+      horizonWidth = bounds.width;
+      horizonHeight = bounds.height;
+      horizonCanvas.width = Math.round(horizonWidth * pixelRatio);
+      horizonCanvas.height = Math.round(horizonHeight * pixelRatio);
+      horizonContext.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+      drawHorizon(0);
+    }
+
+    function curvePoints(base, amplitude, phase, offset) {
+      var points = [];
+      var count = window.innerWidth < 680 ? 48 : 64;
+      for (var point = 0; point <= count; point += 1) {
+        var x = horizonWidth * point / count;
+        var wave = Math.sin((point / count) * Math.PI * 2.1 + phase + offset) * amplitude;
+        var detail = Math.sin((point / count) * Math.PI * 4.4 - phase * .55 + offset) * amplitude * .28;
+        points.push([x, base + wave + detail]);
+      }
+      return points;
+    }
+
+    function traceCurve(points) {
+      horizonContext.beginPath();
+      horizonContext.moveTo(points[0][0], points[0][1]);
+      for (var index = 1; index < points.length; index += 1) {
+        horizonContext.lineTo(points[index][0], points[index][1]);
+      }
+    }
+
+    function drawBand(points, opacity) {
+      var gradient = horizonContext.createLinearGradient(0, horizonHeight * .55, 0, horizonHeight);
+      gradient.addColorStop(0, 'rgba(42, 204, 163, 0)');
+      gradient.addColorStop(.2, 'rgba(42, 204, 163, ' + (opacity * .55) + ')');
+      gradient.addColorStop(1, 'rgba(5, 59, 49, 0)');
+
+      traceCurve(points);
+      horizonContext.lineTo(horizonWidth, horizonHeight);
+      horizonContext.lineTo(0, horizonHeight);
+      horizonContext.closePath();
+      horizonContext.fillStyle = gradient;
+      horizonContext.fill();
+
+      traceCurve(points);
+      horizonContext.strokeStyle = 'rgba(66, 224, 184, ' + (opacity * .2) + ')';
+      horizonContext.lineWidth = 16;
+      horizonContext.stroke();
+      traceCurve(points);
+      horizonContext.strokeStyle = 'rgba(91, 234, 197, ' + (opacity * .42) + ')';
+      horizonContext.lineWidth = 5;
+      horizonContext.stroke();
+      traceCurve(points);
+      horizonContext.strokeStyle = 'rgba(150, 245, 221, ' + opacity + ')';
+      horizonContext.lineWidth = 1;
+      horizonContext.stroke();
+    }
+
+    function drawHorizon(time) {
+      horizonContext.clearRect(0, 0, horizonWidth, horizonHeight);
+      var phase = time * .00012;
+      var compact = window.innerWidth < 680;
+      var bandCount = compact ? 2 : 3;
+
+      horizonContext.save();
+      horizonContext.globalCompositeOperation = 'screen';
+      for (var band = bandCount - 1; band >= 0; band -= 1) {
+        var base = horizonHeight * (.63 + band * .09);
+        var amplitude = horizonHeight * (.026 + band * .008);
+        var points = curvePoints(base, amplitude, phase * (1 + band * .16), band * 1.7);
+        drawBand(points, .2 + band * .07);
+      }
+      horizonContext.restore();
+    }
+
+    function horizonCanMove() {
+      return horizonVisible && !document.hidden && !motionQuery.matches;
+    }
+
+    function renderHorizon(time) {
+      if (!horizonCanMove()) {
+        horizonFrame = 0;
+        return;
+      }
+      var interval = window.innerWidth < 680 ? 33 : 24;
+      if (time - horizonLastDraw >= interval) {
+        drawHorizon(time);
+        horizonLastDraw = time;
+      }
+      horizonFrame = window.requestAnimationFrame(renderHorizon);
+    }
+
+    function syncHorizon() {
+      window.cancelAnimationFrame(horizonFrame);
+      horizonFrame = 0;
+      if (horizonCanMove()) horizonFrame = window.requestAnimationFrame(renderHorizon);
+      else drawHorizon(0);
+    }
+
+    if ('ResizeObserver' in window) new ResizeObserver(resizeHorizon).observe(productSlider);
+    else window.addEventListener('resize', resizeHorizon);
+
+    if ('IntersectionObserver' in window) {
+      new IntersectionObserver(function (entries) {
+        horizonVisible = entries[0].isIntersecting;
+        syncHorizon();
+      }, { threshold: .05 }).observe(productSlider);
+    }
+
+    document.addEventListener('visibilitychange', syncHorizon);
+    motionQuery.addEventListener('change', syncHorizon);
+    resizeHorizon();
+    syncHorizon();
+  }
 }());
