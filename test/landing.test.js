@@ -109,7 +109,8 @@ test('메인 문구에는 강제 줄바꿈이나 준비 중 판매 CTA가 없다
   assert.doesNotMatch(html, /<br\s*\/?\s*>/i);
   assert.doesNotMatch(html, /가격 준비 중|국비지원 과정|수강 신청/);
   assert.doesNotMatch(html, /【이메일】/);
-  assert.match(html, /직접 만들 때, <em>진로는 경험이 됩니다\.<\/em>/);
+  assert.match(html, /AI로 진로교육을 <em>새롭게 설계합니다\.<\/em>/);
+  assert.match(html, /학생은 직접 만들고 탐구하며 자신의 진로를 경험합니다\./);
   assert.doesNotMatch(html, /hero-note|showcase-meta|product-bar|product-kicker/);
 });
 
