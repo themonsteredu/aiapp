@@ -350,7 +350,7 @@ section { scroll-margin-top: 76px; }
   font-size: clamp(2.85rem, 5.2vw, 5.25rem);
   font-weight: 700;
   line-height: 1.14;
-  text-wrap: balance;
+  text-wrap: wrap;
 }
 
 .hero .eyebrow { color: #77d9c1; }

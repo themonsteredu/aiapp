@@ -119,5 +119,6 @@ test('랜딩 전용 한글 폰트는 S-Core Dream을 사용한다', () => {
   assert.match(css, /S-CoreDream-5Medium\.woff/);
   assert.match(css, /S-CoreDream-7ExtraBold\.woff/);
   assert.match(css, /\.hero h1\s*\{[^}]*font-weight:\s*700/s);
+  assert.match(css, /\.hero h1\s*\{[^}]*text-wrap:\s*wrap/s);
   assert.match(css, /word-break: keep-all/);
 });
