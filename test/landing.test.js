@@ -91,6 +91,8 @@ test('Data Pixel Arc는 장식용 경량 캔버스로 동작한다', () => {
   assert.match(js, /IntersectionObserver/);
   assert.match(js, /Math\.min\(window\.devicePixelRatio/);
   assert.match(js, /drawPixelArc/);
+  assert.match(js, /productTones/);
+  assert.match(css, /--showcase-accent/);
   assert.match(css, /\.product-window\.is-switching::after/);
 });
 

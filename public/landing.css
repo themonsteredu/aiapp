@@ -390,6 +390,8 @@ section { scroll-margin-top: 76px; }
 .hero-media { min-width: 0; scroll-margin-top: 104px; }
 
 .product-slider {
+  --showcase-accent: #61e2ba;
+  --showcase-accent-rgb: 97, 226, 186;
   position: relative;
   overflow: visible;
   color: #fff;
@@ -427,7 +429,9 @@ section { scroll-margin-top: 76px; }
   background: #061b18;
   box-shadow:
     0 34px 78px -34px rgba(0, 0, 0, .92),
+    0 0 84px -46px rgba(var(--showcase-accent-rgb), .62),
     0 0 0 1px rgba(83, 221, 185, .045) inset;
+  transition: box-shadow .8s ease;
 }
 
 .product-window::after {
@@ -478,8 +482,9 @@ section { scroll-margin-top: 76px; }
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #6ee2c4;
-  box-shadow: 0 0 0 4px rgba(110, 226, 196, .08);
+  background: var(--showcase-accent);
+  box-shadow: 0 0 0 4px rgba(var(--showcase-accent-rgb), .08);
+  transition: background .8s ease, box-shadow .8s ease;
 }
 
 .product-status i {
@@ -528,11 +533,12 @@ section { scroll-margin-top: 76px; }
 .product-caption small {
   display: block;
   margin-bottom: 2px;
-  color: #74d8c0;
+  color: var(--showcase-accent);
   font-size: .54rem;
   font-weight: 600;
   letter-spacing: .11em;
   text-transform: uppercase;
+  transition: color .8s ease;
 }
 
 .product-caption strong {
@@ -564,8 +570,8 @@ section { scroll-margin-top: 76px; }
 
 .product-arrow:hover {
   transform: translateY(-1px);
-  border-color: rgba(192, 244, 230, .58);
-  background: rgba(110, 226, 196, .11);
+  border-color: rgba(var(--showcase-accent-rgb), .7);
+  background: rgba(var(--showcase-accent-rgb), .12);
 }
 
 .product-toggle { margin-left: 2px; font-size: .63rem; }
@@ -589,9 +595,10 @@ section { scroll-margin-top: 76px; }
   display: block;
   width: 100%;
   height: 100%;
-  background: linear-gradient(90deg, #52cdb0, #a2f0db);
+  background: linear-gradient(90deg, var(--showcase-accent), #f1fffb);
   transform: scaleX(0);
   transform-origin: left;
+  transition: background .8s ease;
 }
 
 .product-progress span.is-running { animation: product-progress 5s linear forwards; }

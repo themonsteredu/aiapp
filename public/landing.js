@@ -57,6 +57,12 @@
   var productProgress = document.getElementById('product-progress');
   var productWindow = document.querySelector('.product-window');
   var productSwitchTimer = null;
+  var productTones = [
+    { color: '#61e2ba', rgb: '97, 226, 186' },
+    { color: '#65bdf5', rgb: '101, 189, 245' },
+    { color: '#efb65f', rgb: '239, 182, 95' },
+    { color: '#b59bf4', rgb: '181, 155, 244' }
+  ];
   var swipeStartX = null;
   var swipePointerId = null;
 
@@ -82,9 +88,12 @@
     });
 
     var currentSlide = productSlides[productIndex];
+    var currentTone = productTones[productIndex];
     productLabel.textContent = currentSlide.dataset.label;
     productKicker.textContent = currentSlide.dataset.kicker;
     productCurrent.textContent = String(productIndex + 1).padStart(2, '0');
+    productSlider.style.setProperty('--showcase-accent', currentTone.color);
+    productSlider.style.setProperty('--showcase-accent-rgb', currentTone.rgb);
 
     if (productWindow && productIndex !== previousIndex && !motionQuery.matches) {
       window.clearTimeout(productSwitchTimer);
@@ -228,17 +237,17 @@
       pixelContext.clearRect(0, 0, pixelWidth, pixelHeight);
       var compact = window.innerWidth < 680;
       var spacing = compact ? 9 : 10;
-      var squareSize = compact ? 5.5 : 6.5;
+      var squareSize = compact ? 6 : 7;
       var centerX = pixelWidth * (compact ? .58 : .66);
       var arcSpan = pixelWidth * (compact ? .78 : .72);
       var arcTop = pixelHeight * (compact ? .46 : .26);
       var arcDepth = pixelHeight * (compact ? .52 : .68);
-      var bandWidth = pixelHeight * (compact ? .095 : .12);
+      var bandWidth = pixelHeight * (compact ? .11 : .135);
       var phase = time * .00022 + productIndex * .48;
 
       pixelContext.save();
       pixelContext.globalCompositeOperation = 'screen';
-      pixelContext.fillStyle = '#61e2ba';
+      pixelContext.fillStyle = productTones[productIndex].color;
 
       for (var x = -spacing; x <= pixelWidth + spacing; x += spacing) {
         var normalizedX = (x - centerX) / arcSpan;
@@ -251,7 +260,7 @@
           var distance = Math.abs(y - curveY) / bandWidth;
           var bandFade = Math.max(0, 1 - distance);
           var breathing = .72 + Math.sin(phase * 1.6 + x * .012 + y * .006) * .18;
-          var alpha = bandFade * bandFade * edgeFade * breathing * .56;
+          var alpha = bandFade * bandFade * edgeFade * breathing * .68;
           if (alpha < .025) continue;
           pixelContext.globalAlpha = alpha;
           pixelContext.fillRect(x, y, squareSize, squareSize);
