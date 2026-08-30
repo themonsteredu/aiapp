@@ -29,6 +29,17 @@ test('랜딩에서 참조하는 로컬 정적 자산이 존재한다', () => {
   assert.deepEqual(missing, []);
 });
 
+test('랜딩 수업 사진은 고해상도 로컬 자산 7장을 중복 없이 사용한다', () => {
+  const photos = Array.from(html.matchAll(/src="(\/brand\/landing\/[^"]+\.jpg)"/g), (match) => match[1]);
+  assert.equal(photos.length, 7);
+  assert.equal(new Set(photos).size, photos.length);
+  assert.doesNotMatch(html, /data:image\/jpeg;base64/);
+
+  photos.forEach((photo) => {
+    assert.ok(fs.statSync(path.join(publicDir, photo)).size > 100_000, `${photo}는 고해상도 사진이어야 합니다`);
+  });
+});
+
 test('메인 문구에는 강제 줄바꿈이나 준비 중 판매 CTA가 없다', () => {
   assert.doesNotMatch(html, /<br\s*\/?\s*>/i);
   assert.doesNotMatch(html, /가격 준비 중|국비지원 과정|수강 신청/);
