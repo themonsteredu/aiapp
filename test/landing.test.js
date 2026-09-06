@@ -33,28 +33,20 @@ test('랜딩에서 참조하는 로컬 정적 자산이 존재한다', () => {
   assert.deepEqual(missing, []);
 });
 
-test('프로그램 사진 3장과 웹앱 화면 4장을 중복 없이 사용한다', () => {
-  const programPhotos = Array.from(html.matchAll(/src="(\/brand\/landing\/program-[^"]+\.jpg)"/g), (match) => match[1]);
-  const productScreens = Array.from(html.matchAll(/src="(\/brand\/showcase\/[^"]+\.jpg)"/g), (match) => match[1]);
-
-  assert.equal(programPhotos.length, 3);
-  assert.equal(new Set(programPhotos).size, 3);
-  assert.equal(productScreens.length, 4);
-  assert.equal(new Set(productScreens).size, 4);
-  assert.doesNotMatch(html, /\/brand\/landing\/hero-[^"]+\.jpg/);
-  assert.doesNotMatch(html, /data:image\/jpeg;base64/);
-
-  programPhotos.forEach((photo) => {
-    assert.ok(fs.statSync(path.join(publicDir, photo)).size > 100_000, `${photo}는 고해상도 사진이어야 합니다`);
-  });
+test('진로 프로그램과 실제 수업 화면만 소개한다', () => {
+  for (const name of ['디지털 포렌식', '항공 관제', '식품개발 연구원', '증권사 애널리스트']) assert.ok(html.includes(name));
+  assert.ok(html.includes('/brand/showcase/ai-forensics.jpg'));
+  assert.ok(html.includes('/brand/showcase/air-control.png'));
+  assert.doesNotMatch(html, /history-detective\.jpg|ai-ethics\.jpg|mind-class\.jpg/);
+  assert.match(html, /href="https:\/\/hub\.moakit\.ai"/);
 });
 
 test('웹앱 슬라이더는 한 화면씩 표시하며 접근 가능한 조작 버튼을 제공한다', () => {
   const slides = Array.from(html.matchAll(/<figure\b[^>]*class="[^"]*\bproduct-slide\b[^"]*"[^>]*>/g), (match) => match[0]);
 
-  assert.equal(slides.length, 4);
+  assert.equal(slides.length, 2);
   assert.equal(slides.filter((slide) => /aria-hidden="false"/.test(slide)).length, 1);
-  assert.equal(slides.filter((slide) => /aria-hidden="true"/.test(slide)).length, 3);
+  assert.equal(slides.filter((slide) => /aria-hidden="true"/.test(slide)).length, 1);
 
   ['product-prev', 'product-next', 'product-toggle'].forEach((id) => {
     const tag = html.match(new RegExp(`<button\\b[^>]*\\bid="${id}"[^>]*>`));
