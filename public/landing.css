@@ -1019,3 +1019,42 @@ section { scroll-margin-top: 76px; }
   .product-track { transition: none; }
   .journey-fill { transform: scaleX(1); }
 }
+
+/* Career discovery and teaching entry are separate, compact paths. */
+.career-programs.section { padding-block: 64px; scroll-margin-top: 88px; }
+.career-programs .section-head { margin-bottom: 32px; }
+.career-programs .section-title { font-size: clamp(1.6rem, 3vw, 2.25rem); line-height: 1.4; }
+.career-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-top: 1px solid var(--line); }
+.career-list article { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 14px 24px; padding: 28px 32px 26px 0; border-bottom: 1px solid var(--line); }
+.career-list article:nth-child(even) { padding-left: 32px; padding-right: 0; border-left: 1px solid var(--line); }
+.career-index { grid-column: 1 / -1; font-size: 12px; font-weight: 600; color: var(--teal-700); }
+.career-list h3 { font-size: 21px; line-height: 1.4; }
+.career-list p { margin-top: 10px; color: var(--muted); font-size: 14px; line-height: 1.8; }
+.career-list b { display: block; margin-top: 16px; font-size: 12px; font-weight: 500; color: var(--teal-700); }
+.career-list .text-link { grid-column: 1 / -1; justify-self: start; min-height: 44px; display: inline-flex; align-items: center; font-size: 13px; }
+.career-teacher-entry { display: flex; justify-content: space-between; align-items: center; gap: 24px; padding: 28px; margin-top: 32px; background: var(--teal-50); border-left: 3px solid var(--teal-700); scroll-margin-top: 90px; }
+.career-teacher-entry strong { font-size: 16px; font-weight: 600; }
+.career-teacher-entry p { margin-top: 8px; color: var(--muted); font-size: 14px; }
+.career-teacher-entry .button { flex-shrink: 0; }
+.career-help { margin-top: 24px; border-block: 1px solid var(--line); scroll-margin-top: 90px; }
+.career-help summary { display: flex; align-items: center; justify-content: space-between; gap: 20px; min-height: 58px; cursor: pointer; list-style: none; font-size: 14px; font-weight: 600; }
+.career-help summary::-webkit-details-marker { display: none; }
+.career-help summary span { font-size: 24px; color: var(--teal-700); }
+.career-help[open] summary span { transform: rotate(45deg); }
+.career-help p { max-width: 740px; padding-bottom: 24px; font-size: 14px; color: var(--muted); }
+.career-help p a { color: var(--teal-700); text-decoration: underline; text-underline-offset: 4px; }
+.career-help summary:focus-visible { outline: 2px solid var(--teal-700); outline-offset: 5px; }
+.cta-section { padding-block: 36px 64px; }
+.cta-panel { padding: 36px; }
+.cta-copy h2 { font-size: clamp(1.5rem, 2.8vw, 2rem); line-height: 1.4; }
+@media (max-width: 900px) { .career-teacher-entry { align-items: flex-start; flex-direction: column; } }
+@media (max-width: 680px) {
+  .career-programs.section { padding-block: 40px; }
+  .career-list { grid-template-columns: minmax(0,1fr); }
+  .career-list article, .career-list article:nth-child(even) { padding: 22px 0; border-left: 0; }
+  .career-list h3 { font-size: 19px; }
+  .career-list p { margin-top: 8px; }
+  .career-teacher-entry { padding: 22px 18px; }
+  .route-item { min-height: 48px; padding-block: 9px; }
+  .cta-panel { padding: 26px 20px; }
+}
