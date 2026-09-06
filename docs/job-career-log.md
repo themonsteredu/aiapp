@@ -29,6 +29,7 @@
 - Supabase 프로젝트 `vypnobpmyadtcvxhtagn`
 - 적용 migration: `20260906130333 / job_career_log_identity_links`
 - SQL: `db/job-career-log.sql`
-- `npm run check`, `npm test`: 구문 검사 및 32개 테스트 통과.
+- `npm run check`, `npm test`: 구문 검사 및 35개 테스트 통과.
+- Vercel Node 서버에 맞춰 일반 API rewrite를 제거했습니다. 로그인·진로기록 경로, 쿼리·본문 전달과 `/class` 정적 셸을 라우팅 회귀 테스트로 검증합니다.
 - 실제 DB 트랜잭션에서 학생·매핑·기록 생성, 본인/담당 강사 조회 조건, 원본 수정 차단, 공개 역할의 매핑 조회 차단을 검증했습니다. 전체 ROLLBACK 후 검증 기록 0건을 확인했습니다.
 - 브라우저 연결이 반복 실패해 모바일·태블릿 실제 렌더링 및 로그인한 학생 UI의 저장 E2E는 완료하지 못했습니다. CSS 반응형 규칙과 학생/교사 입구 및 로그인 후 기록 화면 복귀 경로는 소스로 확인했습니다.
