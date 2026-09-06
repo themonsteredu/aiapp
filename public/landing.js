@@ -58,7 +58,7 @@
   var productSwitchTimer = null;
   var productTones = [
     { color: '#61e2ba', rgb: '97, 226, 186', channels: [97, 226, 186] },
-    { color: '#65bdf5', rgb: '101, 189, 245', channels: [101, 189, 245] },
+    { color: '#89d4c1', rgb: '137, 212, 193', channels: [137, 212, 193] },
     { color: '#efb65f', rgb: '239, 182, 95', channels: [239, 182, 95] },
     { color: '#b59bf4', rgb: '181, 155, 244', channels: [181, 155, 244] }
   ];
@@ -220,7 +220,7 @@
 
   var ribbonCanvas = document.getElementById('silk-ribbon-field');
   var ribbonContext = ribbonCanvas ? ribbonCanvas.getContext('2d') : null;
-  var heroElement = document.querySelector('.hero');
+  var heroElement = document.querySelector('.showcase-stage');
 
   function currentRibbonTone(time) {
     var elapsed = Math.max(0, time - ribbonToneChangedAt);
