@@ -18,9 +18,10 @@
 | `/` | 랜딩 (`public/index.html` + `public/landing.css` + `public/landing.js`) |
 | `/class`, `/class/*` | 플랫폼 SPA (`public/app.html` + `public/app.js`) |
 | `/class#/p/<슬러그>` | 학생에게 배포되는 프로젝트 웹앱 |
-| `/api/*` | 서버리스 (`api/index.js` → `lib/api.js`) |
+| `/api/*` | Node 서버 (`server.js` → `lib/api.js`) |
 
 - 라우팅 규칙은 **`vercel.json`과 `server.js` 양쪽에 같이** 넣는다. 한쪽만 고치면 Vercel과 로컬 동작이 갈린다
+- Vercel 프레임워크는 **`node`**이며 `server.js`가 API를 처리한다. 일반 `/api/*`를 `/api/index`로 rewrite하면 원래 요청 주소가 사라져 로그인 등 모든 API가 404가 된다. API 경로는 그대로 전달한다.
 - 이 앱은 **해시 라우팅**이다. 루트를 랜딩으로 바꾸면서 예전 `/#/...` 링크가 죽지 않도록, 랜딩 `<head>`에 `#/`로 시작하는 해시만 `/class`로 넘기는 스크립트를 둔다. 페이지 내부 앵커(`#core` 등)는 건드리지 않는다
 - 공유 링크 형태를 바꿀 때는 **서버에서 QR을 만드는 `lib/project-api.js`의 `publicAppUrl()`**, 배포 API 응답의 `url`, `public/project-ui.js`의 주소 표기를 함께 고친다
 

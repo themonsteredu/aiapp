@@ -87,6 +87,8 @@ function deckKindIcon(kind) {
 }
 
 /* ---------------- API ---------------- */
+let afterLoginHash = /^#\/career-records(?:\/new(?:\/\d+)?)?$/.test(location.hash) ? location.hash : '';
+
 async function api(method, url, body) {
   const res = await fetch(url, {
     method,
@@ -95,6 +97,7 @@ async function api(method, url, body) {
   });
   const data = await res.json().catch(() => ({}));
   if (res.status === 401 && !url.endsWith('/api/login')) {
+    if (/^#\/career-records(?:\/new(?:\/\d+)?)?$/.test(location.hash)) afterLoginHash = location.hash;
     state.me = null;
     if (!/^#\/p\/[a-z0-9-]+$/.test(location.hash || '')) location.hash = '#/login';
     throw new Error(data.error || '로그인이 필요합니다.');
@@ -396,7 +399,10 @@ async function navigate() {
   document.body.classList.remove('allow-print'); // 내보내기 화면 밖에서는 인쇄 차단 유지
   const hash = location.hash || '#/';
   const isPublicProjectApp = /^#\/p\/[a-z0-9-]+$/.test(hash);
-  if (!state.me && hash !== '#/login' && !isPublicProjectApp) { location.hash = '#/login'; return; }
+  if (!state.me && hash !== '#/login' && !isPublicProjectApp) {
+    if (/^#\/career-records(?:\/new(?:\/\d+)?)?$/.test(hash)) afterLoginHash = hash;
+    location.hash = '#/login'; return;
+  }
   if (state.me && state.me.mustChangePassword && hash !== '#/password' && hash !== '#/login') {
     location.hash = '#/password';
     return;
@@ -492,13 +498,14 @@ function menuGroups() {
   const r = state.me.role;
   if (state.me.isGuest) {
     if (state.me.projectTeamId) {
-      return [['프로젝트', [['#/project', 'briefcase', 'AI 프로젝트']]]];
+      return [['프로젝트', [['#/project', 'briefcase', 'AI 프로젝트'], ['#/career-records', 'fileText', '내 진로기록']]]];
     }
-    return [['수업', [['#/decks', 'decks', '수업 자료']]]];
+    return [['수업', [['#/decks', 'decks', '수업 자료'], ['#/career-records', 'fileText', '내 진로기록']]]];
   }
   if (r === 'student') {
     return [['메뉴', [
       ['#/decks', 'decks', '내 학습 자료'],
+      ['#/career-records', 'fileText', '내 진로기록'],
       ['#/schedules', 'calendar', '접근 시간표'],
       ['#/settings', 'sliders', '설정'],
     ]]];
@@ -510,6 +517,7 @@ function menuGroups() {
         ['#/my-courses', 'layers', '내 과정'],
         ['#/decks', 'decks', '웹앱/PPT 관리'],
         ['#/sessions', 'hash', '수업 입장 코드'],
+        ['#/career-records', 'fileText', '수업 진로기록'],
         ['#/projects', 'briefcase', 'AI 프로젝트'],
       ]],
       ['사용자', [['#/students', 'users', '학생 관리']]],
@@ -524,6 +532,7 @@ function menuGroups() {
       ['#/decks', 'decks', '웹앱/PPT 관리'],
       ['#/courses', 'layers', '과정·강사배정'],
       ['#/sessions', 'hash', '수업 입장 코드'],
+        ['#/career-records', 'fileText', '수업 진로기록'],
       ['#/projects', 'briefcase', 'AI 프로젝트'],
     ]],
     ['사용자', [
@@ -674,7 +683,7 @@ async function fetchDash(force = false) {
 
 /* ---------------- 로그인 ---------------- */
 route(/^#\/login$/, () => {
-  let tab = 'join'; // 'join' (수업 입장 코드) | 'account' (계정 로그인)
+  let tab = new URLSearchParams(location.search).get('mode') === 'account' ? 'account' : 'join';
   let otpMode = null; // null | 'otp' | 'setup'
   let secret = '';
   let joinCode = '';
@@ -764,8 +773,10 @@ route(/^#\/login$/, () => {
     Live.start(); // 게스트일 때만 내부에서 동작
     location.hash = data.user.mustChangePassword ? '#/password'
       : state.mustAgree ? '#/agreement'
+      : afterLoginHash ? afterLoginHash
       : data.user.projectTeamId ? '#/project'
       : (level(data.user.role) >= 1 ? '#/' : '#/decks');
+    afterLoginHash = '';
   };
   async function onSubmit(e) {
     e.preventDefault();
@@ -2075,6 +2086,7 @@ function openLinkModal(deck) {
 route(/^#\/view\/(\d+)$/, async (id) => {
   const data = await api('GET', `/api/decks/${id}`);
   const wm = state.settings && state.settings.watermark;
+  const recordLink = state.me.role === 'student' ? `<a class="btn btn-ghost" href="#/career-records/new/${id}">활동 기록 남기기</a>` : '';
 
   // 업로드형 HTML 웹앱: 플랫폼이 직접 서빙 (배포 불필요)
   if (data.deck.kind === 'html') {
@@ -2082,7 +2094,7 @@ route(/^#\/view\/(\d+)$/, async (id) => {
       <div class="page-head">
         <div><div class="ph-t ph-t-with-icon">${icon('code')} ${esc(data.deck.title)}</div>
           <div class="desc">${esc(data.deck.description)} · ${esc(data.deck.ownerName)} 강사 · 업로드형 웹앱</div></div>
-        <button class="btn btn-primary" id="btn-embed-full">${icon('play')} 전체화면</button>
+        <div class="career-view-actions">${recordLink}<button class="btn btn-primary" id="btn-embed-full">${icon('play')} 전체화면</button></div>
       </div>
       <div class="embed-wrap no-select" id="embed-wrap">
         <iframe src="/api/webapp/${data.deck.id}" sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups" allow="fullscreen" referrerpolicy="no-referrer"></iframe>
@@ -2103,7 +2115,7 @@ route(/^#\/view\/(\d+)$/, async (id) => {
           <div class="desc">${esc(data.deck.description)} · ${esc(data.deck.ownerName)} 강사 · 체험형 웹앱</div></div>
         <div style="display:flex;gap:8px">
           ${data.canEdit ? `<button class="btn btn-ghost" id="btn-linkedit">${icon('edit')} 링크 설정</button>` : ''}
-          <button class="btn btn-primary" id="btn-embed-full">${icon('play')} 전체화면</button>
+          <div class="career-view-actions">${recordLink}<button class="btn btn-primary" id="btn-embed-full">${icon('play')} 전체화면</button></div>
         </div>
       </div>
       <div class="embed-wrap no-select" id="embed-wrap">
@@ -2123,9 +2135,9 @@ route(/^#\/view\/(\d+)$/, async (id) => {
   shell(data.deck.title, `
     <div class="page-head">
       <div><div class="ph-t">${esc(data.deck.title)}</div><div class="desc">${esc(data.deck.description)} · 슬라이드 ${data.slides.length}장 · ${esc(data.deck.ownerName)} 강사</div></div>
-      <div style="display:flex;gap:8px">
+      <div class="career-view-actions">
         ${data.canEdit ? `<a class="btn btn-ghost" href="#/decks/${id}/edit">${icon('edit')} 편집</a>` : ''}
-        <button class="btn btn-primary" id="btn-present">${icon('play')} 전체화면 발표</button>
+        ${recordLink}<button class="btn btn-primary" id="btn-present">${icon('play')} 전체화면 발표</button>
       </div>
     </div>
     <div style="max-width:980px">
@@ -3394,6 +3406,10 @@ route(/^#\/settlement$/, async () => {
     Live.start(); // 게스트일 때만 내부에서 동작
   } catch { state.me = null; }
   try {
+    const { registerCareerLogUI } = await import('/career-log-ui.js');
+    registerCareerLogUI({ route, api, shell, state, esc, toast, navigate, isStaff });
+  } catch (err) { console.error('진로기록 화면을 불러오지 못했습니다.', err); }
+  try {
     const { registerProjectUI } = await import('/project-ui.js');
     registerProjectUI({
       route, api, shell, state, esc, icon, toast, openModal, navigate, level, isStaff, $app,
@@ -3406,3 +3422,4 @@ route(/^#\/settlement$/, async () => {
   // 시간제 접근 상태 주기 갱신 (5분)
   setInterval(refreshMe, 5 * 60 * 1000);
 })();
+

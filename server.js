@@ -67,6 +67,8 @@ const server = http.createServer(async (req, res) => {
   const pathname = decodeURIComponent(url.pathname);
   try {
     if (pathname.startsWith('/api/')) {
+      // Vercel의 node 프레임워크도 이 서버를 실행한다. /api/*를 /api/index로
+      // rewrite하지 않고 원래 pathname과 req.url의 쿼리를 API에 전달한다.
       const body = ['POST', 'PATCH', 'PUT'].includes(req.method) ? await readBody(req) : null;
       return await handleApi(req, res, pathname, body);
     }
