@@ -52,6 +52,9 @@
   var productVisible = true;
   var productLabel = document.getElementById('product-label');
   var productCurrent = document.getElementById('product-current');
+  var productTotal = document.getElementById('product-total');
+  if (productTotal) productTotal.textContent = String(productSlides.length).padStart(2, '0');
+  var syncRibbonPlayback = null;
   var productToggle = document.getElementById('product-toggle');
   var productProgress = document.getElementById('product-progress');
   var productWindow = document.querySelector('.product-window');
@@ -59,8 +62,8 @@
   var productTones = [
     { color: '#61e2ba', rgb: '97, 226, 186', channels: [97, 226, 186] },
     { color: '#89d4c1', rgb: '137, 212, 193', channels: [137, 212, 193] },
-    { color: '#efb65f', rgb: '239, 182, 95', channels: [239, 182, 95] },
-    { color: '#b59bf4', rgb: '181, 155, 244', channels: [181, 155, 244] }
+    { color: '#8bd6ba', rgb: '139, 214, 186', channels: [139, 214, 186] },
+    { color: '#62bba8', rgb: '98, 187, 168', channels: [98, 187, 168] }
   ];
   var ribbonToneFrom = productTones[0].channels.slice();
   var ribbonToneTarget = productTones[0].channels.slice();
@@ -90,7 +93,7 @@
     });
 
     var currentSlide = productSlides[productIndex];
-    var currentTone = productTones[productIndex];
+    var currentTone = productTones[productIndex % productTones.length];
     productLabel.textContent = currentSlide.dataset.label;
     productCurrent.textContent = String(productIndex + 1).padStart(2, '0');
     productSlider.style.setProperty('--showcase-accent', currentTone.color);
@@ -124,6 +127,7 @@
 
   function syncProductSlider() {
     stopProductSlider();
+    if (syncRibbonPlayback) syncRibbonPlayback();
     if (!canAutoPlay()) return;
     productTimer = window.setInterval(function () { showProduct(productIndex + 1); }, 5000);
     restartProductProgress();
@@ -343,7 +347,7 @@
     }
 
     function silkRibbonCanMove() {
-      return ribbonVisible && !document.hidden && !motionQuery.matches;
+      return ribbonVisible && canAutoPlay();
     }
 
     function renderSilkRibbon(time) {
@@ -365,6 +369,8 @@
       if (silkRibbonCanMove()) ribbonFrame = window.requestAnimationFrame(renderSilkRibbon);
       else drawSilkRibbon(performance.now());
     }
+
+    syncRibbonPlayback = syncSilkRibbon;
 
     if ('ResizeObserver' in window) new ResizeObserver(resizeSilkRibbon).observe(heroElement);
     else window.addEventListener('resize', resizeSilkRibbon);
