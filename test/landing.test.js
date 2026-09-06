@@ -37,6 +37,8 @@ test('진로 프로그램과 실제 수업 화면만 소개한다', () => {
   for (const name of ['디지털 포렌식', '항공 관제', '식품개발 연구원', '증권사 애널리스트']) assert.ok(html.includes(name));
   assert.ok(html.includes('/brand/showcase/ai-forensics.jpg'));
   assert.ok(html.includes('/brand/showcase/air-control.png'));
+  assert.ok(html.includes('/brand/showcase/food-research.jpg'));
+  assert.ok(html.includes('/brand/showcase/equity-analyst.jpg'));
   assert.doesNotMatch(html, /history-detective\.jpg|ai-ethics\.jpg|mind-class\.jpg/);
   assert.match(html, /href="https:\/\/hub\.moakit\.ai"/);
 });
@@ -44,9 +46,9 @@ test('진로 프로그램과 실제 수업 화면만 소개한다', () => {
 test('웹앱 슬라이더는 한 화면씩 표시하며 접근 가능한 조작 버튼을 제공한다', () => {
   const slides = Array.from(html.matchAll(/<figure\b[^>]*class="[^"]*\bproduct-slide\b[^"]*"[^>]*>/g), (match) => match[0]);
 
-  assert.equal(slides.length, 2);
+  assert.equal(slides.length, 4);
   assert.equal(slides.filter((slide) => /aria-hidden="false"/.test(slide)).length, 1);
-  assert.equal(slides.filter((slide) => /aria-hidden="true"/.test(slide)).length, 1);
+  assert.equal(slides.filter((slide) => /aria-hidden="true"/.test(slide)).length, 3);
 
   ['product-prev', 'product-next', 'product-toggle'].forEach((id) => {
     const tag = html.match(new RegExp(`<button\\b[^>]*\\bid="${id}"[^>]*>`));
