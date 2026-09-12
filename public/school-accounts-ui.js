@@ -210,7 +210,10 @@ export function registerSchoolAccountsUI({ route, api, shell, state, esc, toast,
   // 관리자와 기록 권한(record_access)을 받은 계정만. 최신 버전만 보여주고, 정정은 새 버전으로 남긴다.
   const RP = '#/student-records';
   const PROGRAM_LABELS = { 'history-ai-01': '역사 AI 수업', 'science-observation-ai-03': '자연을 관찰하는 AI', 'aviation-mobility-01': '항공 모빌리티', 'hub-submission-v1': '활동 결과물 제출', 'job-staff-record': '담당자 기록' };
-  const sourceLabel = r => r.source === 'hub' ? '모아허브 · 학교 수업' : r.entry_kind === 'staff_record' ? '담당자 작성' : '모아랩 · 진로 수업';
+  // 정정본은 원래 출처(학교 수업/진로 수업)를 그대로 보여준다.
+  const sourceLabel = r => (r.source === 'hub' || r.original_source === 'hub') ? '모아허브 · 학교 수업' : r.entry_kind === 'staff_record' ? '담당자 작성' : '모아랩 · 진로 수업';
+  const kindLabel = r => r.supersedes_id ? '<span class="badge amber">정정됨</span>' : r.entry_kind === 'staff_record' ? '담당자 작성' : (r.source === 'hub' ? '수업 활동 기록' : '학생 작성');
+  const subLine = r => [r.session_title, r.author_name].filter(Boolean).map(esc).join(' · ');
   const RS = { schoolId: '', schools: [], students: [], studentId: '', level: 'view', student: null, records: [], page: 0, hasMore: false, editing: null, adding: false, history: {} };
   const dateText = value => { const d = new Date(value); return Number.isNaN(d.getTime()) ? '' : d.toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', dateStyle: 'medium', timeStyle: 'short' }); };
   const dateInput = value => { const d = new Date(value); return Number.isNaN(d.getTime()) ? '' : new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); };
@@ -240,8 +243,8 @@ export function registerSchoolAccountsUI({ route, api, shell, state, esc, toast,
     const editing = RS.editing === r.id;
     const hist = RS.history[r.id];
     return `<article class="career-record" id="rec-${r.id}">
-      <div class="career-record-meta"><span>${esc(dateText(r.occurred_at))}</span><span>${esc(sourceLabel(r))}</span><span>${r.supersedes_id ? '<span class="badge amber">정정됨</span>' : r.source === 'hub' ? '수업 활동 기록' : '학생 작성'}</span></div>
-      <h2>${esc(r.title || PROGRAM_LABELS[r.program_ref] || '진로 활동')}</h2><p class="career-record-sub">${esc(r.session_title || '')}${r.author_name ? ` · ${esc(r.author_name)}` : ''}</p>
+      <div class="career-record-meta"><span>${esc(dateText(r.occurred_at))}</span><span>${esc(sourceLabel(r))}</span><span>${kindLabel(r)}</span></div>
+      <h2>${esc(r.title || PROGRAM_LABELS[r.program_ref] || '진로 활동')}</h2><p class="career-record-sub">${subLine(r)}</p>
       ${editing ? `<form class="sa-edit" data-sa-revise="${r.id}">
         <div class="form-grid"><div><label>제목</label><input name="title" maxlength="120" value="${esc(r.title || '')}" placeholder="비우면 기존 제목 유지"></div><div><label>활동 날짜</label><input name="occurred_at" type="date" value="${dateInput(r.occurred_at)}"></div></div>
         <label class="field-label" style="display:block;margin-top:10px">활동 과정</label><textarea name="process" class="input sa-roster" maxlength="1500" required>${esc(r.process || '')}</textarea>

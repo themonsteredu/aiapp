@@ -8,7 +8,7 @@ export function registerCareerLogUI({ route, api, shell, state, esc, toast, navi
   }
   // 모아허브에서 들어온 학교 수업 기록의 이름표. 제목이 없는 기록은 프로그램 이름으로 보여준다.
   const PROGRAM_LABELS = { 'history-ai-01': '역사 AI 수업', 'science-observation-ai-03': '자연을 관찰하는 AI', 'aviation-mobility-01': '항공 모빌리티', 'hub-submission-v1': '활동 결과물 제출', 'job-staff-record': '담당자 기록' };
-  const sourceLabel = record => record.source === 'hub' ? '모아허브 · 학교 수업' : record.entry_kind === 'staff_record' ? '담당자 작성' : (!record.source || record.source === 'job') ? '모아랩 · 진로 수업' : record.source;
+  const sourceLabel = record => (record.source === 'hub' || record.original_source === 'hub') ? '모아허브 · 학교 수업' : record.entry_kind === 'staff_record' ? '담당자 작성' : (!record.source || record.source === 'job') ? '모아랩 · 진로 수업' : record.source;
   const status = (message, error = false) => `<p class="career-message${error ? ' is-error' : ''}" role="${error ? 'alert' : 'status'}">${esc(message)}</p>`;
 
   async function ensureIdentity(current) {
