@@ -43,6 +43,13 @@
 - 자동 전환은 마우스 오버·키보드 포커스·화면 밖·탭 비활성화 시 정지하고, `prefers-reduced-motion`에서는 자동 재생하지 않는다. 캔버스 모션도 같은 조건에서 멈춘다
 - 랜딩 한글 폰트는 jsDelivr의 S-Core Dream 고정 버전(`noonfonts_six@1.2`)을 사용한다
 
+## 학생 계정 (모아허브 공통)
+
+- 모아허브가 발급한 학교 학생 계정(아이디 `m`+16진수 20자, 중앙 테이블 `moakit_accounts`)은 모아랩 로그인에도 그대로 쓴다. 로직은 `lib/school-accounts.js`, 설계는 `docs/job-career-log.md` 하단. `users.school_account_id`로 연결하고 비밀번호는 중앙 계정에서만 검증한다 — 모아랩 `users.password_hash`에는 로그인 가능한 값을 넣지 않는다
+- 진로기록 `student_id`는 계정의 `career_student_id`다. 학교 수업(모아허브)과 진로 수업(모아랩) 기록이 같은 번호로 모이는 근거이므로 `job_identities`로 우회하지 않는다
+- 비밀번호 형식(`scrypt1:salt:key`, N=32768)과 잠금 규칙은 모아허브 `lib/student-accounts/security.js`와 같아야 한다. 한쪽만 바꾸면 다른 쪽 로그인이 깨진다
+- **모아랩도 학교·기관 학생 계정을 발급한다** (`#/school-accounts`, `lib/school-registry.js` + `lib/school-registry-api.js`). 발급 주체는 `managers.issuer='moakit-lab'`. 학교를 모아허브에 열어 주는 표는 `moakit_accounts.school_access` — 정의는 teacher-s-project `db/moakit-accounts-0002-school-access.sql`. 명단 규칙(`lib/school-roster.js`, `public/school-roster.js`)은 모아허브 `roster.js`·`account-roster.js` 복사본이라 한쪽을 고치면 다른 쪽도 맞춘다
+
 ## 문구 원칙
 
 랜딩은 외부 시안에서 이식한 것이라 **사실이 아닌 문구가 섞여 있었다.** 문구를 넣거나 시안을 옮길 때 반드시 확인한다.

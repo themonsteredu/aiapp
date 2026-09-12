@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node --no-warnings server.js",
     "test": "node --test",
-    "check": "node --check server.js && node --check api/index.js && node --check lib/api.js && node --check lib/project-api.js && node --check public/app.js && node --check public/project-ui.js && node --check public/landing.js && node --check lib/career-log.js && node --check public/career-log-ui.js"
+    "check": "node --check server.js && node --check api/index.js && node --check lib/api.js && node --check lib/project-api.js && node --check public/app.js && node --check public/project-ui.js && node --check public/landing.js && node --check lib/career-log.js && node --check lib/school-accounts.js && node --check lib/school-roster.js && node --check lib/school-registry.js && node --check lib/school-registry-api.js && node --check public/school-accounts-ui.js && node --check public/career-log-ui.js"
   },
   "engines": {
     "node": ">=22.13.0"
