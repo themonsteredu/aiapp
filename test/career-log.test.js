@@ -4,6 +4,8 @@ const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const { registerCareerLogRoutes, digest, submission } = require('../lib/career-log');
 const sid = crypto.randomUUID();
+const schoolSid = crypto.randomUUID();
+const schoolAccountId = crypto.randomUUID();
 const guestKey = 'a'.repeat(64);
 const roles = { student: 0, instructor: 1, admin: 2, superadmin: 3 };
 const ctx = (extra = {}) => ({ user: { id: 12, role: 'student', name: '검증용 학생', guest_session_id: null }, token: 'session-one', ...extra });
@@ -41,7 +43,8 @@ function fixture(options = {}) {
   registerCareerLogRoutes({ route: (method, pattern, minRole, handler) => routes.push({ method, pattern, minRole, handler }), q, one, withTransaction,
     json: (res, status, body) => { res.status = status; res.body = body; }, roleLevel: role => roles[role] ?? -1,
     guestDeckAccess: async () => ({ allowed: !options.locked }), deckVisibleToStudent: () => !options.locked,
-    checkAccess: async () => ({ allowed: !options.timeBlocked }), todayInTimezone: () => '2026-09-06', cookieSecure: '; Secure' });
+    checkAccess: async () => ({ allowed: !options.timeBlocked }), todayInTimezone: () => '2026-09-06', cookieSecure: '; Secure',
+    schoolStudentId: async user => (user.school_account_id === schoolAccountId && !options.schoolInactive ? schoolSid : null) });
   async function call(method, path, context = ctx(), body = {}, extraHeaders = {}) {
     const route = routes.find(item => item.method === method && item.pattern.test(path.split('?')[0]));
     assert.ok(route, path); assert.notEqual(route.minRole, null);
@@ -151,4 +154,34 @@ test('storage failure never produces a saved response', async () => {
   const app = fixture({ failWrite: true });
   await assert.rejects(app.call('POST', '/api/career-log/records', ctx(), payload()), /database unavailable/);
   assert.equal(app.records.length, 0);
+});
+
+// ---- 모아허브 학교 학생 계정으로 로그인한 학생 ----
+const schoolCtx = () => ctx({ user: { id: 77, role: 'student', name: '김모아', guest_session_id: null, school_account_id: schoolAccountId } });
+test('학교 계정 학생은 시작 단계 없이 계정의 학생 번호로 기록을 저장한다', async () => {
+  const app = fixture({ empty: true });
+  const profile = await app.call('GET', '/api/career-log/profile', schoolCtx());
+  assert.equal(profile.body.active, true);
+  assert.equal(profile.body.school, true);
+  const result = await app.call('POST', '/api/career-log/records', schoolCtx(), payload());
+  assert.equal(result.status, 201);
+  assert.equal(app.records[0].student_id, schoolSid, '모아허브 학교 수업 기록과 같은 학생 번호');
+  assert.equal(app.records[0].raw_data.job.identity, 'school-account');
+  assert.equal(app.identities.length, 0, 'job_identities 에 별도 번호를 만들지 않는다');
+});
+test('학교 계정 학생의 기록 조회는 출처를 가리지 않아 모아허브 기록도 같은 번호로 나온다', async () => {
+  const app = fixture({ empty: true });
+  const result = await app.call('GET', '/api/career-log/records', schoolCtx());
+  assert.equal(result.status, 200);
+  const listSql = app.trace.findLast(item => item.sql.includes('FROM career_log.records r WHERE'));
+  assert.equal(listSql.values[0], schoolSid);
+  assert.equal(listSql.sql.includes("r.source = 'job' AND r.student_id"), false);
+  assert.match(listSql.sql, /r\.source, r\.program_ref/);
+});
+test('비활성 학교 계정은 기록을 시작하거나 저장할 수 없다', async () => {
+  const app = fixture({ empty: true, schoolInactive: true });
+  assert.equal((await app.call('POST', '/api/career-log/start', schoolCtx())).status, 403);
+  assert.equal((await app.call('POST', '/api/career-log/records', schoolCtx(), payload())).status, 409);
+  assert.equal(app.records.length, 0);
+  assert.equal(app.identities.length, 0);
 });

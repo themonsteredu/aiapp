@@ -6,6 +6,9 @@ export function registerCareerLogUI({ route, api, shell, state, esc, toast, navi
     const version = ++renderVersion, hash = location.hash, actor = state.me?.id;
     return () => version === renderVersion && location.hash === hash && state.me?.id === actor;
   }
+  // 모아허브에서 들어온 학교 수업 기록의 이름표. 제목이 없는 기록은 프로그램 이름으로 보여준다.
+  const PROGRAM_LABELS = { 'history-ai-01': '역사 AI 수업', 'science-observation-ai-03': '자연을 관찰하는 AI', 'aviation-mobility-01': '항공 모빌리티', 'hub-submission-v1': '활동 결과물 제출' };
+  const sourceLabel = record => record.source === 'hub' ? '모아허브 · 학교 수업' : (!record.source || record.source === 'job') ? '모아랩 · 진로 수업' : record.source;
   const status = (message, error = false) => `<p class="career-message${error ? ' is-error' : ''}" role="${error ? 'alert' : 'status'}">${esc(message)}</p>`;
 
   async function ensureIdentity(current) {
@@ -42,9 +45,9 @@ export function registerCareerLogUI({ route, api, shell, state, esc, toast, navi
   function recordHtml(record, staff) {
     const date = new Date(record.occurred_at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', dateStyle: 'medium', timeStyle: 'short' });
     return `<article class="career-record">
-      <div class="career-record-meta"><span>${esc(date)}</span><span>학생 작성</span></div>
-      <h2>${esc(record.title || '진로 활동')}</h2><p class="career-record-sub">${staff ? `${esc(record.student_name || '학생')} · ` : ''}${esc(record.session_title || '')}</p>
-      <dl><div><dt>활동 과정</dt><dd>${esc(record.process)}</dd></div>${record.artifact ? `<div><dt>결과물</dt><dd>${esc(record.artifact)}</dd></div>` : ''}<div><dt>돌아보기</dt><dd>${esc(record.reflection)}</dd></div></dl>
+      <div class="career-record-meta"><span>${esc(date)}</span><span>${esc(sourceLabel(record))}</span><span>${record.source === 'hub' ? '수업 활동 기록' : '학생 작성'}</span></div>
+      <h2>${esc(record.title || PROGRAM_LABELS[record.program_ref] || '진로 활동')}</h2><p class="career-record-sub">${staff ? `${esc(record.student_name || '학생')} · ` : ''}${esc(record.session_title || '')}</p>
+      <dl><div><dt>활동 과정</dt><dd>${esc(record.process)}</dd></div>${record.artifact ? `<div><dt>결과물</dt><dd>${esc(record.artifact)}</dd></div>` : ''}${record.reflection ? `<div><dt>돌아보기</dt><dd>${esc(record.reflection)}</dd></div>` : ''}</dl>
       <details class="career-receipt"><summary>저장 접수번호</summary><code>${esc(record.id)}</code></details>
     </article>`;
   }
@@ -64,7 +67,7 @@ export function registerCareerLogUI({ route, api, shell, state, esc, toast, navi
         ${staff ? `<label class="career-filter">수업 선택<select id="career-class"><option value="">전체 담당 수업</option>${classes.map(item => `<option value="${esc(item.session_ref)}"${currentClass === item.session_ref ? ' selected' : ''}>${esc(item.title || '수업')} · ${item.count}개</option>`).join('')}</select></label>` : ''}
         <div id="career-records-list" class="career-records-list" aria-live="polite"></div>
         <div id="career-list-status"></div><button id="career-more" class="btn btn-ghost" hidden>기록 더 보기</button>
-        <p class="career-note">JOB에서 직접 작성한 기록이 표시됩니다. 체험 앱의 자동 제출 기록은 별도 연결 대상입니다.${!staff && state.me.isGuest ? ' 수업 종료 후에는 다음 수업 코드로 참여해 이전 기록을 이어갈 수 있어요. 기기·브라우저를 바꾸거나 사이트 데이터를 지우면 이 연결이 유지되지 않습니다.' : ''}</p>
+        <p class="career-note">${!staff && state.me.schoolAccount ? '학교 계정으로 로그인해 모아허브 학교 수업 기록과 모아랩 진로 수업 기록이 한 사람의 기록으로 함께 표시됩니다. 체험 앱의 자동 제출 기록은 별도 연결 대상입니다.' : 'JOB에서 직접 작성한 기록이 표시됩니다. 체험 앱의 자동 제출 기록은 별도 연결 대상입니다.'}${!staff && state.me.isGuest ? ' 수업 종료 후에는 다음 수업 코드로 참여해 이전 기록을 이어갈 수 있어요. 기기·브라우저를 바꾸거나 사이트 데이터를 지우면 이 연결이 유지되지 않습니다.' : ''}</p>
       </section>`);
       let page = 0;
       let busy = false;

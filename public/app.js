@@ -724,6 +724,7 @@ route(/^#\/login$/, () => {
             <input class="input" name="username" autocomplete="username" required>
             <label>비밀번호</label>
             <input class="input" name="password" type="password" autocomplete="current-password" required>
+            <div class="small muted" style="margin-top:10px;line-height:1.6;word-break:keep-all">학교에서 받은 모아킷 학생 계정(m으로 시작하는 아이디)으로도 로그인할 수 있어요.<br>모아허브와 같은 아이디·비밀번호이고, 진로기록이 한 사람의 기록으로 모입니다.</div>
           ` : `
             <input type="hidden" name="username" value="${esc(loginCreds.username)}">
             <input type="hidden" name="password" value="${esc(loginCreds.password)}">
@@ -2474,7 +2475,7 @@ async function usersPage({ title, description, fixedRole, minLevel }) {
           <tbody>
             ${list.map((u) => `
               <tr>
-                <td data-label="아이디" class="cell-main">${esc(u.username)}</td>
+                <td data-label="아이디" class="cell-main">${esc(u.username)}${u.schoolAccount ? ' <span class="badge green">학교 계정</span>' : ''}</td>
                 <td data-label="이름">${esc(u.name)}</td>
                 <td data-label="역할"><span class="badge ${u.role === 'superadmin' ? 'violet' : u.role === 'admin' ? 'blue' : u.role === 'instructor' ? 'green' : 'gray'}">${esc(u.roleLabel)}</span></td>
                 <td data-label="반">${esc(u.className) || '<span class="muted">-</span>'}</td>
@@ -2485,8 +2486,8 @@ async function usersPage({ title, description, fixedRole, minLevel }) {
                     : !u.manageable ? '<span class="small muted">관리 권한 없음</span>' : `
                   <div class="row-actions">
                     <button class="btn btn-ghost btn-sm" data-act="${u.id}" data-val="${u.active ? 0 : 1}">${u.active ? '비활성화' : '활성화'}</button>
-                    ${u.role === 'student' ? `<button class="btn btn-ghost btn-sm" data-cls="${u.id}">반 변경</button>` : ''}
-                    <button class="btn btn-ghost btn-sm" data-rpw="${u.id}">비번 초기화</button>
+                    ${u.role === 'student' && !u.schoolAccount ? `<button class="btn btn-ghost btn-sm" data-cls="${u.id}">반 변경</button>` : ''}
+                    ${u.schoolAccount ? '<span class="small muted">이름·반·비밀번호는 모아허브에서 관리</span>' : `<button class="btn btn-ghost btn-sm" data-rpw="${u.id}">비번 초기화</button>`}
                     ${myLevel >= 2 ? `<button class="btn btn-danger btn-sm" data-udel="${u.id}">${icon('trash')}</button>` : ''}
                   </div>`}
                 </td>
@@ -2546,7 +2547,7 @@ route(/^#\/instructors$/, () => usersPage({
   title: '강사 관리', description: '수업을 운영하는 강사 계정을 관리합니다.', fixedRole: 'instructor', minLevel: 2,
 }));
 route(/^#\/students$/, () => usersPage({
-  title: '학생 관리', description: '학생 계정과 소속 반을 관리합니다. 반은 웹앱 배정의 기준이 됩니다.', fixedRole: 'student', minLevel: 1,
+  title: '학생 관리', description: '학생 계정과 소속 반을 관리합니다. 반은 웹앱 배정의 기준이 됩니다. 모아허브 학교 계정으로 로그인한 학생은 "학교 계정"으로 표시되고 반은 "학교명 n학년 n반"으로 자동 연결됩니다.', fixedRole: 'student', minLevel: 1,
 }));
 route(/^#\/users$/, () => { location.hash = isAdmin() ? '#/permissions' : '#/students'; });
 
@@ -2772,6 +2773,7 @@ function passwordCardHtml(forced) {
     <div class="card" style="max-width:460px">
       <h2>비밀번호 변경</h2>
       ${forced ? '<p class="msg err" style="margin-bottom:12px">보안을 위해 비밀번호를 변경해야 서비스를 이용할 수 있습니다.</p>' : ''}
+      ${state.me?.schoolAccount ? '<p class="small muted" style="margin-bottom:12px;line-height:1.7">학교 학생 계정입니다. 여기서 바꾼 비밀번호는 모아허브(학교 수업)와 모아랩에 함께 적용됩니다.</p>' : ''}
       <form id="pw-form" class="form-grid" style="grid-template-columns:1fr">
         <div><label>현재 비밀번호</label><input name="current" type="password" required autocomplete="current-password"></div>
         <div><label>새 비밀번호 (8자 이상)</label><input name="next" type="password" required minlength="8" autocomplete="new-password"></div>
@@ -2816,6 +2818,7 @@ route(/^#\/settings$/, async () => {
             <span class="k">이름</span><span class="v">${esc(u.name)}</span>
             <span class="k">아이디</span><span class="v">${esc(u.username)}</span>
             <span class="k">역할</span><span><span class="badge blue">${esc(u.roleLabel)}</span></span>
+            ${u.schoolAccount ? '<span class="k">계정 종류</span><span><span class="badge green">학교 학생 계정 · 모아허브 공통</span></span>' : ''}
             ${u.className ? `<span class="k">소속 반</span><span class="v">${esc(u.className)}</span>` : ''}
             ${isAdmin() && state.settings?.two_factor ? `<span class="k">2단계 인증</span><span>${u.totpEnabled ? '<span class="badge green">등록됨</span>' : '<span class="badge amber">다음 로그인 시 등록</span>'}</span>` : ''}
           </div>
