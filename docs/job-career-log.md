@@ -58,3 +58,13 @@
 - 임시 비밀번호는 발급 응답에만 있고 화면 메모리에 두었다가 학교를 바꾸거나 탭이 가려지면 지운다. DB에는 해시만 남는다.
 - 검증: `test/school-registry.test.js`(권한·발급·중복·열기) + 로컬 PostgreSQL에 중앙 표를 재현하고 모아랩·모아허브 서버를 함께 띄워 "모아랩 학교 등록 → 발급 → 모아허브에 열기 → 모아허브 관리자가 조회·추가 발급 → 반대 방향 열기·닫기 → 발급 학생 양쪽 로그인"을 실제 HTTP로 확인. 운영 DB의 실제 계정으로는 아직 확인하지 않았다.
 - 아직 없는 것: 모아허브 없이 이미 모아랩에서 수업 코드·강사 발급 계정으로 남긴 기록(job_identities 번호)을 나중에 받은 공통 계정에 잇는 단계. 운영 DB에 그런 기록은 아직 0건이라 급하지 않다.
+
+## 학생 기록 열람·수정 (2026-09-13)
+
+관리자와 "기록 권한"을 받은 담당자가 한 학생의 학교 수업(모아허브)·진로 수업(모아랩) 기록 전체를 보고, 정정하거나 새 기록을 남기는 화면. 메뉴 `학생 기록 열람`(`#/student-records`), 코드는 `lib/school-registry.js`(recordLevel 이하)·`lib/school-registry-api.js`·`public/school-accounts-ui.js` 하단.
+
+- **누가 보나**: 모아랩 관리자(admin 이상)는 중앙에 등록된 **모든 학교**를 열람·수정한다. 일반 강사는 기본적으로 아무것도 못 보고, 관리자가 학교 단위로 `열람만` 또는 `열람+수정` 권한(`moakit_accounts.record_access`, 정의 `db/moakit-accounts-record-access.sql`)을 준 계정만 그 학교를 본다. 외부 진로기관 담당자는 강사 관리에서 계정을 만든 뒤 이 권한을 준다. 권한을 받은 강사에게만 메뉴가 뜬다(`/api/me`의 `canViewRecords`).
+- **수정은 새 버전**: 기록 원본은 append-only 라서 UPDATE 하지 않는다. 정정하면 `supersedes_id`로 원본을 가리키는 새 레코드(`source='job'`, `raw_data.job.entry_kind='revision'`, `revised_by`, `original_source`)를 넣고, 목록은 `NOT EXISTS (… supersedes_id = r.id)` 조건으로 최신 버전만 보여준다. 이미 정정된 원본을 다시 정정하면 409. 이전 버전은 `…/records/:id/history`(재귀 질의)로 본다. 학생 본인 목록(모아랩 `/api/career-log/records`, 모아허브 `readRecords`)도 같은 조건으로 최신만 보여준다.
+- **기록 추가**: `program_ref='job-staff-record'`, `session_ref='job-school:<학교>'`, `raw_data.job.entry_kind='staff_record'` + 작성자(`author`, `author_name`)·제목. 학생 본인 화면에는 "담당자 작성"으로 표시된다.
+- 열람(첫 페이지)·정정·추가·권한 부여/해제는 모두 `moakit_accounts.audit`에 남는다 (`records_viewed`, `record_revised`, `record_added`, `record_access_granted:<level>:<user>`, `record_access_revoked:<user>`).
+- 검증: `test/school-registry.test.js` 기록 권한 3건 + 로컬 PostgreSQL 실제 HTTP(권한 전 403 → 열람만 부여 → 정정 403 → 열람+수정 → 추가·정정·이력·재정정 409 → 학생 본인은 최신만). 운영 DB에는 migration `moakit_accounts_record_access` 적용 완료.

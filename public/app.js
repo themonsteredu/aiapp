@@ -520,7 +520,8 @@ function menuGroups() {
         ['#/career-records', 'fileText', '수업 진로기록'],
         ['#/projects', 'briefcase', 'AI 프로젝트'],
       ]],
-      ['사용자', [['#/students', 'users', '학생 관리'], ['#/school-accounts', 'userCheck', '학교 학생 계정']]],
+      ['사용자', [['#/students', 'users', '학생 관리'], ['#/school-accounts', 'userCheck', '학교 학생 계정'],
+        ...(state.me.canViewRecords ? [['#/student-records', 'fileText', '학생 기록 열람']] : [])]],
       ['운영', [
         ['#/settings', 'sliders', '설정'],
       ]],
@@ -540,6 +541,7 @@ function menuGroups() {
       ['#/instructors', 'userCheck', '강사 관리'],
       ['#/students', 'users', '학생 관리'],
       ['#/school-accounts', 'userCheck', '학교 학생 계정'],
+      ['#/student-records', 'fileText', '학생 기록 열람'],
     ]],
     ['운영', [
       ['#/schedules', 'calendar', '시간표 접근 설정'],

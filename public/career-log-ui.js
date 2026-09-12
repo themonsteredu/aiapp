@@ -7,8 +7,8 @@ export function registerCareerLogUI({ route, api, shell, state, esc, toast, navi
     return () => version === renderVersion && location.hash === hash && state.me?.id === actor;
   }
   // 모아허브에서 들어온 학교 수업 기록의 이름표. 제목이 없는 기록은 프로그램 이름으로 보여준다.
-  const PROGRAM_LABELS = { 'history-ai-01': '역사 AI 수업', 'science-observation-ai-03': '자연을 관찰하는 AI', 'aviation-mobility-01': '항공 모빌리티', 'hub-submission-v1': '활동 결과물 제출' };
-  const sourceLabel = record => record.source === 'hub' ? '모아허브 · 학교 수업' : (!record.source || record.source === 'job') ? '모아랩 · 진로 수업' : record.source;
+  const PROGRAM_LABELS = { 'history-ai-01': '역사 AI 수업', 'science-observation-ai-03': '자연을 관찰하는 AI', 'aviation-mobility-01': '항공 모빌리티', 'hub-submission-v1': '활동 결과물 제출', 'job-staff-record': '담당자 기록' };
+  const sourceLabel = record => record.source === 'hub' ? '모아허브 · 학교 수업' : record.entry_kind === 'staff_record' ? '담당자 작성' : (!record.source || record.source === 'job') ? '모아랩 · 진로 수업' : record.source;
   const status = (message, error = false) => `<p class="career-message${error ? ' is-error' : ''}" role="${error ? 'alert' : 'status'}">${esc(message)}</p>`;
 
   async function ensureIdentity(current) {
@@ -45,7 +45,7 @@ export function registerCareerLogUI({ route, api, shell, state, esc, toast, navi
   function recordHtml(record, staff) {
     const date = new Date(record.occurred_at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', dateStyle: 'medium', timeStyle: 'short' });
     return `<article class="career-record">
-      <div class="career-record-meta"><span>${esc(date)}</span><span>${esc(sourceLabel(record))}</span><span>${record.source === 'hub' ? '수업 활동 기록' : '학생 작성'}</span></div>
+      <div class="career-record-meta"><span>${esc(date)}</span><span>${esc(sourceLabel(record))}</span><span>${record.supersedes_id ? '담당자 정정' : record.source === 'hub' ? '수업 활동 기록' : record.entry_kind === 'staff_record' ? '담당자 기록' : '학생 작성'}</span></div>
       <h2>${esc(record.title || PROGRAM_LABELS[record.program_ref] || '진로 활동')}</h2><p class="career-record-sub">${staff ? `${esc(record.student_name || '학생')} · ` : ''}${esc(record.session_title || '')}</p>
       <dl><div><dt>활동 과정</dt><dd>${esc(record.process)}</dd></div>${record.artifact ? `<div><dt>결과물</dt><dd>${esc(record.artifact)}</dd></div>` : ''}${record.reflection ? `<div><dt>돌아보기</dt><dd>${esc(record.reflection)}</dd></div>` : ''}</dl>
       <details class="career-receipt"><summary>저장 접수번호</summary><code>${esc(record.id)}</code></details>
