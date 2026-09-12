@@ -1,0 +1,15 @@
+/* 학교 학생 계정 발급 화면 (public/school-accounts-ui.js) */
+.sa-page { word-break: keep-all; }
+.sa-card { margin-bottom: 18px; }
+.sa-help { font-size: 12.5px; color: var(--text-3, #66776f); line-height: 1.7; margin: 10px 0 0; }
+.sa-check { display: flex; align-items: flex-start; gap: 8px; margin: 12px 0; font-size: 14px; line-height: 1.6; cursor: pointer; }
+.sa-check input { width: auto; margin-top: 4px; flex: none; }
+.sa-access { border-top: 1px solid var(--line, #e4ecea); margin-top: 16px; padding-top: 12px; }
+.sa-roster { width: 100%; box-sizing: border-box; min-height: 130px; margin-top: 6px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; line-height: 1.6; }
+.sa-preview { margin-top: 14px; padding: 14px; background: var(--bg-2, #f4f9f8); border: 1px solid var(--line, #e4ecea); border-radius: 10px; }
+.sa-preview .tbl-scroll { max-height: 320px; overflow: auto; margin: 10px 0; padding: 0; }
+.sa-issued { border: 1px solid var(--brand-600, #0a6f61); }
+.sa-issued code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+.sa-edit { border-top: 1px solid var(--line, #e4ecea); margin-top: 16px; padding-top: 12px; }
+.sa-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+@media (max-width: 600px) { .sa-actions > * { flex: 1 1 160px; } }

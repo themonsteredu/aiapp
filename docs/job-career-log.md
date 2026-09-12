@@ -46,3 +46,15 @@
 - 학생 본인 조회는 출처를 가리지 않습니다. 학교 계정 학생의 `내 진로기록`에는 모아허브 학교 수업 기록이 `모아허브 · 학교 수업` 이름표로 함께 나옵니다. 강사 조회는 이전과 같이 모아랩 기록만 담당 수업 범위로 봅니다.
 - 스키마: `users.school_account_id UUID UNIQUE` (`lib/db.js` MIGRATIONS, 콜드스타트 때 자동 적용). 중앙 테이블은 바꾸지 않습니다. 모아랩 서버의 `DATABASE_URL`은 중앙 테이블과 같은 Supabase 프로젝트(`vypnobpmyadtcvxhtagn`)를 가리켜야 합니다.
 - 검증: `test/school-accounts.test.js`, `test/career-log.test.js`(학교 계정 3건)와 로컬 PostgreSQL에 중앙 테이블을 재현해 로그인 → 비밀번호 변경 → 기록 저장 → 허브·랩 기록 통합 조회 → 관리자 차단까지 실제 HTTP로 확인했습니다. 운영 DB의 실제 학교 계정으로는 아직 확인하지 않았습니다.
+
+## 모아랩에서 학교·기관 학생 계정 발급 + 제품 간 "열기" (2026-09-12)
+
+모아허브를 쓰지 않는 학교의 학생도 처음부터 모아킷 공통 계정을 갖게 하려고, 모아허브의 학교 계정 관리와 같은 기능을 모아랩에 넣었다. 강사·관리자 메뉴 `학교 학생 계정`(`#/school-accounts`). 수업 입장 코드 흐름은 바뀌지 않는다.
+
+- 서버: `lib/school-registry.js`(발급·관리 로직, 모아허브 `lib/student-accounts/service.js`와 같은 규칙) · `lib/school-roster.js`(명단 검증) · `lib/school-registry-api.js`(`/api/school-accounts/*`). 화면: `public/school-accounts-ui.js` + `public/school-roster.js`(모아허브 `account-roster.js` 복사) + `public/school-accounts.css`.
+- 발급 주체 표시는 `moakit_accounts.managers.issuer = 'moakit-lab'`, 감사 기록의 actor 는 `moakit-lab:<강사 ID>`. 학생 번호(`career_student_id`)는 무작위 UUID이고 계정은 모아허브가 발급한 것과 구별되지 않는다 — 같은 아이디·비밀번호로 양쪽 로그인, 진로기록 한 번호.
+- **제품 간 열기**: 중앙 표 `moakit_accounts.school_access (school_id, issuer)`. 행이 있으면 그 제품의 관리자(admin 이상)가 담당자 지정 없이 학교를 보고 학생을 발급·관리하며 담당 강사를 지정할 수 있다. 강사(일반)는 여전히 담당 지정이 필요하다. 모아랩 화면의 `모아허브에 열기` 체크박스 ↔ 모아허브 학교 관리 화면의 `모아랩에 열기` 체크박스. 표 정의는 teacher-s-project `db/moakit-accounts-0002-school-access.sql`, 운영 DB에는 migration `moakit_accounts_school_access`로 2026-09-12 적용 완료.
+- 담당 강사 지정은 모아랩 활성 강사·관리자 계정만(학교 계정 연결 행 제외). 학교·기관 등록과 열기는 관리자만.
+- 임시 비밀번호는 발급 응답에만 있고 화면 메모리에 두었다가 학교를 바꾸거나 탭이 가려지면 지운다. DB에는 해시만 남는다.
+- 검증: `test/school-registry.test.js`(권한·발급·중복·열기) + 로컬 PostgreSQL에 중앙 표를 재현하고 모아랩·모아허브 서버를 함께 띄워 "모아랩 학교 등록 → 발급 → 모아허브에 열기 → 모아허브 관리자가 조회·추가 발급 → 반대 방향 열기·닫기 → 발급 학생 양쪽 로그인"을 실제 HTTP로 확인. 운영 DB의 실제 계정으로는 아직 확인하지 않았다.
+- 아직 없는 것: 모아허브 없이 이미 모아랩에서 수업 코드·강사 발급 계정으로 남긴 기록(job_identities 번호)을 나중에 받은 공통 계정에 잇는 단계. 운영 DB에 그런 기록은 아직 0건이라 급하지 않다.

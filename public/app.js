@@ -520,7 +520,7 @@ function menuGroups() {
         ['#/career-records', 'fileText', '수업 진로기록'],
         ['#/projects', 'briefcase', 'AI 프로젝트'],
       ]],
-      ['사용자', [['#/students', 'users', '학생 관리']]],
+      ['사용자', [['#/students', 'users', '학생 관리'], ['#/school-accounts', 'userCheck', '학교 학생 계정']]],
       ['운영', [
         ['#/settings', 'sliders', '설정'],
       ]],
@@ -539,6 +539,7 @@ function menuGroups() {
       ['#/permissions', 'shield', '권한 관리'],
       ['#/instructors', 'userCheck', '강사 관리'],
       ['#/students', 'users', '학생 관리'],
+      ['#/school-accounts', 'userCheck', '학교 학생 계정'],
     ]],
     ['운영', [
       ['#/schedules', 'calendar', '시간표 접근 설정'],
@@ -3412,6 +3413,10 @@ route(/^#\/settlement$/, async () => {
     const { registerCareerLogUI } = await import('/career-log-ui.js');
     registerCareerLogUI({ route, api, shell, state, esc, toast, navigate, isStaff });
   } catch (err) { console.error('진로기록 화면을 불러오지 못했습니다.', err); }
+  try {
+    const { registerSchoolAccountsUI } = await import('/school-accounts-ui.js');
+    registerSchoolAccountsUI({ route, api, shell, state, esc, toast, navigate, level, icon });
+  } catch (err) { console.error('학교 학생 계정 화면을 불러오지 못했습니다.', err); }
   try {
     const { registerProjectUI } = await import('/project-ui.js');
     registerProjectUI({
