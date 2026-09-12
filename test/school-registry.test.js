@@ -86,3 +86,93 @@ test('학교 등록·담당 지정·모아허브에 열기는 관리자만, 대�
   await f.registry.grantManager(admin, created.id, '7');
   assert.ok(f.managers.some(m => m.school === created.id && m.teacher === '7'));
 });
+
+// ---- 진로기록 열람·수정 권한 ----
+function recordFixture() {
+  const calls = [], schools = [{ id: school, name: '모아초등학교' }, { id: crypto.randomUUID(), name: '나래중학교' }];
+  const access = [], records = [];
+  const account = { id: crypto.randomUUID(), username: 'mabc', career_student_id: crypto.randomUUID(), display_name: '김모아', class_name: '2학년 1반 3번' };
+  const hubRecord = { id: crypto.randomUUID(), student_id: account.career_student_id, session_ref: 'hub-board:1', program_ref: 'science-observation-ai-03', occurred_at: '2026-09-05T00:00:00Z', process: '민들레 관찰', artifact: null, reflection: null, source: 'hub', raw_data: { hub: { board_id: '1' } }, supersedes_id: null };
+  records.push(hubRecord);
+  async function q(sql, values = []) {
+    calls.push({ sql, values });
+    if (sql.includes('FROM moakit_accounts.schools WHERE id')) return schools.some(s => s.id === values[0]) ? [{ ok: 1 }] : [];
+    if (sql.startsWith('SELECT id, name FROM moakit_accounts.schools')) return schools;
+    if (sql.startsWith('SELECT name FROM moakit_accounts.schools')) return [{ name: '모아초등학교' }];
+    if (sql.includes('FROM moakit_accounts.record_access v JOIN')) return access.filter(a => a.user === values[1]).map(a => ({ id: a.school, name: schools.find(s => s.id === a.school).name, level: a.level }));
+    if (sql.startsWith('SELECT level FROM moakit_accounts.record_access')) { const a = access.find(a => a.school === values[0] && a.user === values[2]); return a ? [{ level: a.level }] : []; }
+    if (sql.startsWith('SELECT 1 FROM moakit_accounts.record_access')) return access.some(a => a.user === values[1]) ? [{ ok: 1 }] : [];
+    if (sql.startsWith('INSERT INTO moakit_accounts.record_access')) { const i = access.findIndex(a => a.school === values[0] && a.user === values[2]); const row = { school: values[0], user: values[2], level: values[3] }; if (i >= 0) access[i] = row; else access.push(row); return []; }
+    if (sql.startsWith('DELETE FROM moakit_accounts.record_access')) { const i = access.findIndex(a => a.school === values[0] && a.user === values[2]); if (i >= 0) access.splice(i, 1); return []; }
+    if (sql.includes('FROM moakit_accounts.managers')) return [];
+    if (sql.includes('FROM moakit_accounts.school_access')) return [];
+    if (sql.includes('JOIN moakit_accounts.memberships m') && sql.includes('WHERE a.id = $1')) return values[0] === account.id && values[1] === school ? [account] : [];
+    if (sql.includes('FROM moakit_accounts.memberships m JOIN moakit_accounts.accounts a')) return [account];
+    if (sql.includes('pg_advisory_xact_lock')) return [];
+    if (sql.startsWith('INSERT INTO moakit_accounts.audit')) return [];
+    if (sql.includes('WHERE r.student_id = $1 AND NOT EXISTS')) return records.filter(r => r.student_id === values[0] && !records.some(n => n.supersedes_id === r.id)).map(r => ({ ...r, title: r.raw_data.job?.title || '' }));
+    if (sql.startsWith('SELECT * FROM career_log.records WHERE id')) return records.filter(r => r.id === values[0] && r.student_id === values[1]);
+    if (sql.startsWith('SELECT 1 FROM career_log.records WHERE student_id = $1 AND supersedes_id')) return records.some(r => r.supersedes_id === values[1]) ? [{ ok: 1 }] : [];
+    if (sql.startsWith('INSERT INTO career_log.records')) { const r = { id: crypto.randomUUID(), student_id: values[0], session_ref: values[1], program_ref: sql.includes("'job-staff-record'") ? 'job-staff-record' : values[2], process: sql.includes("'job-staff-record'") ? values[3] : values[4], artifact: sql.includes("'job-staff-record'") ? values[4] : values[5], reflection: sql.includes("'job-staff-record'") ? values[5] : values[6], source: 'job', raw_data: JSON.parse(sql.includes("'job-staff-record'") ? values[6] : values[7]), supersedes_id: sql.includes("'job-staff-record'") ? null : values[9] }; records.push(r); return [{ id: r.id }]; }
+    if (sql.includes('WITH RECURSIVE chain')) { const out = []; let cur = records.find(r => r.id === values[0]); while (cur && cur.supersedes_id) { cur = records.find(r => r.id === cur.supersedes_id); if (cur) out.push(cur); } return out; }
+    throw new Error('Unhandled: ' + sql.slice(0, 80));
+  }
+  const one = async (sql, values) => (await q(sql, values))[0] || null;
+  const withTransaction = work => work({ q, one });
+  return { registry: createSchoolRegistry({ withTransaction, roleLevel }), calls, access, records, account, hubRecord };
+}
+const sky = { id: 77, role: 'instructor', name: '스카이 담당자' };
+
+test('관리자는 중앙의 모든 학교 기록을 열람·수정하고, 권한 없는 강사는 아무것도 못 본다', async () => {
+  const f = recordFixture();
+  assert.equal((await f.registry.recordSchools(admin)).length, 2);
+  assert.equal(await f.registry.canViewRecords(admin), true);
+  assert.equal(await f.registry.canViewRecords(sky), false);
+  assert.deepEqual(await f.registry.recordSchools(sky), []);
+  await rejects(f.registry.members(sky, school), 403);
+  await rejects(f.registry.studentRecords(sky, school, f.account.id), 403);
+  const data = await f.registry.studentRecords(admin, school, f.account.id);
+  assert.equal(data.level, 'edit');
+  assert.equal(data.records.length, 1);
+  assert.ok(f.calls.some(c => c.sql.startsWith('INSERT INTO moakit_accounts.audit') && c.values[2] === 'records_viewed'), '열람은 감사 기록에 남는다');
+});
+
+test('열람 권한은 읽기만, 수정 권한은 정정·추가까지. 권한 부여는 관리자만', async () => {
+  const f = recordFixture();
+  await rejects(f.registry.setRecordAccess(sky, school, '77', 'edit'), 403);
+  await rejects(f.registry.setRecordAccess(admin, school, '77', 'owner'), 400);
+  await f.registry.setRecordAccess(admin, school, '77', 'view');
+  assert.equal(await f.registry.canViewRecords(sky), true);
+  assert.deepEqual((await f.registry.recordSchools(sky)).map(s => s.level), ['view']);
+  assert.equal((await f.registry.members(sky, school)).students.length, 1);
+  await rejects(f.registry.reviseRecord(sky, school, f.account.id, f.hubRecord.id, { process: '고침' }, '스카이'), 403);
+  await rejects(f.registry.addRecord(sky, school, f.account.id, { title: '상담', process: '내용' }, '스카이'), 403);
+  await f.registry.setRecordAccess(admin, school, '77', 'edit');
+  const added = await f.registry.addRecord(sky, school, f.account.id, { title: '진로 상담 1회차', process: '흥미 검사 결과를 함께 읽음', occurred_at: '2026-09-10' }, '스카이');
+  assert.ok(added.id);
+  const staff = f.records.find(r => r.id === added.id);
+  assert.equal(staff.program_ref, 'job-staff-record');
+  assert.equal(staff.raw_data.job.entry_kind, 'staff_record');
+  assert.equal(staff.raw_data.job.author, 'moakit-lab:77');
+  await f.registry.setRecordAccess(admin, school, '77', null);
+  assert.equal(await f.registry.canViewRecords(sky), false);
+});
+
+test('정정은 원본을 두고 새 버전을 잇고, 두 번째 정정은 최신 버전에만 된다', async () => {
+  const f = recordFixture();
+  const first = await f.registry.reviseRecord(admin, school, f.account.id, f.hubRecord.id, { process: '민들레와 토끼풀을 비교 관찰', reflection: '잎 모양이 다르다' }, '관리자');
+  assert.equal(first.supersedes, f.hubRecord.id);
+  const revised = f.records.find(r => r.id === first.id);
+  assert.equal(revised.supersedes_id, f.hubRecord.id);
+  assert.equal(revised.program_ref, f.hubRecord.program_ref, '수업·프로그램 정보는 원본을 따른다');
+  assert.equal(revised.raw_data.job.entry_kind, 'revision');
+  assert.equal(revised.raw_data.job.original_source, 'hub');
+  assert.ok(f.records.some(r => r.id === f.hubRecord.id), '원본은 지워지지 않는다');
+  assert.equal(f.calls.some(c => /^(UPDATE|DELETE) /.test(c.sql) && c.sql.includes('career_log.records')), false, '원본 UPDATE/DELETE 없음');
+  const list = await f.registry.studentRecords(admin, school, f.account.id);
+  assert.deepEqual(list.records.map(r => r.id), [first.id], '최신 버전만 보인다');
+  await rejects(f.registry.reviseRecord(admin, school, f.account.id, f.hubRecord.id, { process: '또 고침' }, '관리자'), 409);
+  const history = await f.registry.recordHistory(admin, school, f.account.id, first.id);
+  assert.deepEqual(history.history.map(h => h.id), [f.hubRecord.id]);
+  await rejects(f.registry.reviseRecord(admin, school, f.account.id, first.id, { process: '' }, '관리자'), 400);
+});

@@ -13,3 +13,6 @@
 .sa-edit { border-top: 1px solid var(--line, #e4ecea); margin-top: 16px; padding-top: 12px; }
 .sa-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 @media (max-width: 600px) { .sa-actions > * { flex: 1 1 160px; } }
+.sa-history { margin-top: 12px; padding: 12px; background: var(--bg-2, #f4f9f8); border: 1px dashed var(--line, #cfdcd7); border-radius: 8px; }
+.sa-history-item + .sa-history-item { border-top: 1px solid var(--line, #e4ecea); margin-top: 10px; padding-top: 10px; }
+.sa-page .career-records-list { margin: 16px 0; }
