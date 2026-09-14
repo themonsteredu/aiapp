@@ -90,7 +90,7 @@ test('학교 등록·담당 지정·모아허브에 열기는 관리자만, 대�
 // ---- 진로기록 열람·수정 권한 ----
 function recordFixture() {
   const calls = [], schools = [{ id: school, name: '모아초등학교' }, { id: crypto.randomUUID(), name: '나래중학교' }];
-  const access = [], records = [];
+  const access = [], records = [], photos = [];
   const account = { id: crypto.randomUUID(), username: 'mabc', career_student_id: crypto.randomUUID(), display_name: '김모아', class_name: '2학년 1반 3번' };
   const hubRecord = { id: crypto.randomUUID(), student_id: account.career_student_id, session_ref: 'hub-board:1', program_ref: 'science-observation-ai-03', occurred_at: '2026-09-05T00:00:00Z', process: '민들레 관찰', artifact: null, reflection: null, source: 'hub', raw_data: { hub: { board_id: '1' } }, supersedes_id: null };
   records.push(hubRecord);
@@ -109,17 +109,40 @@ function recordFixture() {
     if (sql.includes('JOIN moakit_accounts.memberships m') && sql.includes('WHERE a.id = $1')) return values[0] === account.id && values[1] === school ? [account] : [];
     if (sql.includes('FROM moakit_accounts.memberships m JOIN moakit_accounts.accounts a')) return [account];
     if (sql.includes('pg_advisory_xact_lock')) return [];
+    if (sql.startsWith('SELECT id, record_id, mime, caption, position FROM career_record_photos')) {
+      return photos.filter(p => values[0].includes(p.record_id)).sort((a, b) => a.position - b.position);
+    }
+    if (sql.startsWith('SELECT COALESCE(max(position)')) {
+      const mine = photos.filter(p => p.record_id === values[0]);
+      return [{ next: mine.length ? Math.max(...mine.map(p => p.position)) + 1 : 0 }];
+    }
+    if (sql.includes('INSERT INTO career_record_photos') && sql.includes('SELECT $1')) {
+      const keep = values[2] || null;
+      for (const p of photos.filter(p => p.record_id === values[1] && (!keep || keep.includes(p.id))).sort((a, b) => a.position - b.position)) {
+        photos.push({ ...p, id: crypto.randomUUID(), record_id: values[0] });
+      }
+      return [];
+    }
+    if (sql.startsWith('INSERT INTO career_record_photos')) {
+      photos.push({ id: crypto.randomUUID(), record_id: values[0], student_uuid: values[1], school_id: values[2], mime: values[3], data: values[4], caption: values[5], position: values[6], created_by: values[7] });
+      return [];
+    }
+    if (sql.includes('FROM career_record_photos WHERE id = $1 AND student_uuid')) return photos.filter(p => p.id === values[0] && p.student_uuid === values[1]);
+    if (sql.includes('FROM career_record_photos WHERE id = $1')) return photos.filter(p => p.id === values[0]);
     if (sql.startsWith('INSERT INTO moakit_accounts.audit')) return [];
-    if (sql.includes('WHERE r.student_id = $1 AND NOT EXISTS')) return records.filter(r => r.student_id === values[0] && !records.some(n => n.supersedes_id === r.id)).map(r => ({ ...r, title: r.raw_data.job?.title || '' }));
+    if (sql.includes('WHERE r.student_id = $1 AND NOT EXISTS')) return records.filter(r => r.student_id === values[0] && !records.some(n => n.supersedes_id === r.id)).map(r => ({ ...r, title: r.raw_data.job?.title || '', entry_kind: r.raw_data.job?.entry_kind || null, observation: r.raw_data.job?.observation || null }));
     if (sql.startsWith('SELECT * FROM career_log.records WHERE id')) return records.filter(r => r.id === values[0] && r.student_id === values[1]);
     if (sql.startsWith('SELECT 1 FROM career_log.records WHERE student_id = $1 AND supersedes_id')) return records.some(r => r.supersedes_id === values[1]) ? [{ ok: 1 }] : [];
-    if (sql.startsWith('INSERT INTO career_log.records')) { const r = { id: crypto.randomUUID(), student_id: values[0], session_ref: values[1], program_ref: sql.includes("'job-staff-record'") ? 'job-staff-record' : values[2], process: sql.includes("'job-staff-record'") ? values[3] : values[4], artifact: sql.includes("'job-staff-record'") ? values[4] : values[5], reflection: sql.includes("'job-staff-record'") ? values[5] : values[6], source: 'job', raw_data: JSON.parse(sql.includes("'job-staff-record'") ? values[6] : values[7]), supersedes_id: sql.includes("'job-staff-record'") ? null : values[9] }; records.push(r); return [{ id: r.id }]; }
+    if (sql.startsWith('INSERT INTO career_log.records')) {
+      const r = { id: crypto.randomUUID(), student_id: values[0], session_ref: values[1], program_ref: values[2], occurred_at: values[3], process: values[4], artifact: values[5], reflection: values[6], source: 'job', raw_data: JSON.parse(values[7]), supersedes_id: values[9] ?? null };
+      records.push(r); return [{ id: r.id }];
+    }
     if (sql.includes('WITH RECURSIVE chain')) { const out = []; let cur = records.find(r => r.id === values[0]); while (cur && cur.supersedes_id) { cur = records.find(r => r.id === cur.supersedes_id); if (cur) out.push(cur); } return out; }
     throw new Error('Unhandled: ' + sql.slice(0, 80));
   }
   const one = async (sql, values) => (await q(sql, values))[0] || null;
   const withTransaction = work => work({ q, one });
-  return { registry: createSchoolRegistry({ withTransaction, roleLevel }), calls, access, records, account, hubRecord };
+  return { registry: createSchoolRegistry({ withTransaction, roleLevel }), calls, access, records, photos, account, hubRecord };
 }
 const sky = { id: 77, role: 'instructor', name: '스카이 담당자' };
 
@@ -175,4 +198,106 @@ test('정정은 원본을 두고 새 버전을 잇고, 두 번째 정정은 최�
   const history = await f.registry.recordHistory(admin, school, f.account.id, first.id);
   assert.deepEqual(history.history.map(h => h.id), [f.hubRecord.id]);
   await rejects(f.registry.reviseRecord(admin, school, f.account.id, first.id, { process: '' }, '관리자'), 400);
+});
+
+// ---- 진로 관찰 기록 + 활동 사진 ----
+const partner = { id: 91, role: 'partner', name: '스카이 진로업체' };
+const jpeg = caption => ({ data: `data:image/jpeg;base64,${'A'.repeat(120)}`, caption });
+
+test('진로업체 담당자는 권한을 받은 학교만 보고, 학교·계정 관리에는 닿지 못한다', async () => {
+  const f = recordFixture();
+  assert.equal(await f.registry.canViewRecords(partner), false);
+  await rejects(f.registry.studentRecords(partner, school, f.account.id), 403);
+  await f.registry.setRecordAccess(admin, school, '91', 'edit');
+  assert.equal(await f.registry.canViewRecords(partner), true);
+  assert.deepEqual((await f.registry.recordSchools(partner)).map(s => s.name), ['모아초등학교'], '권한 받은 학교만');
+  assert.equal((await f.registry.members(partner, school)).level, 'edit');
+  // 학교 등록·계정 발급·권한 부여는 여전히 관리자 몫이다.
+  await rejects(f.registry.createSchool(partner, '남의 학교'), 403);
+  await rejects(f.registry.schools(partner), 403);
+  await rejects(f.registry.setRecordAccess(partner, school, '92', 'edit'), 403);
+  await rejects(f.registry.grantManager(partner, school, '92'), 403);
+});
+
+test('진로 관찰 기록은 관찰 항목과 사진을 함께 남기고, 학생 목록에 최신 버전으로 나온다', async () => {
+  const f = recordFixture();
+  await f.registry.setRecordAccess(admin, school, '91', 'edit');
+  const added = await f.registry.addRecord(partner, school, f.account.id, {
+    kind: 'career_observation', title: '항공 진로 체험 2회차', occurred_at: '2026-09-11',
+    activity: '관제 시뮬레이터를 직접 조작했습니다.', strengths: '순서를 정리해 설명하는 힘이 좋습니다.', next_step: '공항 견학 프로그램을 권합니다.',
+    photos: [jpeg('시뮬레이터 실습'), jpeg('')],
+  }, '스카이 진로업체');
+  assert.equal(added.photos, 2);
+  const saved = f.records.find(r => r.id === added.id);
+  assert.equal(saved.program_ref, 'job-career-observation');
+  assert.equal(saved.raw_data.job.entry_kind, 'career_observation');
+  assert.equal(saved.raw_data.job.author, 'moakit-lab:91');
+  assert.deepEqual(saved.raw_data.job.observation, {
+    activity: '관제 시뮬레이터를 직접 조작했습니다.', strengths: '순서를 정리해 설명하는 힘이 좋습니다.', next_step: '공항 견학 프로그램을 권합니다.',
+  });
+  // 관찰 항목은 원래 칸에도 들어가 학생 본인 화면·모아허브가 그대로 읽는다.
+  assert.equal(saved.process, '관제 시뮬레이터를 직접 조작했습니다.');
+  assert.equal(saved.artifact, '순서를 정리해 설명하는 힘이 좋습니다.');
+  assert.equal(saved.reflection, '공항 견학 프로그램을 권합니다.');
+
+  const list = await f.registry.studentRecords(partner, school, f.account.id);
+  const card = list.records.find(r => r.id === added.id);
+  assert.equal(card.photos.length, 2);
+  assert.equal(card.photos[0].caption, '시뮬레이터 실습');
+  assert.equal(card.photos[0].data, undefined, '목록에는 사진 바이트를 내려보내지 않는다');
+});
+
+test('관찰 기록을 정정하면 고른 사진만 새 버전으로 이어지고 원본은 그대로 남는다', async () => {
+  const f = recordFixture();
+  await f.registry.setRecordAccess(admin, school, '91', 'edit');
+  const added = await f.registry.addRecord(partner, school, f.account.id, {
+    kind: 'career_observation', title: '체험 1회차', activity: '처음 기록', photos: [jpeg('첫 장'), jpeg('둘째 장')],
+  }, '스카이');
+  const original = f.photos.filter(p => p.record_id === added.id);
+  const revised = await f.registry.reviseRecord(partner, school, f.account.id, added.id, {
+    activity: '고친 기록', strengths: '관찰 내용을 보탰습니다.',
+    keep_photo_ids: [original[0].id], photos: [jpeg('정정하며 추가')],
+  }, '스카이');
+  const next = f.records.find(r => r.id === revised.id);
+  assert.equal(next.raw_data.job.entry_kind, 'revision');
+  assert.equal(next.raw_data.job.observation_kind, 'career_observation', '정정본도 관찰 기록으로 읽힌다');
+  assert.equal(next.raw_data.job.observation.activity, '고친 기록');
+  assert.equal(next.process, '고친 기록');
+  assert.equal(f.photos.filter(p => p.record_id === added.id).length, 2, '원본의 사진은 그대로');
+  const carried = f.photos.filter(p => p.record_id === revised.id);
+  assert.deepEqual(carried.map(p => p.caption), ['첫 장', '정정하며 추가'], '남기기로 고른 사진 + 새 사진');
+  const history = await f.registry.recordHistory(partner, school, f.account.id, revised.id);
+  assert.equal(history.history[0].photos.length, 2, '이전 버전에는 뺀 사진도 남아 있다');
+});
+
+test('사진은 이미지 형식·장수·용량을 넘기면 저장되지 않는다', async () => {
+  const f = recordFixture();
+  await f.registry.setRecordAccess(admin, school, '91', 'edit');
+  const base = { kind: 'career_observation', title: '체험', activity: '내용' };
+  await rejects(f.registry.addRecord(partner, school, f.account.id, { ...base, photos: [{ data: 'data:application/pdf;base64,AAAA' }] }, '스카이'), 400);
+  await rejects(f.registry.addRecord(partner, school, f.account.id, { ...base, photos: [{ data: 'https://example.com/a.jpg' }] }, '스카이'), 400);
+  await rejects(f.registry.addRecord(partner, school, f.account.id, { ...base, photos: Array.from({ length: 7 }, () => jpeg('')) }, '스카이'), 400);
+  await rejects(f.registry.addRecord(partner, school, f.account.id, { ...base, photos: [{ data: `data:image/jpeg;base64,${'A'.repeat(2_800_001)}` }] }, '스카이'), 400);
+  // 일반 담당자 기록에는 사진을 붙일 수 없다.
+  await rejects(f.registry.addRecord(partner, school, f.account.id, { title: '상담', process: '내용', photos: [jpeg('')] }, '스카이'), 400);
+  // 제목과 활동 모습은 필수다.
+  await rejects(f.registry.addRecord(partner, school, f.account.id, { kind: 'career_observation', title: '체험', activity: '' }, '스카이'), 400);
+  assert.equal(f.photos.length, 0);
+});
+
+test('사진은 기록 권한이 있는 학교만, 학생은 자기 번호의 것만 열 수 있다', async () => {
+  const f = recordFixture();
+  await f.registry.setRecordAccess(admin, school, '91', 'edit');
+  const added = await f.registry.addRecord(partner, school, f.account.id, {
+    kind: 'career_observation', title: '체험', activity: '내용', photos: [jpeg('한 장')],
+  }, '스카이');
+  const photo = f.photos.find(p => p.record_id === added.id);
+  assert.equal((await f.registry.photo(admin, photo.id)).mime, 'image/jpeg');
+  assert.equal((await f.registry.photo(partner, photo.id)).id, photo.id);
+  await rejects(f.registry.photo(sky, photo.id), 403, '권한 없는 강사는 못 본다');
+  await f.registry.setRecordAccess(admin, school, '91', null);
+  await rejects(f.registry.photo(partner, photo.id), 403, '권한을 거두면 사진도 닫힌다');
+  assert.equal((await f.registry.photoForStudent(f.account.career_student_id, photo.id)).id, photo.id);
+  await rejects(f.registry.photoForStudent(crypto.randomUUID(), photo.id), 404, '다른 학생 번호로는 못 연다');
+  await rejects(f.registry.photo(admin, 'not-a-uuid'), 404);
 });

@@ -68,3 +68,48 @@
 - **기록 추가**: `program_ref='job-staff-record'`, `session_ref='job-school:<학교>'`, `raw_data.job.entry_kind='staff_record'` + 작성자(`author`, `author_name`)·제목. 학생 본인 화면에는 "담당자 작성"으로 표시된다.
 - 열람(첫 페이지)·정정·추가·권한 부여/해제는 모두 `moakit_accounts.audit`에 남는다 (`records_viewed`, `record_revised`, `record_added`, `record_access_granted:<level>:<user>`, `record_access_revoked:<user>`).
 - 검증: `test/school-registry.test.js` 기록 권한 3건 + 로컬 PostgreSQL 실제 HTTP(권한 전 403 → 열람만 부여 → 정정 403 → 열람+수정 → 추가·정정·이력·재정정 409 → 학생 본인은 최신만). 운영 DB에는 migration `moakit_accounts_record_access` 적용 완료.
+
+## 진로업체 담당자 계정 + 진로 관찰 기록·활동 사진 (2026-09-14)
+
+기록을 쓰는 사람이 학생·강사만이 아니게 됐다. **모아킷 관리자가 기본을 적고, 수업에 들어간 외부 진로업체 직원이 활동 모습과 사진을 채운다.** 그 직원에게는 학생 기록 말고는 아무것도 보이면 안 된다.
+
+### 진로업체 담당자 역할 `partner`
+
+- `ROLE_LEVEL = { student: 0, partner: 0.5, instructor: 1, admin: 2, superadmin: 3 }` (`lib/auth.js`, `public/app.js`에 같은 값). 강사보다 낮으므로 `minRole: 'instructor'` 이상인 API는 역할 서열만으로 막힌다.
+- 서열만으로는 `minRole: 'student'` 경로(수업 자료·시간표·웹앱·게이트 토큰 등)가 열려 버린다. 그래서 디스패처에 **`PARTNER_ALLOW` 화이트리스트**(`lib/api.js`)를 두고 목록 밖 경로는 전부 403. 기록 경로를 새로 만들면 이 목록에도 넣어야 한다 (`test/partner-access.test.js`가 허용·차단 경로를 고정한다)
+- 계정 발급은 **관리자 이상만** (`canAssignRole`), 관리는 관리자·슈퍼관리자만 (`canManage`). 화면은 `#/partners`
+- **계약·보안 동의 대상에서 제외한다** (`needsAgreement`). 그 계약서는 모아랩 강사용이고, 동의 화면(`/api/agreement`)이 강사 전용이라 걸어 두면 로그인만 되고 아무것도 못 하는 상태가 된다
+- 화면에서는 사이드바가 `학생 기록 열람·작성`·`비밀번호 변경` 둘뿐이고, 헤더 전체 검색과 강사용 도움말도 감춘다. 라우터의 `PARTNER_ALLOWED_HASH` 밖으로 나가면 `#/student-records`로 되돌린다
+- 볼 수 있는 학교는 기존 `moakit_accounts.record_access` 그대로다 — 관리자가 학교별로 `열람만`/`열람+수정`을 준다. 권한이 없으면 학교 목록이 비어 있다. 계약 여부와 무관하게 중앙에 등록된 학교면 기록을 쌓을 수 있다
+
+### 진로 관찰 기록 `career_observation`
+
+학생이 쓰는 3칸(활동 과정·결과물·돌아보기)과 묻는 것이 다르다. **표의 칸은 그대로 쓰고**(다른 화면과 모아허브가 읽으므로) 무엇을 적은 칸인지는 `raw_data.job.observation`에 남긴다.
+
+| 관찰 항목 | 저장 칸 | 필수 |
+|---|---|---|
+| `activity` 수업에서 한 활동과 학생의 모습 | `process` | ○ |
+| `strengths` 드러난 강점·흥미 | `artifact` | |
+| `next_step` 추천하는 다음 활동 | `reflection` | |
+
+- `program_ref='job-career-observation'`, `session_ref='job-school:<학교>'`, `raw_data.job.entry_kind='career_observation'`
+- 정정본은 `entry_kind='revision'`이라 원래 종류를 알 수 없다 → `raw_data.job.observation_kind='career_observation'`를 함께 남기고, 읽는 쪽은 `observation` 값 유무까지 함께 본다 (`isObservation`)
+- 기존 `job-staff-record`(상담·행정용 일반 담당자 기록)는 그대로 남아 있고 화면에서 골라 쓴다
+
+### 활동 사진
+
+- 표는 **모아랩 쪽 `career_record_photos`** (`lib/db.js` MIGRATIONS, 콜드스타트 때 자동 적용). `career_log.records`는 append-only 라 사진을 거기 넣지 않는다
+- 브라우저가 긴 변 1600px·JPEG 0.82로 줄여 data URL 로 보내고 서버는 **JPG·PNG·WEBP / 한 장 2MB / 한 기록 6장**까지만 받는다. 기록과 사진은 한 트랜잭션에서 함께 저장된다
+- **사진 바이트는 목록 응답에 실리지 않는다.** 목록에는 `{id, mime, caption}`만 내려가고 실제 이미지는 `GET /api/career-photos/<id>`로만 열린다. 학생 본인은 자기 `student_uuid`의 사진만, 담당자는 `recordLevel`이 있는 학교의 사진만. 응답은 `private, no-store`
+- 권한 확인은 `record_id`가 아니라 `student_uuid`·`school_id`로 한다 — 기록이 정정돼도 사진 주인은 그대로다
+- **정정하면 사진은 새 버전으로 복사된다.** `keep_photo_ids`로 고른 것만 넘어가고, 빠진 사진도 이전 버전에는 그대로 남는다 (원본 불변)
+- 학생용 경로라 사진도 **학생 접근 시간표**의 적용을 받는다 (`STUDENT_EXEMPT` 밖). 허용 시간 밖에서는 학생 본인도 못 연다
+
+### 모아허브 쪽 (`teacher-s-project`)
+
+학생 화면(`public/student-accounts.js`)은 `record.artifact`를 제목으로 쓰는데, 진로 관찰 기록의 `artifact`는 "드러난 강점·흥미"라서 그대로 두면 관찰 내용이 제목이 된다. `observationOf()`로 가려내 제목은 `job.title`을 쓰고, 강점·다음 활동은 **선생님이 쓴 내용**으로 이름표를 붙인다(`내가 남긴 생각`이 아니다). 사진은 모아랩에서 본다고 안내한다.
+
+### 아직 없는 것
+
+- **수업 입장 코드로만 참여한 학생**은 대상이 아니다. 담당자 화면은 학교→학생으로 찾는데 코드 학생은 학교 계정이 없고, 기록 번호(`job_identities`)가 기기 쿠키에만 묶여 있어 서버가 학생 행에서 찾아갈 수 없다. 포함하려면 `job_identities`에 게스트 사용자 연결 열을 더하고 담당자↔수업 배정 개념이 필요하다
+- 사진은 DB에 base64 로 들어간다. `lib/storage.js`(Supabase Storage)로 옮기는 것은 다음 단계

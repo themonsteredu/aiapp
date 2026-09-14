@@ -7,8 +7,12 @@ export function registerCareerLogUI({ route, api, shell, state, esc, toast, navi
     return () => version === renderVersion && location.hash === hash && state.me?.id === actor;
   }
   // 모아허브에서 들어온 학교 수업 기록의 이름표. 제목이 없는 기록은 프로그램 이름으로 보여준다.
-  const PROGRAM_LABELS = { 'history-ai-01': '역사 AI 수업', 'science-observation-ai-03': '자연을 관찰하는 AI', 'aviation-mobility-01': '항공 모빌리티', 'hub-submission-v1': '활동 결과물 제출', 'job-staff-record': '담당자 기록' };
-  const sourceLabel = record => (record.source === 'hub' || record.original_source === 'hub') ? '모아허브 · 학교 수업' : record.entry_kind === 'staff_record' ? '담당자 작성' : (!record.source || record.source === 'job') ? '모아랩 · 진로 수업' : record.source;
+  const PROGRAM_LABELS = { 'history-ai-01': '역사 AI 수업', 'science-observation-ai-03': '자연을 관찰하는 AI', 'aviation-mobility-01': '항공 모빌리티', 'hub-submission-v1': '활동 결과물 제출', 'job-staff-record': '담당자 기록', 'job-career-observation': '진로 관찰 기록' };
+  // 담당자(모아킷 관리자·진로업체)가 남긴 진로 관찰 기록. 정정본은 entry_kind 가 'revision' 이라 observation 값도 함께 본다.
+  const isObservation = record => !!record.observation || record.entry_kind === 'career_observation' || record.program_ref === 'job-career-observation';
+  const OBS_LABELS = [['activity', 'process', '수업에서 한 활동과 나의 모습'], ['strengths', 'artifact', '선생님이 본 나의 강점·흥미'], ['next_step', 'reflection', '추천받은 다음 활동']];
+  const sourceLabel = record => (record.source === 'hub' || record.original_source === 'hub') ? '모아허브 · 학교 수업'
+    : (!record.source || record.source === 'job') ? '모아랩 · 진로 수업' : record.source;
   const status = (message, error = false) => `<p class="career-message${error ? ' is-error' : ''}" role="${error ? 'alert' : 'status'}">${esc(message)}</p>`;
 
   async function ensureIdentity(current) {
@@ -42,12 +46,33 @@ export function registerCareerLogUI({ route, api, shell, state, esc, toast, navi
     return false;
   }
 
+  // 진로 관찰 기록은 같은 칸을 관찰 항목 이름으로 보여준다.
+  function bodyHtml(record) {
+    if (isObservation(record)) {
+      const obs = record.observation || {};
+      return `<dl>${OBS_LABELS.map(([key, column, label]) => {
+        const value = obs[key] ?? record[column] ?? '';
+        return value ? `<div><dt>${esc(label)}</dt><dd>${esc(value)}</dd></div>` : '';
+      }).join('')}</dl>`;
+    }
+    return `<dl><div><dt>활동 과정</dt><dd>${esc(record.process)}</dd></div>${record.artifact ? `<div><dt>결과물</dt><dd>${esc(record.artifact)}</dd></div>` : ''}${record.reflection ? `<div><dt>돌아보기</dt><dd>${esc(record.reflection)}</dd></div>` : ''}</dl>`;
+  }
+  // 활동 사진. 사진 자체는 로그인·본인 확인을 거친 /api/career-photos/<id> 로만 열린다.
+  const photoStrip = record => (record.photos && record.photos.length)
+    ? `<div class="career-photos">${record.photos.map(photo => `<figure>
+        <img src="/api/career-photos/${encodeURIComponent(photo.id)}" alt="${esc(photo.caption || '활동 사진')}" loading="lazy">
+        ${photo.caption ? `<figcaption>${esc(photo.caption)}</figcaption>` : ''}</figure>`).join('')}</div>`
+    : '';
+
   function recordHtml(record, staff) {
     const date = new Date(record.occurred_at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', dateStyle: 'medium', timeStyle: 'short' });
+    const kind = record.supersedes_id ? '담당자 정정' : record.source === 'hub' ? '수업 활동 기록'
+      : isObservation(record) ? '담당 선생님 관찰' : record.entry_kind === 'staff_record' ? '담당자 기록' : '학생 작성';
     return `<article class="career-record">
-      <div class="career-record-meta"><span>${esc(date)}</span><span>${esc(sourceLabel(record))}</span><span>${record.supersedes_id ? '담당자 정정' : record.source === 'hub' ? '수업 활동 기록' : record.entry_kind === 'staff_record' ? '담당자 기록' : '학생 작성'}</span></div>
+      <div class="career-record-meta"><span>${esc(date)}</span><span>${esc(sourceLabel(record))}</span><span>${esc(kind)}</span></div>
       <h2>${esc(record.title || PROGRAM_LABELS[record.program_ref] || '진로 활동')}</h2><p class="career-record-sub">${staff ? `${esc(record.student_name || '학생')} · ` : ''}${esc(record.session_title || '')}</p>
-      <dl><div><dt>활동 과정</dt><dd>${esc(record.process)}</dd></div>${record.artifact ? `<div><dt>결과물</dt><dd>${esc(record.artifact)}</dd></div>` : ''}${record.reflection ? `<div><dt>돌아보기</dt><dd>${esc(record.reflection)}</dd></div>` : ''}</dl>
+      ${bodyHtml(record)}
+      ${photoStrip(record)}
       <details class="career-receipt"><summary>저장 접수번호</summary><code>${esc(record.id)}</code></details>
     </article>`;
   }
