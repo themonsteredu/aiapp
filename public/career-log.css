@@ -38,3 +38,9 @@
 .career-view-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 @media (max-width: 900px) { .career-records-list { grid-template-columns: 1fr; } }
 @media (max-width: 540px) { .career-heading { align-items: flex-start; flex-direction: column; gap: 12px; } .career-record, .career-start { padding: 20px; } .career-compose textarea, .career-compose select { font-size: 16px; } .career-actions > * { flex: 1 1 180px; } }
+
+/* 담당자가 넣은 활동 사진 (public/career-log-ui.js) */
+.career-photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin: 12px 0 4px; }
+.career-photos figure { margin: 0; border: 1px solid var(--line, #e8edf4); border-radius: 10px; overflow: hidden; background: var(--bg-2, #f4f9f8); }
+.career-photos img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; }
+.career-photos figcaption { padding: 7px 9px; font-size: 12.5px; line-height: 1.6; color: var(--text-3, #66776f); word-break: keep-all; }

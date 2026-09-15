@@ -49,7 +49,17 @@
 - 진로기록 `student_id`는 계정의 `career_student_id`다. 학교 수업(모아허브)과 진로 수업(모아랩) 기록이 같은 번호로 모이는 근거이므로 `job_identities`로 우회하지 않는다
 - 비밀번호 형식(`scrypt1:salt:key`, N=32768)과 잠금 규칙은 모아허브 `lib/student-accounts/security.js`와 같아야 한다. 한쪽만 바꾸면 다른 쪽 로그인이 깨진다
 - **모아랩도 학교·기관 학생 계정을 발급한다** (`#/school-accounts`, `lib/school-registry.js` + `lib/school-registry-api.js`). 발급 주체는 `managers.issuer='moakit-lab'`. 학교를 모아허브에 열어 주는 표는 `moakit_accounts.school_access` — 정의는 teacher-s-project `db/moakit-accounts-0002-school-access.sql`. 명단 규칙(`lib/school-roster.js`, `public/school-roster.js`)은 모아허브 `roster.js`·`account-roster.js` 복사본이라 한쪽을 고치면 다른 쪽도 맞춘다
-- **학생 기록 열람·수정**(`#/student-records`): 관리자는 모든 학교, 강사는 `moakit_accounts.record_access` 권한(열람만/열람+수정)을 받은 학교만. 기록 원본은 append-only 라 **정정은 `supersedes_id`로 잇는 새 레코드**이고 목록은 최신 버전만 보여준다(`NOT EXISTS` 조건 — 학생 본인 목록과 모아허브 `readRecords`도 같은 조건). 설계는 `docs/job-career-log.md` 하단
+- **학생 기록 열람·수정**(`#/student-records`): 관리자는 모든 학교, 강사·진로업체 담당자는 `moakit_accounts.record_access` 권한(열람만/열람+수정)을 받은 학교만. 기록 원본은 append-only 라 **정정은 `supersedes_id`로 잇는 새 레코드**이고 목록은 최신 버전만 보여준다(`NOT EXISTS` 조건 — 학생 본인 목록과 모아허브 `readRecords`도 같은 조건). 설계는 `docs/job-career-log.md` 하단
+
+## 진로업체 담당자와 진로 관찰 기록
+
+- **역할 `partner`(진로업체 담당자)는 강사보다 낮다** (`ROLE_LEVEL`의 0.5 — `lib/auth.js`와 `public/app.js`에 같은 값). 강사용 API는 서열로 막히지만 학생용 경로(`minRole: 'student'`)는 서열만으로 열리므로 **`lib/api.js`의 `PARTNER_ALLOW` 화이트리스트가 최종 방어선이다.** 기록 관련 API를 새로 만들면 이 목록에 같이 넣는다 (`test/partner-access.test.js`)
+- 계정은 관리자만 발급한다(`#/partners`). 계약·보안 동의 대상이 아니다 — 동의 화면이 강사 전용이라 걸면 아무것도 못 하는 계정이 된다
+- **진로 관찰 기록**(`program_ref='job-career-observation'`)은 학생의 3칸과 저장 칸을 공유하되 `raw_data.job.observation`(`activity`/`strengths`/`next_step`)으로 무엇을 적은 칸인지 남긴다. 정정본은 `entry_kind='revision'`이 되므로 `observation_kind`도 함께 본다
+- **활동 사진은 모아랩 쪽 `career_record_photos`에 넣는다** — `career_log.records`는 append-only 라 거기에 붙이지 않는다. 목록 응답에는 `{id, mime, caption}`만 싣고 이미지는 `GET /api/career-photos/<id>`로만 연다(학생 본인 = 자기 `student_uuid`, 담당자 = `record_access` 있는 학교). 정정하면 `keep_photo_ids`로 고른 사진만 새 버전으로 복사되고 이전 버전에는 전부 남는다
+- **사진 크기는 Vercel 요청 본문 4.5MB 한도가 정한다.** 장당 상한만 두면 여러 장을 올릴 때 요청이 잘려 핸들러에 닿지도 않는다 — 장당(900,000자)과 **한 요청 합계**(3,200,000자)를 함께 막고, 브라우저(1280px·JPEG 0.75, 크면 단계적으로 더 축소)도 같은 값을 쓴다. 한쪽만 바꾸면 사용자에게는 이유 없는 실패로 보인다
+- 정정(`reviseRecord`)은 `addRecord` 와 같은 규칙을 받아야 한다 — 관찰 기록이 아니면 사진 거부, 장수는 **이어받는 것 + 새로 넣는 것**을 합쳐서 센다
+- 모아허브 학생 화면(`teacher-s-project public/student-accounts.js`)은 `artifact`를 제목으로 쓰므로, 관찰 기록은 `observationOf()`로 가려내 제목·이름표를 따로 붙인다. **한쪽 표시 규칙을 바꾸면 다른 쪽도 맞춘다**
 
 ## 문구 원칙
 

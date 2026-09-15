@@ -82,6 +82,8 @@ svg.ic { width: 18px; height: 18px; stroke: currentColor; stroke-width: 1.8; fil
 .form-grid label, .field-label {
   display: block; font-size: 12px; font-weight: 700; color: var(--text-2); margin-bottom: 6px;
 }
+/* 라벨 옆의 "선택 입력" 같은 보조 표시 — 라벨 글자와 구분되게 흐리고 가볍게 */
+.form-grid label .sub, .field-label .sub { font-weight: 500; color: var(--text-3); }
 .msg { margin-top: 10px; font-size: 13px; min-height: 18px; }
 .msg.err { color: var(--red-600); }
 .msg.ok { color: var(--green-600); }

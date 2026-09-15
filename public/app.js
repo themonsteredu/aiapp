@@ -17,8 +17,9 @@ const state = {
   dashAt: 0,
 };
 
-const ROLE_LABELS = { superadmin: '슈퍼관리자', admin: '관리자', instructor: '강사', student: '학생' };
-const ROLE_LEVEL = { student: 0, instructor: 1, admin: 2, superadmin: 3 };
+const ROLE_LABELS = { superadmin: '슈퍼관리자', admin: '관리자', instructor: '강사', partner: '진로업체 담당자', student: '학생' };
+// partner(진로업체 담당자)는 강사보다 낮다 — 강사용 화면과 API가 열리지 않는다. 서버는 lib/auth.js 에 같은 값.
+const ROLE_LEVEL = { student: 0, partner: 0.5, instructor: 1, admin: 2, superadmin: 3 };
 const DAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
 const DAY_NAMES = ['일', '월', '화', '수', '목', '금', '토'];
 
@@ -28,6 +29,10 @@ function esc(s) {
 function level(role) { return ROLE_LEVEL[role] ?? -1; }
 function isStaff() { return state.me && level(state.me.role) >= 1; }
 function isAdmin() { return state.me && level(state.me.role) >= 2; }
+// 진로업체 담당자: 학생 기록 화면만 쓴다. 다른 화면은 라우터에서 되돌려보낸다.
+function isPartner() { return !!state.me && state.me.role === 'partner'; }
+const PARTNER_HOME = '#/student-records';
+const PARTNER_ALLOWED_HASH = /^(#\/student-records|#\/password|#\/login|#\/settings)$/;
 
 /* ---------------- 아이콘 (Feather 스타일 인라인 SVG) ---------------- */
 const ICONS = {
@@ -412,6 +417,7 @@ async function navigate() {
     location.hash = '#/agreement';
     return;
   }
+  if (isPartner() && !PARTNER_ALLOWED_HASH.test(hash)) { location.hash = PARTNER_HOME; return; }
   if (state.me && state.me.role === 'student' && state.access && !state.access.allowed
       && !['#/password', '#/login', '#/settings'].includes(hash)) {
     renderBlocked();
@@ -426,7 +432,7 @@ async function navigate() {
       return;
     }
   }
-  location.hash = state.me ? (isStaff() ? '#/' : '#/decks') : '#/login';
+  location.hash = state.me ? (isPartner() ? PARTNER_HOME : isStaff() ? '#/' : '#/decks') : '#/login';
 }
 window.addEventListener('hashchange', navigate);
 
@@ -496,6 +502,13 @@ function logListHtml(logs) {
 /* ---------------- 셸 (사이드바 + 헤더) ---------------- */
 function menuGroups() {
   const r = state.me.role;
+  // 진로업체 담당자: 학생 기록과 비밀번호 변경만. 수업 자료·학생 관리·운영 메뉴는 아예 만들지 않는다.
+  if (r === 'partner') {
+    return [['진로기록', [
+      ['#/student-records', 'fileText', '학생 기록 열람·작성'],
+      ['#/password', 'lock', '비밀번호 변경'],
+    ]]];
+  }
   if (state.me.isGuest) {
     if (state.me.projectTeamId) {
       return [['프로젝트', [['#/project', 'briefcase', 'AI 프로젝트'], ['#/career-records', 'fileText', '내 진로기록']]]];
@@ -539,6 +552,7 @@ function menuGroups() {
     ['사용자', [
       ['#/permissions', 'shield', '권한 관리'],
       ['#/instructors', 'userCheck', '강사 관리'],
+      ['#/partners', 'briefcase', '진로업체 담당자'],
       ['#/students', 'users', '학생 관리'],
       ['#/school-accounts', 'userCheck', '학교 학생 계정'],
       ['#/student-records', 'fileText', '학생 기록 열람'],
@@ -595,10 +609,10 @@ function shell(title, contentHtml) {
         <header class="header">
           <button class="hamburger" id="btn-hamburger" aria-label="메뉴">${icon('menu')}</button>
           <div class="page-title">${esc(title)}</div>
-          <div class="search-box">
+          ${isPartner() ? '' : `<div class="search-box">
             ${icon('search')}
             <input id="global-search" placeholder="웹앱, 강사, 학생, 로그 검색" autocomplete="off">
-          </div>
+          </div>`}
           ${isStaff() ? `<button class="icon-btn" id="btn-notif" aria-label="알림">${icon('bell')}${notifCount ? `<span class="dot">${notifCount > 99 ? '99+' : notifCount}</span>` : ''}</button>` : ''}
           <button class="icon-btn" id="btn-help" aria-label="도움말">${icon('help')}</button>
           <div class="profile-chip">
@@ -621,7 +635,8 @@ function shell(title, contentHtml) {
   const shellEl = document.getElementById('shell');
   document.getElementById('btn-hamburger').onclick = () => shellEl.classList.toggle('side-open');
   document.getElementById('side-overlay').onclick = () => shellEl.classList.remove('side-open');
-  document.getElementById('global-search').onkeydown = (e) => {
+  const globalSearch = document.getElementById('global-search');
+  if (globalSearch) globalSearch.onkeydown = (e) => {
     if (e.key === 'Enter' && e.target.value.trim()) {
       location.hash = `#/search/${encodeURIComponent(e.target.value.trim())}`;
     }
@@ -631,10 +646,17 @@ function shell(title, contentHtml) {
       <h3>도움말</h3>
       <div class="m-sub">모아랩 사용 안내</div>
       <div style="font-size:13px;line-height:2">
+        ${isPartner() ? `
+        · <b>학생 기록 열람·작성</b>에서 학교와 학생을 고른 뒤 <b>기록 추가</b>를 누릅니다.<br>
+        · <b>진로 관찰 기록</b>은 수업에서 본 모습·강점·다음 활동을 적고 활동 사진을 함께 올립니다.<br>
+        · 저장한 기록은 지워지지 않습니다. 고칠 내용은 <b>수정</b>으로 새 버전을 남기고, 이전 내용도 보관됩니다.<br>
+        · 학생 본인도 자기 기록과 사진을 볼 수 있습니다. 다른 학교·다른 학생은 열리지 않습니다.
+        ` : `
         · <b>웹앱/PPT 관리</b>에서 슬라이드 웹앱을 만들고 반·기간을 배정합니다.<br>
         · <b>시간표 접근 설정</b>의 허용 시간에만 학생이 접속할 수 있습니다.<br>
         · <b>보안 설정</b>에서 캡처 방지 강화·워터마크 추적을 켜고 끕니다.<br>
         · 모든 접속·차단·보안 이벤트는 <b>접속 기록</b>에 남습니다.
+        `}
       </div>
       <div class="m-actions"><button class="btn btn-primary" id="m-close">확인</button></div>`)
       .querySelector('#m-close').onclick = (e) => e.target.closest('.modal-back').remove();
@@ -779,6 +801,7 @@ route(/^#\/login$/, () => {
       : state.mustAgree ? '#/agreement'
       : afterLoginHash ? afterLoginHash
       : data.user.projectTeamId ? '#/project'
+      : data.user.role === 'partner' ? PARTNER_HOME
       : (level(data.user.role) >= 1 ? '#/' : '#/decks');
     afterLoginHash = '';
   };
@@ -2480,7 +2503,7 @@ async function usersPage({ title, description, fixedRole, minLevel }) {
               <tr>
                 <td data-label="아이디" class="cell-main">${esc(u.username)}${u.schoolAccount ? ' <span class="badge green">학교 계정</span>' : ''}</td>
                 <td data-label="이름">${esc(u.name)}</td>
-                <td data-label="역할"><span class="badge ${u.role === 'superadmin' ? 'violet' : u.role === 'admin' ? 'blue' : u.role === 'instructor' ? 'green' : 'gray'}">${esc(u.roleLabel)}</span></td>
+                <td data-label="역할"><span class="badge ${u.role === 'superadmin' ? 'violet' : u.role === 'admin' ? 'blue' : u.role === 'instructor' ? 'green' : u.role === 'partner' ? 'amber' : 'gray'}">${esc(u.roleLabel)}</span></td>
                 <td data-label="반">${esc(u.className) || '<span class="muted">-</span>'}</td>
                 <td data-label="상태">${u.active ? '<span class="badge green">활성</span>' : '<span class="badge red">비활성</span>'}</td>
                 <td data-label="생성일" class="small muted">${esc(u.createdAt).slice(0, 10)}</td>
@@ -2548,6 +2571,11 @@ route(/^#\/permissions$/, () => usersPage({
 }));
 route(/^#\/instructors$/, () => usersPage({
   title: '강사 관리', description: '수업을 운영하는 강사 계정을 관리합니다.', fixedRole: 'instructor', minLevel: 2,
+}));
+route(/^#\/partners$/, () => usersPage({
+  title: '진로업체 담당자',
+  description: '외부 진로교육 업체 직원에게 주는 계정입니다. 이 계정은 학생 기록 화면만 볼 수 있고 수업 자료·학생 관리·운영 메뉴에는 들어오지 못합니다. 계정을 만든 뒤 아래 "학교 학생 계정" 화면에서 학교별로 기록 권한(열람만 / 열람+수정)을 주세요.',
+  fixedRole: 'partner', minLevel: 2,
 }));
 route(/^#\/students$/, () => usersPage({
   title: '학생 관리', description: '학생 계정과 소속 반을 관리합니다. 반은 웹앱 배정의 기준이 됩니다. 모아허브 학교 계정으로 로그인한 학생은 "학교 계정"으로 표시되고 반은 "학교명 n학년 n반"으로 자동 연결됩니다.', fixedRole: 'student', minLevel: 1,
@@ -2800,7 +2828,7 @@ function bindPasswordForm() {
       await api('POST', '/api/password', { current: f.get('current'), next: f.get('next') });
       state.me.mustChangePassword = false;
       toast('비밀번호가 변경되었습니다.');
-      setTimeout(() => { location.hash = isStaff() ? '#/' : '#/decks'; }, 500);
+      setTimeout(() => { location.hash = isPartner() ? PARTNER_HOME : isStaff() ? '#/' : '#/decks'; }, 500);
     } catch (err) { msg.textContent = err.message; msg.className = 'msg err'; }
   };
 }
@@ -2955,7 +2983,7 @@ route(/^#\/agreement$/, async () => {
       state.mustAgree = false;
       state.me.agreedVersion = ag.version;
       toast('동의가 완료되었습니다.');
-      location.hash = isStaff() ? '#/' : '#/decks';
+      location.hash = isPartner() ? PARTNER_HOME : isStaff() ? '#/' : '#/decks';
     } catch (err) { msg.textContent = err.message; msg.className = 'msg err'; }
   };
 });
@@ -3427,7 +3455,7 @@ route(/^#\/settlement$/, async () => {
   } catch (err) {
     console.error('AI 프로젝트 화면을 불러오지 못했습니다.', err);
   }
-  if (!location.hash) location.hash = state.me ? (isStaff() ? '#/' : '#/decks') : '#/login';
+  if (!location.hash) location.hash = state.me ? (isPartner() ? PARTNER_HOME : isStaff() ? '#/' : '#/decks') : '#/login';
   navigate();
   // 시간제 접근 상태 주기 갱신 (5분)
   setInterval(refreshMe, 5 * 60 * 1000);

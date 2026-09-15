@@ -29,7 +29,8 @@ function fixture(options = {}) {
   async function q(sql, values = []) {
     trace.push({ sql, values });
     if (sql.includes('INSERT INTO career_log.job_identities')) identities.push({ student_id: values[0], account_user_id: values[1], guest_key_hash: values[2] });
-    if (sql.includes('FROM career_log.records')) return [];
+    if (sql.includes('FROM career_record_photos')) return (options.photos || []).filter(photo => values[0].includes(photo.record_id));
+    if (sql.includes('FROM career_log.records')) return options.listRows || [];
     return [];
   }
   async function withTransaction(work) {
@@ -44,13 +45,26 @@ function fixture(options = {}) {
     json: (res, status, body) => { res.status = status; res.body = body; }, roleLevel: role => roles[role] ?? -1,
     guestDeckAccess: async () => ({ allowed: !options.locked }), deckVisibleToStudent: () => !options.locked,
     checkAccess: async () => ({ allowed: !options.timeBlocked }), todayInTimezone: () => '2026-09-06', cookieSecure: '; Secure',
-    schoolStudentId: async user => (user.school_account_id === schoolAccountId && !options.schoolInactive ? schoolSid : null) });
+    schoolStudentId: async user => (user.school_account_id === schoolAccountId && !options.schoolInactive ? schoolSid : null),
+    photoForStudent: async (studentUuid, photoId) => {
+      const photo = (options.photos || []).find(item => item.id === photoId && item.student_uuid === studentUuid);
+      if (!photo) throw Object.assign(new Error('사진을 찾을 수 없습니다.'), { status: 404 });
+      return photo;
+    },
+    photoForStaff: async (user, photoId) => {
+      const photo = (options.photos || []).find(item => item.id === photoId);
+      if (!photo || !options.staffMaySeePhoto) throw Object.assign(new Error('이 사진을 볼 권한이 없습니다.'), { status: 403 });
+      return photo;
+    } });
   async function call(method, path, context = ctx(), body = {}, extraHeaders = {}) {
     const route = routes.find(item => item.method === method && item.pattern.test(path.split('?')[0]));
     assert.ok(route, path); assert.notEqual(route.minRole, null);
+    const params = route.pattern.exec(path.split('?')[0]).slice(1);
     const req = { method, url: path, headers: { host: 'job.moakit.ai', origin: 'https://job.moakit.ai', ...extraHeaders } };
-    const res = { headers: {}, setHeader(key, value) { this.headers[key] = value; } };
-    await route.handler(req, res, { ...context, body }); return res;
+    const res = { headers: {}, setHeader(key, value) { this.headers[key] = value; },
+      writeHead(status, headers) { this.status = status; Object.assign(this.headers, headers); return this; },
+      end(value) { this.bytes = value; } };
+    await route.handler(req, res, { params, ...context, body }); return res;
   }
   return { call, records, identities, trace };
 }
@@ -184,4 +198,41 @@ test('비활성 학교 계정은 기록을 시작하거나 저장할 수 없다'
   assert.equal((await app.call('POST', '/api/career-log/records', schoolCtx(), payload())).status, 409);
   assert.equal(app.records.length, 0);
   assert.equal(app.identities.length, 0);
+});
+
+// ---- 담당자가 남긴 진로 관찰 기록의 활동 사진 ----
+const photoId = crypto.randomUUID();
+const photoRow = { id: photoId, record_id: 'rec-1', student_uuid: sid, mime: 'image/jpeg', data: Buffer.from('사진').toString('base64'), caption: '시뮬레이터 실습' };
+const observationRow = { id: 'rec-1', occurred_at: '2026-09-11T00:00:00Z', process: '관제 시뮬레이터를 조작', artifact: '설명하는 힘', reflection: '공항 견학', source: 'job', program_ref: 'job-career-observation', entry_kind: 'career_observation', observation: { activity: '관제 시뮬레이터를 조작' }, supersedes_id: null };
+
+test('학생 목록에는 사진 이름표만 나오고 사진 자체는 내려가지 않는다', async () => {
+  const app = fixture({ listRows: [observationRow], photos: [photoRow] });
+  const result = await app.call('GET', '/api/career-log/records');
+  assert.equal(result.status, 200);
+  assert.deepEqual(result.body.records[0].photos, [{ id: photoId, mime: 'image/jpeg', caption: '시뮬레이터 실습' }]);
+  assert.equal(result.body.records[0].photos[0].data, undefined);
+  assert.equal(result.body.records[0].observation.activity, '관제 시뮬레이터를 조작');
+});
+
+test('활동 사진은 본인 학생 번호로만 열리고 응답을 저장하지 않는다', async () => {
+  const app = fixture({ photos: [photoRow] });
+  const ok = await app.call('GET', `/api/career-photos/${photoId}`);
+  assert.equal(ok.status, 200);
+  assert.equal(ok.headers['Content-Type'], 'image/jpeg');
+  assert.equal(ok.headers['Cache-Control'], 'private, no-store');
+  assert.equal(ok.bytes.toString('utf8'), '사진');
+  // 다른 학생 번호의 사진은 404
+  const other = fixture({ photos: [{ ...photoRow, student_uuid: crypto.randomUUID() }] });
+  assert.equal((await other.call('GET', `/api/career-photos/${photoId}`)).body.error, '사진을 찾을 수 없습니다.');
+});
+
+test('기록을 시작하지 않은 학생은 사진을 열 수 없고, 권한 없는 담당자도 막힌다', async () => {
+  const none = fixture({ empty: true, photos: [photoRow] });
+  const blocked = await none.call('GET', `/api/career-photos/${photoId}`);
+  assert.equal(blocked.status, 403);
+  const staff = fixture({ photos: [photoRow] });
+  const denied = await staff.call('GET', `/api/career-photos/${photoId}`, ctx({ user: { id: 91, role: 'partner', name: '진로업체' } }));
+  assert.equal(denied.status, 403);
+  const allowed = fixture({ photos: [photoRow], staffMaySeePhoto: true });
+  assert.equal((await allowed.call('GET', `/api/career-photos/${photoId}`, ctx({ user: { id: 91, role: 'partner', name: '진로업체' } }))).status, 200);
 });

@@ -16,3 +16,17 @@
 .sa-history { margin-top: 12px; padding: 12px; background: var(--bg-2, #f4f9f8); border: 1px dashed var(--line, #cfdcd7); border-radius: 8px; }
 .sa-history-item + .sa-history-item { border-top: 1px solid var(--line, #e4ecea); margin-top: 10px; padding-top: 10px; }
 .sa-page .career-records-list { margin: 16px 0; }
+
+/* 진로 관찰 기록의 활동 사진 (public/school-accounts-ui.js) */
+.rs-photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin: 12px 0 4px; }
+.rs-photos figure { margin: 0; border: 1px solid var(--line, #e8edf4); border-radius: 10px; overflow: hidden; background: var(--bg-2, #f4f9f8); }
+.rs-photos img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; }
+.rs-photos figcaption { padding: 7px 9px; font-size: 12.5px; line-height: 1.6; color: var(--text-3, #66776f); word-break: keep-all; }
+.rs-photo-picker { margin-top: 8px; }
+.rs-photo-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
+.rs-photo-item { margin: 0; display: flex; flex-direction: column; gap: 6px; padding: 8px; border: 1px solid var(--line, #e8edf4); border-radius: 10px; background: #fff; }
+.rs-photo-item img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 6px; }
+.rs-photo-item .input { font-size: 12.5px; padding: 6px 8px; }
+.rs-photo-add { display: inline-flex; align-items: center; margin-top: 10px; cursor: pointer; }
+.rs-keep-photos .rs-photo-item label { display: flex; align-items: center; gap: 6px; line-height: 1.5; }
+.rs-keep-photos .rs-photo-item input[type="checkbox"] { width: auto; flex: none; }
