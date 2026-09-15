@@ -218,7 +218,8 @@ export function registerSchoolAccountsUI({ route, api, shell, state, esc, toast,
   const isObservation = r => !!r.observation || r.entry_kind === 'career_observation' || r.program_ref === 'job-career-observation';
   // 정정본은 원래 출처(학교 수업/진로 수업)를 그대로 보여준다.
   const sourceLabel = r => (r.source === 'hub' || r.original_source === 'hub') ? '모아허브 · 학교 수업' : '모아랩 · 진로 수업';
-  const kindLabel = r => r.supersedes_id ? '<span class="badge amber">정정됨</span>'
+  // 정정 표시가 종류를 대신하면 안 된다 — 정정된 관찰 기록도 관찰 기록임을 알 수 있어야 한다.
+  const kindLabel = r => r.supersedes_id ? `${isObservation(r) ? '진로 관찰 기록 ' : ''}<span class="badge amber">정정됨</span>`
     : isObservation(r) ? '진로 관찰 기록' : r.entry_kind === 'staff_record' ? '담당자 작성' : (r.source === 'hub' ? '수업 활동 기록' : '학생 작성');
   const subLine = r => [r.session_title, r.author_name].filter(Boolean).map(esc).join(' · ');
   // 진로 관찰 기록에서 각 칸이 무엇을 묻는 칸인지. 저장 칸(process·artifact·reflection)은 그대로 두고 이름표만 바꾼다.

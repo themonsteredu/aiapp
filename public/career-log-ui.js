@@ -66,7 +66,9 @@ export function registerCareerLogUI({ route, api, shell, state, esc, toast, navi
 
   function recordHtml(record, staff) {
     const date = new Date(record.occurred_at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', dateStyle: 'medium', timeStyle: 'short' });
-    const kind = record.supersedes_id ? '담당자 정정' : record.source === 'hub' ? '수업 활동 기록'
+    // 정정 표시가 종류를 대신하면 안 된다 — 정정된 관찰 기록도 관찰 기록임을 알 수 있어야 한다.
+    const kind = record.supersedes_id ? (isObservation(record) ? '담당 선생님 관찰 · 정정' : '담당자 정정')
+      : record.source === 'hub' ? '수업 활동 기록'
       : isObservation(record) ? '담당 선생님 관찰' : record.entry_kind === 'staff_record' ? '담당자 기록' : '학생 작성';
     return `<article class="career-record">
       <div class="career-record-meta"><span>${esc(date)}</span><span>${esc(sourceLabel(record))}</span><span>${esc(kind)}</span></div>
