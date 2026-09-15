@@ -109,6 +109,10 @@ function recordFixture() {
     if (sql.includes('JOIN moakit_accounts.memberships m') && sql.includes('WHERE a.id = $1')) return values[0] === account.id && values[1] === school ? [account] : [];
     if (sql.includes('FROM moakit_accounts.memberships m JOIN moakit_accounts.accounts a')) return [account];
     if (sql.includes('pg_advisory_xact_lock')) return [];
+    if (sql.startsWith('SELECT id FROM career_record_photos WHERE record_id')) {
+      const keep = values[1] || null;
+      return photos.filter(p => p.record_id === values[0] && (!keep || keep.includes(p.id)));
+    }
     if (sql.startsWith('SELECT id, record_id, mime, caption, position FROM career_record_photos')) {
       return photos.filter(p => values[0].includes(p.record_id)).sort((a, b) => a.position - b.position);
     }
@@ -277,12 +281,39 @@ test('사진은 이미지 형식·장수·용량을 넘기면 저장되지 않�
   await rejects(f.registry.addRecord(partner, school, f.account.id, { ...base, photos: [{ data: 'data:application/pdf;base64,AAAA' }] }, '스카이'), 400);
   await rejects(f.registry.addRecord(partner, school, f.account.id, { ...base, photos: [{ data: 'https://example.com/a.jpg' }] }, '스카이'), 400);
   await rejects(f.registry.addRecord(partner, school, f.account.id, { ...base, photos: Array.from({ length: 7 }, () => jpeg('')) }, '스카이'), 400);
-  await rejects(f.registry.addRecord(partner, school, f.account.id, { ...base, photos: [{ data: `data:image/jpeg;base64,${'A'.repeat(2_800_001)}` }] }, '스카이'), 400);
+  await rejects(f.registry.addRecord(partner, school, f.account.id, { ...base, photos: [{ data: `data:image/jpeg;base64,${'A'.repeat(900_001)}` }] }, '스카이'), 400);
+  // Vercel 요청 본문 한도(4.5MB) 때문에 한 요청의 사진 합계도 막는다 — 장당 한도만으로는 부족하다.
+  const big = () => ({ data: `data:image/jpeg;base64,${'A'.repeat(880_000)}` });
+  await rejects(f.registry.addRecord(partner, school, f.account.id, { ...base, photos: [big(), big(), big(), big()] }, '스카이'), 400);
+  await f.registry.addRecord(partner, school, f.account.id, { ...base, photos: [big(), big(), big()] }, '스카이');
+  assert.equal(f.photos.length, 3, '합계 안에 들면 저장된다');
   // 일반 담당자 기록에는 사진을 붙일 수 없다.
   await rejects(f.registry.addRecord(partner, school, f.account.id, { title: '상담', process: '내용', photos: [jpeg('')] }, '스카이'), 400);
   // 제목과 활동 모습은 필수다.
   await rejects(f.registry.addRecord(partner, school, f.account.id, { kind: 'career_observation', title: '체험', activity: '' }, '스카이'), 400);
-  assert.equal(f.photos.length, 0);
+});
+
+test('정정도 사진 규칙을 그대로 지킨다 — 종류와 이어받은 장수까지 센다', async () => {
+  const f = recordFixture();
+  await f.registry.setRecordAccess(admin, school, '91', 'edit');
+  const full = await f.registry.addRecord(partner, school, f.account.id, {
+    kind: 'career_observation', title: '체험', activity: '내용',
+    photos: Array.from({ length: 6 }, (_, i) => jpeg(`사진${i}`)),
+  }, '스카이');
+  // 6장을 그대로 남기고 한 장 더 넣으면 상한을 넘는다 (새 사진만 세면 통과해 버린다).
+  await rejects(f.registry.reviseRecord(partner, school, f.account.id, full.id, { activity: '고침', photos: [jpeg('일곱째')] }, '스카이'), 400);
+  assert.equal(f.photos.length, 6, '막힌 정정은 사진을 남기지 않는다');
+  // 두 장을 빼면 들어간다.
+  const keep = f.photos.filter(p => p.record_id === full.id).slice(0, 4).map(p => p.id);
+  const revised = await f.registry.reviseRecord(partner, school, f.account.id, full.id, { activity: '고침', keep_photo_ids: keep, photos: [jpeg('다섯째')] }, '스카이');
+  assert.equal(f.photos.filter(p => p.record_id === revised.id).length, 5);
+  // 일반 담당자 기록에는 정정할 때도 사진을 못 붙인다 (addRecord 와 같은 규칙).
+  const staffRecord = await f.registry.addRecord(partner, school, f.account.id, { title: '상담', process: '내용' }, '스카이');
+  await rejects(f.registry.reviseRecord(partner, school, f.account.id, staffRecord.id, { process: '고침', photos: [jpeg('몰래')] }, '스카이'), 400);
+  assert.equal(f.photos.some(p => p.caption === '몰래'), false);
+  // 학교 수업 기록(hub)을 정정할 때도 마찬가지다.
+  await rejects(f.registry.reviseRecord(partner, school, f.account.id, f.hubRecord.id, { process: '고침', photos: [jpeg('몰래2')] }, '스카이'), 400);
+  assert.equal(f.photos.some(p => p.caption === '몰래2'), false);
 });
 
 test('사진은 기록 권한이 있는 학교만, 학생은 자기 번호의 것만 열 수 있다', async () => {

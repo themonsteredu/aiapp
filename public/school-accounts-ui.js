@@ -254,22 +254,32 @@ export function registerSchoolAccountsUI({ route, api, shell, state, esc, toast,
     } catch (e) { shell(isPartner() ? '학생 진로기록' : '학생 기록 열람', msg(e.message, true)); }
   });
 
-  // ---- 활동 사진: 브라우저에서 미리 줄여 보낸다 (서버는 2MB·6장까지만 받는다) ----
+  // ---- 활동 사진: 브라우저에서 미리 줄여 보낸다 ----
+  // Vercel 이 요청 본문을 4.5MB 에서 자르므로(서버 lib/school-registry.js 의 같은 값) 장당·합계를 여기서도 지킨다.
+  // 넘으면 품질을 한 단계씩 낮춰 다시 만들고, 그래도 크면 사용자에게 알린다.
   const MAX_PHOTOS = 6;
+  const MAX_PHOTO_CHARS = 900_000;
+  const MAX_PHOTOS_TOTAL_CHARS = 3_200_000;
+  const photoChars = data => data.length - (data.indexOf(',') + 1);
   async function readPhoto(file) {
     if (!/^image\//.test(file.type || '')) throw new Error('사진은 이미지 파일만 넣을 수 있습니다.');
     const bitmap = await createImageBitmap(file);
-    const scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
     const canvas = document.createElement('canvas');
-    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
-    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
-    canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    let data = '';
+    for (const [edge, quality] of [[1280, 0.75], [1280, 0.6], [1024, 0.6], [800, 0.55]]) {
+      const scale = Math.min(1, edge / Math.max(bitmap.width, bitmap.height));
+      canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+      canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+      canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      data = canvas.toDataURL('image/jpeg', quality);
+      if (photoChars(data) <= MAX_PHOTO_CHARS) break;
+    }
     if (bitmap.close) bitmap.close();
-    const data = canvas.toDataURL('image/jpeg', 0.82);
-    if (data.length > 2_700_000) throw new Error('사진 용량이 너무 큽니다. 더 작은 사진으로 올려 주세요.');
+    if (photoChars(data) > MAX_PHOTO_CHARS) throw new Error('사진 용량이 너무 큽니다. 더 작은 사진으로 올려 주세요.');
     return data;
   }
   const photoValue = () => RS.newPhotos.map(photo => ({ data: photo.data, caption: photo.caption }));
+  const photoTotal = () => RS.newPhotos.reduce((sum, photo) => sum + photoChars(photo.data), 0);
 
   // 새로 고른 사진 미리보기. 글을 쓰던 중이라 화면 전체를 다시 그리지 않고 이 칸만 갈아 끼운다.
   function photoPickerHtml() {
@@ -282,7 +292,7 @@ export function registerSchoolAccountsUI({ route, api, shell, state, esc, toast,
       <label class="btn btn-soft btn-sm rs-photo-add">사진 고르기
         <input type="file" accept="image/*" multiple hidden id="rs-photo-input">
       </label>
-      <span class="sa-help">최대 ${MAX_PHOTOS}장 · 올리면 자동으로 줄여서 저장합니다. 학생 본인과 기록 권한이 있는 담당자만 볼 수 있습니다.</span>
+      <span class="sa-help">최대 ${MAX_PHOTOS}장 · 올리면 자동으로 줄여서 저장합니다. 큰 사진은 더 줄어듭니다. 학생 본인과 기록 권한이 있는 담당자만 볼 수 있습니다.</span>
       <div class="msg" id="rs-photo-msg"></div>
     </div>`;
   }
@@ -297,7 +307,11 @@ export function registerSchoolAccountsUI({ route, api, shell, state, esc, toast,
       try {
         for (const file of files) {
           if (RS.newPhotos.length >= MAX_PHOTOS) throw new Error(`사진은 최대 ${MAX_PHOTOS}장까지 넣을 수 있습니다.`);
-          RS.newPhotos.push({ data: await readPhoto(file), caption: '' });
+          const data = await readPhoto(file);
+          if (photoTotal() + photoChars(data) > MAX_PHOTOS_TOTAL_CHARS) {
+            throw new Error('한 번에 올리는 사진 용량이 너무 큽니다. 장수를 줄이거나 나눠서 올려 주세요.');
+          }
+          RS.newPhotos.push({ data, caption: '' });
         }
         redraw();
       } catch (err) {
@@ -349,12 +363,13 @@ export function registerSchoolAccountsUI({ route, api, shell, state, esc, toast,
   // 정정할 때 이미 있는 사진은 그대로 이어지고, 체크를 풀면 새 버전에서 빠진다 (이전 버전에는 남는다).
   function keepPhotosHtml(r) {
     if (!r.photos || !r.photos.length) return '';
+    // 남기는 사진과 새로 넣는 사진을 합쳐 상한을 넘으면 저장할 때 막힌다. 미리 알려 준다.
     return `<div class="rs-keep-photos"><p class="field-label" style="margin-top:12px">이미 올린 사진</p>
       <div class="rs-photo-list">${r.photos.map(photo => `<figure class="rs-photo-item">
         <img src="/api/career-photos/${encodeURIComponent(photo.id)}" alt="${esc(photo.caption || '활동 사진')}" loading="lazy">
         <label class="small"><input type="checkbox" data-rs-keep="${esc(photo.id)}" checked> 이 사진 남기기</label>
       </figure>`).join('')}</div>
-      <p class="sa-help">체크를 풀면 정정본에서 빠집니다. 이전 버전에는 그대로 남습니다.</p></div>`;
+      <p class="sa-help">체크를 풀면 정정본에서 빠집니다. 이전 버전에는 그대로 남습니다. 남기는 사진과 새로 넣는 사진을 합쳐 ${MAX_PHOTOS}장을 넘을 수 없습니다.</p></div>`;
   }
 
   function recordCard(r) {
