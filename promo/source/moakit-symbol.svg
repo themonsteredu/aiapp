@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
+  <defs>
+    <linearGradient id="mk" x1="14" y1="18" x2="86" y2="84" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#41e3ce"/>
+      <stop offset="1" stop-color="#0d9683"/>
+    </linearGradient>
+  </defs>
+  <!-- M 모노그램: 두 다리 + 얕은 가운데 V -->
+  <path d="M21 83 V37 C21 28 32 28 35.5 34.5 L50 58 L64.5 34.5 C68 28 79 28 79 37 V83"
+        stroke="url(#mk)" stroke-width="12.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- 가운데 다이아몬드(엔벨로프 플랩) — 크고 또렷하게 -->
+  <path d="M50 40 L66 56 L50 72 L34 56 Z" fill="url(#mk)"/>
+  <path d="M50 47 L59 56 L50 65 L41 56 Z" fill="#0c1210" opacity="0.32"/>
+</svg>

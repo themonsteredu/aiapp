@@ -1,0 +1,8 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>직업 카드 탐색</title>
+<style>body{margin:0;font-family:Pretendard,sans-serif;background:#f3faf8;color:#0b3b36;word-break:keep-all}header{padding:28px 36px;background:#0a6f61;color:#fff}h1{margin:0;font-size:30px}p{margin:6px 0 0;opacity:.85}
+.g{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;padding:28px 36px}.c{background:#fff;border-radius:18px;padding:22px;border:2px solid #d5eee9;cursor:pointer;transition:.2s}.c:hover,.c.on{border-color:#17b6a0;transform:translateY(-3px);box-shadow:0 10px 24px rgba(10,111,97,.15)}.c b{font-size:40px}.c h3{margin:10px 0 6px;font-size:22px}.c span{font-size:15px;color:#4f6f6a}
+.pick{margin:0 36px;padding:16px 22px;background:#fff;border-radius:14px;font-size:18px;border:2px dashed #17b6a0}</style></head><body>
+<header><h1>🔍 직업 카드 탐색</h1><p>관심 가는 직업 카드 3장을 골라 보세요</p></header>
+<div class="g" id="g"></div><div class="pick" id="pick">선택한 카드: 없음</div>
+<script>const J=[['🤖','로봇 엔지니어','로봇을 설계하고 움직임을 프로그래밍해요'],['📊','데이터 분석가','숫자 속에서 의미 있는 이야기를 찾아요'],['🩺','디지털 헬스케어 전문가','기술로 건강을 돌보는 방법을 만들어요'],['🎮','게임 기획자','재미있는 규칙과 세계를 설계해요'],['🌱','스마트팜 연구원','데이터로 농작물을 키워요'],['🎨','AI 콘텐츠 디자이너','AI와 함께 이미지와 영상을 만들어요']];
+const s=new Set();J.forEach((j,i)=>{const d=document.createElement('div');d.className='c';d.innerHTML='<b>'+j[0]+'</b><h3>'+j[1]+'</h3><span>'+j[2]+'</span>';d.onclick=()=>{s.has(i)?s.delete(i):s.size<3&&s.add(i);d.classList.toggle('on',s.has(i));document.getElementById('pick').textContent='선택한 카드: '+([...s].map(k=>J[k][1]).join(', ')||'없음')};g.appendChild(d)});</script></body></html>

@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><title>모아랩 홍보영상</title>
+<style>
+:root{--bg:#0c1210;--bg2:#12302c;--ink:#eef8f6;--mute:#8fb3ab;--mint:#41e3ce;--teal:#17b6a0;--teal6:#0a6f61;--cta:#b04a12;--red:#ff7a6b}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1920px;height:1080px;overflow:hidden;background:var(--bg);color:var(--ink);font-family:"Pretendard",sans-serif;letter-spacing:-0.02em;word-break:keep-all}
+.stage{position:absolute;inset:0;overflow:hidden;background:radial-gradient(1200px 700px at 82% 18%,#15433c 0%,transparent 60%),radial-gradient(900px 600px at 8% 92%,#123a34 0%,transparent 60%),var(--bg)}
+.grid{position:absolute;inset:-100px;background-image:linear-gradient(rgba(65,227,206,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(65,227,206,.05) 1px,transparent 1px);background-size:80px 80px}
+.scene{position:absolute;inset:0;opacity:0}
+.a{will-change:transform,opacity}
+/* hero */
+.hero .txt{position:absolute;left:130px;top:250px;width:760px}
+.eyebrow{font-size:30px;font-weight:600;color:var(--mint);letter-spacing:.04em;margin-bottom:28px;display:flex;align-items:center;gap:16px}
+.eyebrow::before{content:"";width:44px;height:3px;background:var(--mint);display:block}
+.big{font-size:96px;font-weight:800;line-height:1.14;letter-spacing:-0.04em}
+.big em{font-style:normal;color:var(--mint)}
+.sub{font-size:36px;font-weight:500;color:#cfe6e1;margin-top:34px;line-height:1.45}
+.hero .win{left:930px;top:250px;width:880px}
+.hero .win .view{width:880px;height:495px}
+/* window scenes */
+.cap{position:absolute;left:110px;top:0;bottom:0;width:560px;display:flex;flex-direction:column;justify-content:center}
+.cap .num{font-size:26px;font-weight:700;color:var(--mint);letter-spacing:.08em;margin-bottom:22px}
+.cap h2{font-size:66px;font-weight:800;line-height:1.18;letter-spacing:-0.04em}
+.cap h2 em{font-style:normal;color:var(--mint)}
+.cap p{font-size:31px;font-weight:500;color:#bcd8d2;line-height:1.5;margin-top:30px}
+.chips{display:flex;flex-wrap:wrap;gap:12px;margin-top:34px}
+.chip{font-size:24px;font-weight:600;padding:10px 20px;border-radius:999px;border:1.5px solid rgba(65,227,206,.45);color:var(--mint);background:rgba(65,227,206,.07)}
+.win{position:absolute;left:720px;top:176px;width:1110px;border-radius:22px;overflow:hidden;background:#0f1d1a;border:1.5px solid rgba(65,227,206,.25);box-shadow:0 40px 120px rgba(0,0,0,.55),0 0 0 1px rgba(0,0,0,.4)}
+.win .bar{height:52px;display:flex;align-items:center;gap:10px;padding:0 22px;background:#142a26;border-bottom:1px solid rgba(65,227,206,.14)}
+.win .bar i{width:14px;height:14px;border-radius:50%;background:#2e4a45;display:block}
+.win .bar span{margin-left:22px;flex:1;height:32px;border-radius:9px;background:#0a1614;color:#8fb3ab;font-size:19px;display:flex;align-items:center;padding:0 18px;font-weight:500}
+.win .view{position:relative;width:1110px;height:624px;overflow:hidden;background:#fff}
+.win .view img{position:absolute;left:0;top:0;transform-origin:0 0}
+.wide .win{left:320px;top:170px;width:1280px}
+.wide .win .view{width:1280px;height:720px}
+.wide .cap{left:320px;top:52px;bottom:auto;width:1280px;flex-direction:row;align-items:baseline;gap:28px;justify-content:flex-start}
+.wide .cap h2{font-size:58px}
+.wide .cap .num{margin:0}
+.tag{position:absolute;padding:14px 24px;border-radius:14px;background:rgba(12,18,16,.92);border:1.5px solid var(--mint);font-size:27px;font-weight:700;color:var(--mint);box-shadow:0 18px 50px rgba(0,0,0,.5);white-space:nowrap}
+.tag.red{border-color:var(--red);color:var(--red)}
+/* cards */
+.cases .head{position:absolute;left:0;right:0;top:118px;text-align:center}
+.cases .head h2{font-size:76px;font-weight:800;letter-spacing:-0.04em}
+.cases .head h2 em{font-style:normal;color:var(--mint)}
+.cases .head p{font-size:32px;color:#bcd8d2;margin-top:18px;font-weight:500}
+.cgrid{position:absolute;left:200px;right:200px;top:380px;display:grid;grid-template-columns:repeat(3,1fr);gap:28px}
+.card{height:230px;border-radius:22px;padding:32px 34px;background:linear-gradient(160deg,#173a34,#0f211e);border:1.5px solid rgba(65,227,206,.2);display:flex;flex-direction:column;justify-content:space-between}
+.card b{display:block;margin-bottom:10px;font-size:23px;color:var(--mint);font-weight:700;letter-spacing:.06em}
+.card strong{font-size:36px;font-weight:800;line-height:1.28;letter-spacing:-0.03em}
+.card .ic{font-size:44px;line-height:1}
+.card.hot{border-color:var(--mint);background:linear-gradient(160deg,#1c4a42,#10261f)}
+/* outro */
+.outro{display:flex;align-items:center;justify-content:center;flex-direction:column;text-align:center;padding-bottom:90px}
+.logo{display:flex;align-items:center;gap:30px}
+.logo img{width:130px;height:130px}
+.logo .name{font-size:96px;font-weight:900;letter-spacing:-.02em;text-align:left;line-height:1}
+.logo .name small{display:block;font-size:28px;letter-spacing:.12em;color:var(--mint);font-weight:600;margin-top:14px}
+.outro .line{font-size:50px;font-weight:700;margin-top:70px;letter-spacing:-0.03em}
+.outro .line em{font-style:normal;color:var(--mint)}
+.url{margin-top:56px;font-size:40px;font-weight:700;padding:22px 50px;border-radius:999px;background:var(--cta);color:#fff;letter-spacing:0}
+.outro .foot{margin-top:40px;font-size:26px;color:var(--mute);font-weight:500}
+.subs{position:absolute;left:0;right:0;bottom:44px;display:flex;justify-content:center;pointer-events:none}
+.subs span{font-size:40px;font-weight:600;line-height:1.35;color:#fff;background:rgba(6,12,11,.8);padding:14px 34px;border-radius:16px;text-align:center;max-width:1560px;box-shadow:0 10px 40px rgba(0,0,0,.35);letter-spacing:-0.02em}
+.progress{position:absolute;left:0;bottom:0;height:6px;background:var(--teal);opacity:.9}
+</style></head>
+<body>
+<div class="stage" id="stage">
+  <div class="grid a" id="grid"></div>
+
+  <section class="scene hero" id="s-hero">
+    <div class="txt">
+      <div class="eyebrow a" data-in="0.3">모아킷 · AI 수업·진로교육 플랫폼</div>
+      <div class="big a" data-in="0.7">수업자료가<br><em>웹앱</em>이 되는<br>교실</div>
+      <div class="sub a" data-in="1.6">만들고, 나누고, 지키는 일을 한곳에서</div>
+    </div>
+    <div class="win a" data-win><div class="bar"><i></i><i></i><i></i><span>job.moakit.ai</span></div><div class="view"><img id="v-hero"></div></div>
+  </section>
+
+  <section class="scene" id="s-decks">
+    <div class="cap">
+      <div class="num a" data-in="0.2">01 · PPT를 웹앱으로</div>
+      <h2 class="a" data-in="0.4">슬라이드 그대로<br><em>웹에서</em> 수업</h2>
+      <p class="a" data-in="0.8">PowerPoint에서 내보낸 이미지를 올리면 발표용 웹앱이 됩니다.</p>
+      <div class="chips a" data-in="1.2"><span class="chip">과목별 폴더</span><span class="chip">전체화면 발표</span><span class="chip">열람자 워터마크</span></div>
+    </div>
+    <div class="win a" data-win><div class="bar"><i></i><i></i><i></i><span>job.moakit.ai/class#/decks</span></div><div class="view"><img id="v-decks"></div></div>
+  </section>
+
+  <section class="scene" id="s-code">
+    <div class="cap">
+      <div class="num a" data-in="0.2">02 · 수업 입장 코드</div>
+      <h2 class="a" data-in="0.4">6자리 코드로<br><em>바로 입장</em></h2>
+      <p class="a" data-in="0.8">학생은 계정·비밀번호 없이 코드와 이름만 넣으면 돼요. 수업이 끝나면 접근이 자동으로 끊겨요.</p>
+    </div>
+    <div class="win a" data-win><div class="bar"><i></i><i></i><i></i><span id="url-code">job.moakit.ai/class#/sessions</span></div><div class="view"><img id="v-code"></div></div>
+    <div class="tag a" id="tag-code" style="left:1500px;top:862px">× 2배속</div>
+  </section>
+
+  <section class="scene wide" id="s-time">
+    <div class="cap"><div class="num a" data-in="0.1">03 · 시간표 접근 제어</div><h2 class="a" data-in="0.3">정해 둔 <em>요일·시간</em>에만 열려요</h2></div>
+    <div class="win a" data-win><div class="bar"><i></i><i></i><i></i><span id="url-time">job.moakit.ai/class#/schedules</span></div><div class="view"><img id="v-time"></div></div>
+    <div class="tag red a" id="tag-time" style="left:1290px;top:74px">허용 시간 밖 · 학생 화면</div>
+  </section>
+
+  <section class="scene" id="s-sec">
+    <div class="cap">
+      <div class="num a" data-in="0.2">04 · 콘텐츠 보호</div>
+      <h2 class="a" data-in="0.4">소중한 수업자료,<br><em>토글 하나</em>로 보호</h2>
+      <p class="a" data-in="0.8">캡처 억제·복사 차단·동시접속 제한, 그리고 누가 봤는지 남는 워터마크.</p>
+    </div>
+    <div class="win a" data-win><div class="bar"><i></i><i></i><i></i><span>job.moakit.ai/class#/security</span></div><div class="view"><img id="v-sec"></div></div>
+  </section>
+
+  <section class="scene cases" id="s-cards">
+    <div class="head"><h2 class="a" data-in="0.1">6차시 <em>AI 웹앱 프로젝트</em></h2><p class="a" data-in="0.4">학생들이 팀을 이뤄 지역 자원을 추천하는 AI 웹앱을 직접 만들어요.</p></div>
+    <div class="cgrid">
+      <div class="card a" data-in="0.7"><span class="ic">🔍</span><div><b>1차시</b><strong>AI가 놓친<br>광주 발견하기</strong></div></div>
+      <div class="card a" data-in="0.85"><span class="ic">💬</span><div><b>2차시</b><strong>진짜 이유와<br>사용자의 문제 찾기</strong></div></div>
+      <div class="card a" data-in="1.0"><span class="ic">🧑‍💼</span><div><b>3차시</b><strong>다른 직무의<br>눈으로 보기</strong></div></div>
+      <div class="card a" data-in="1.15"><span class="ic">📝</span><div><b>4차시</b><strong>나에게 맞는 역할로<br>웹앱 기획하기</strong></div></div>
+      <div class="card a" data-in="1.3"><span class="ic">🛠️</span><div><b>5차시</b><strong>AI 웹앱 제작과<br>테스트</strong></div></div>
+      <div class="card hot a" data-in="1.45"><span class="ic">🎪</span><div><b>6차시</b><strong>광주<br>AI 웹앱 박람회</strong></div></div>
+    </div>
+  </section>
+
+  <section class="scene" id="s-proj">
+    <div class="cap">
+      <div class="num a" data-in="0.2">05 · 팀 프로젝트 운영</div>
+      <h2 class="a" data-in="0.4">차시는 선생님이,<br><em>기록</em>은 팀이</h2>
+      <p class="a" data-in="0.8">공개한 차시까지만 열리고, 학생은 실명 대신 팀코드·익명번호로 참여해요.</p>
+      <div class="chips a" data-in="1.2"><span class="chip">차시 공개 설정</span><span class="chip">팀별 진행 현황</span><span class="chip">익명 참여</span></div>
+    </div>
+    <div class="win a" data-win><div class="bar"><i></i><i></i><i></i><span id="url-proj">job.moakit.ai/class#/projects</span></div><div class="view"><img id="v-proj"></div></div>
+  </section>
+
+  <section class="scene" id="s-dash">
+    <div class="cap">
+      <div class="num a" data-in="0.2">06 · 운영 대시보드</div>
+      <h2 class="a" data-in="0.4">기관 운영을<br><em>한 화면</em>에서</h2>
+      <p class="a" data-in="0.8">슈퍼관리자·관리자·강사·학생 4단계 권한과 웹앱 허용 시간표를 한눈에.</p>
+    </div>
+    <div class="win a" data-win><div class="bar"><i></i><i></i><i></i><span>job.moakit.ai/class#/</span></div><div class="view"><img id="v-dash"></div></div>
+  </section>
+
+  <section class="scene outro" id="s-outro">
+    <div class="logo a" data-in="0.1"><img src="moakit-symbol.svg"><div class="name">모아랩<small>MOALAB · BY MOAKIT</small></div></div>
+    <div class="line a" data-in="0.6">AI로 진로교육을 <em>새롭게 설계</em>합니다</div>
+    <div class="url a" data-in="1.1">job.moakit.ai</div>
+    <div class="foot a" data-in="1.5">모아킷의 AI 수업·진로교육 서비스 · 설치 없이 브라우저에서</div>
+  </section>
+  <div class="subs"><span id="sub"></span></div>
+  <div class="progress" id="prog"></div>
+</div>
+<script>
+const FPS = 30;
+const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
+const ease = t => t < .5 ? 4*t*t*t : 1 - Math.pow(-2*t + 2, 3)/2;
+const eout = t => 1 - Math.pow(1 - t, 3);
+const lerp = (a, b, t) => a + (b - a) * t;
+// 녹화 클립: 프레임 수, 원본 폭(px)
+const CLIPS = {
+  landing:{n:316,w:1600}, decks:{n:265,w:1600}, session:{n:218,w:1600}, join:{n:370,w:1600},
+  schedule:{n:172,w:1600}, blocked:{n:151,w:1600}, security:{n:161,w:1600},
+  projteacher:{n:192,w:1600}, projstudent:{n:198,w:1600}, dashboard:{n:218,w:1600},
+};
+// view: 1600x900 기준 [x,y,w] 시작→끝 (h = w*9/16), url: 주소창 문구
+const SCENES = [
+  { id:'s-hero', dur:6.0, img:'v-hero', segs:[
+      { clip:'landing', from:0.4, rate:1.6, len:6.0, view:[[0,0,1600],[100,60,1400]] } ] },
+  { id:'s-decks', dur:8.4, img:'v-decks', segs:[
+      { clip:'decks', from:0.6, rate:1, len:8.2, view:[[0,0,1600],[250,60,1050]] } ] },
+  { id:'s-code', dur:8.6, img:'v-code', segs:[
+      { clip:'session', from:0.4, rate:1.6, len:4.2, view:[[0,0,1600],[250,60,1360]], url:['url-code','job.moakit.ai/class#/sessions'] },
+      { clip:'join', from:0.5, rate:2.1, len:4.4, view:[[200,0,1200],[0,0,1600]], url:['url-code','job.moakit.ai/class#/login'] } ] },
+  { id:'s-time', dur:7.2, img:'v-time', segs:[
+      { clip:'schedule', from:0.5, rate:1.1, len:4.3, view:[[0,0,1600],[250,60,1350]], url:['url-time','job.moakit.ai/class#/schedules'] },
+      { clip:'blocked', from:0.5, rate:1, len:2.9, view:[[250,70,1350],[330,90,1180]], url:['url-time','job.moakit.ai/class#/decks'] } ] },
+  { id:'s-sec', dur:6.4, img:'v-sec', segs:[
+      { clip:'security', from:0.4, rate:0.8, len:6.2, view:[[0,0,1600],[250,60,1350]] } ] },
+  { id:'s-cards', dur:5.8 },
+  { id:'s-proj', dur:7.6, img:'v-proj', segs:[
+      { clip:'projteacher', from:0.8, rate:1.4, len:3.6, view:[[0,0,1600],[250,60,1350]], url:['url-proj','job.moakit.ai/class#/projects/1'] },
+      { clip:'projstudent', from:0.6, rate:1.4, len:4.0, view:[[250,60,1350],[250,70,1100]], url:['url-proj','job.moakit.ai/class#/project/3'] } ] },
+  { id:'s-dash', dur:6.0, img:'v-dash', segs:[
+      { clip:'dashboard', from:1.0, rate:1, len:6.0, view:[[0,0,1600],[250,40,1350]] } ] },
+  { id:'s-outro', dur:6.2 },
+];
+const XF = 0.6;
+let acc = 0; for (const s of SCENES) { s.start = acc; acc += s.dur - XF; }
+const TOTAL = acc + XF;
+window.TOTAL = TOTAL;
+function src(clip, i) { const c = CLIPS[clip]; i = Math.max(1, Math.min(c.n, i)); return `frames/${clip}/${String(i).padStart(5,'0')}.jpg`; }
+async function setImg(el, url) {
+  if (el.dataset.src === url) return;
+  el.dataset.src = url; el.src = url;
+  try { await el.decode(); } catch {}
+}
+const SUBS = [
+  [0.5,5.0,'PPT 수업자료, 학생들이 웹에서 바로 볼 수 있다면 어떨까요?'],
+  [5.6,9.2,'모아랩은 선생님의 PPT를 발표용 웹앱으로 바꿔 줍니다.'],
+  [9.4,12.8,'화면마다 보는 사람의 이름이 워터마크로 남아 유출 추적도 쉬워요.'],
+  [13.4,17.2,'수업 시간엔 6자리 입장 코드 하나면 충분해요.'],
+  [17.4,20.8,'학생은 계정 없이 코드와 이름만 넣고 바로 참여합니다.'],
+  [21.4,24.6,'요일과 시간을 정해 두면 허용된 시간에만 자료가 열리고,'],
+  [24.8,27.4,'그 밖의 시간에는 서버가 접근을 자동으로 막아요.'],
+  [28.0,33.0,'캡처 억제, 복사 차단, 동시접속 제한까지 버튼 하나로 켜고 끕니다.'],
+  [33.8,38.4,'6차시 AI 프로젝트에서는 학생들이 팀을 이뤄 직접 AI 웹앱을 만들어요.'],
+  [39.0,42.2,'선생님은 차시를 하나씩 열고 팀별 진행을 한눈에 확인하고,'],
+  [42.4,45.6,'학생은 실명 대신 팀코드와 익명번호로 안전하게 참여해요.'],
+  [46.0,51.0,'자료, 강사, 학생, 접근 시간표까지 대시보드 한 곳에서 관리하세요.'],
+  [51.4,56.8,'모아킷의 AI 수업·진로교육 플랫폼, 모아랩. job.moakit.ai'],
+];
+window.SUBS = SUBS;
+window.render = async function (t) {
+  { const cur = SUBS.find(x => t >= x[0] && t <= x[1]); const el = document.getElementById('sub');
+    if (cur) { el.textContent = cur[2]; const o = Math.min(clamp((t-cur[0])/0.25), clamp((cur[1]-t)/0.25)); el.parentElement.style.opacity = o; el.style.visibility='visible'; }
+    else { el.style.visibility='hidden'; } }
+  document.getElementById('prog').style.width = (t / TOTAL * 100) + '%';
+  document.getElementById('grid').style.transform = `translate(${-(t*6)%80}px, ${-(t*3)%80}px)`;
+  const waits = [];
+  for (const s of SCENES) {
+    const el = document.getElementById(s.id);
+    const lt = t - s.start;
+    if (lt < -0.01 || lt > s.dur + 0.01) { el.style.opacity = 0; el.style.display = 'none'; continue; }
+    el.style.display = '';
+    const fin = s === SCENES[0] ? 1 : clamp(lt / XF), fout = s === SCENES.at(-1) ? clamp((s.dur - lt) / 0.8) : clamp((s.dur - lt) / XF);
+    el.style.opacity = Math.min(fin, fout);
+    el.querySelectorAll('[data-in]').forEach(a => {
+      const p = eout(clamp((lt - parseFloat(a.dataset.in)) / 0.7));
+      a.style.opacity = p; a.style.transform = `translateY(${(1 - p) * 34}px)`;
+    });
+    const win = el.querySelector('[data-win]');
+    if (win) { const d = s.id === 's-hero' ? 0.9 : 0.15; const p = eout(clamp((lt - d) / 0.9)); win.style.opacity = p; win.style.transform = `translateY(${(1-p)*50}px) scale(${lerp(.96,1,p)})`; }
+    const tagAt = (id, from, to = 99) => { const tg = document.getElementById(id); if (!tg) return; const p = Math.min(eout(clamp((lt-from)/0.5)), clamp((to-lt)/0.3)); tg.style.opacity = p; tg.style.transform = `translateY(${(1-p)*20}px)`; };
+    if (s.id === 's-code') tagAt('tag-code', 1.2);
+    if (s.id === 's-time') tagAt('tag-time', 4.6);
+    if (s.segs) {
+      let off = 0, seg = s.segs[0];
+      for (const g of s.segs) { if (lt >= off) seg = g; off += g.len; }
+      let segStart = 0; for (const g of s.segs) { if (g === seg) break; segStart += g.len; }
+      const st = clamp(lt - segStart, 0, seg.len);
+      const frame = Math.round((seg.from + st * seg.rate) * FPS) + 1;
+      const img = document.getElementById(s.img);
+      const box = img.parentElement; const bw = box.clientWidth;
+      const k = ease(clamp(st / seg.len));
+      const [a, b] = seg.view;
+      const vx = lerp(a[0], b[0], k), vy = lerp(a[1], b[1], k), vw = lerp(a[2], b[2], k);
+      const sc = bw / vw;
+      const pxScale = 1600 / CLIPS[seg.clip].w;
+      img.style.width = CLIPS[seg.clip].w + 'px';
+      img.style.transform = `translate(${-vx*sc}px, ${-vy*sc}px) scale(${sc*pxScale})`;
+      if (seg.url) document.getElementById(seg.url[0]).textContent = seg.url[1];
+      waits.push(setImg(img, src(seg.clip, frame)));
+    }
+  }
+  await Promise.all(waits);
+};
+</script>
+</body></html>
