@@ -236,3 +236,103 @@ test('기록을 시작하지 않은 학생은 사진을 열 수 없고, 권한 �
   const allowed = fixture({ photos: [photoRow], staffMaySeePhoto: true });
   assert.equal((await allowed.call('GET', `/api/career-photos/${photoId}`, ctx({ user: { id: 91, role: 'partner', name: '진로업체' } }))).status, 200);
 });
+
+test('작성자 이름은 담당자가 쓴 기록(관찰·담당자 기록·정정본)에만 실린다', async () => {
+  const app = fixture({ listRows: [{ ...observationRow, author_name: '모아킷 진로 강사' }] });
+  const result = await app.call('GET', '/api/career-log/records');
+  assert.equal(result.body.records[0].author_name, '모아킷 진로 강사');
+  const listSql = app.trace.findLast(item => item.sql.includes('FROM career_log.records r WHERE')).sql;
+  assert.match(listSql, /CASE WHEN r\.raw_data->'job'->>'entry_kind' IN \('career_observation', 'staff_record', 'revision'\)\s+THEN r\.raw_data->'job'->>'author_name' END AS author_name/);
+  assert.equal(/'author_name' AS author_name/.test(listSql), false, '조건 없이 모든 기록에 싣지 않는다');
+});
+
+// ---- 관찰 기록의 제목·웹앱 줄: 모아허브 학생 화면(student-accounts.js)과 같은 규칙 ----
+test('기록 목록은 제목과 웹앱 이름을 따로 싣는다 — 웹앱 이름을 제목 칸에 섞지 않는다', async () => {
+  const app = fixture();
+  await app.call('GET', '/api/career-log/records');
+  const listSql = app.trace.findLast(item => item.sql.includes('FROM career_log.records r WHERE')).sql;
+  assert.match(listSql, /r\.raw_data->'job'->>'title' AS title/);
+  assert.match(listSql, /r\.raw_data->'job'->>'deck_title' AS deck_title/);
+  assert.equal(/COALESCE\([^)]*deck_title/.test(listSql), false);
+});
+
+test('내 진로기록 화면: 관찰 기록은 웹앱 이름을 제목 대신 웹앱: 줄로, 학생 기록은 웹앱 이름을 제목으로', async () => {
+  const path = require('node:path');
+  const { pathToFileURL } = require('node:url');
+  process.removeAllListeners('warning');
+  const { recordHeading, recordDeckLine } = await import(pathToFileURL(path.join(__dirname, '..', 'public', 'career-log-ui.js')).href);
+  const linked = { ...observationRow, title: '포렌식 웹앱 관찰', deck_title: '디지털 포렌식' };
+  assert.equal(recordHeading(linked), '포렌식 웹앱 관찰');
+  assert.equal(recordDeckLine(linked), '웹앱: 디지털 포렌식');
+  // 제목 없는 관찰 기록은 웹앱 이름이 아니라 '진로 관찰 기록' (모아허브 heading 규칙과 같다).
+  assert.equal(recordHeading({ ...linked, title: null }), '진로 관찰 기록');
+  // 정정본(entry_kind='revision')도 관찰 기록으로 읽는다.
+  assert.equal(recordDeckLine({ ...linked, entry_kind: 'revision', program_ref: 'job-career-observation' }), '웹앱: 디지털 포렌식');
+  // 학생이 웹앱에서 직접 쓴 기록은 웹앱 이름이 제목이고 웹앱: 줄은 없다.
+  const student = { source: 'job', program_ref: 'job-deck:7', entry_kind: 'student_reflection', title: null, deck_title: '디지털 포렌식', observation: null };
+  assert.equal(recordHeading(student), '디지털 포렌식');
+  assert.equal(recordDeckLine(student), '');
+  assert.equal(recordDeckLine({ ...observationRow, deck_title: null }), '', '웹앱을 잇지 않은 관찰 기록');
+  assert.equal(recordHeading({ source: 'hub', program_ref: 'science-observation-ai-03', title: null }), '자연을 관찰하는 AI');
+});
+
+// ---- 쓴 사람·고친 사람 줄: 모아허브 writerOf · 담당자 기록 화면과 같은 규칙 ----
+test('학생 목록은 정정본에 고친 사람(revised_by_name)을 함께 싣는다', async () => {
+  const app = fixture({ listRows: [{ ...observationRow, supersedes_id: 'rec-0', entry_kind: 'revision', author_name: '김진로', revised_by_name: '모아킷 관리자' }] });
+  const result = await app.call('GET', '/api/career-log/records');
+  assert.equal(result.body.records[0].revised_by_name, '모아킷 관리자');
+  const listSql = app.trace.findLast(item => item.sql.includes('FROM career_log.records r WHERE')).sql;
+  assert.match(listSql, /CASE WHEN r\.raw_data->'job'->>'entry_kind' = 'revision' THEN r\.raw_data->'job'->>'revised_by_name' END AS revised_by_name/);
+});
+
+test('내 진로기록 화면: 담당자가 쓴 기록은 작성·정정을 나눠 보이고, 학생 글을 고친 정정본은 고친 사람만', async () => {
+  const path = require('node:path');
+  const { pathToFileURL } = require('node:url');
+  process.removeAllListeners('warning');
+  const { recordWriter } = await import(pathToFileURL(path.join(__dirname, '..', 'public', 'career-log-ui.js')).href);
+  // 담당자가 쓴 관찰 기록·담당자 기록
+  assert.equal(recordWriter({ ...observationRow, author_name: '김진로' }), '작성: 김진로');
+  assert.equal(recordWriter({ program_ref: 'job-staff-record', entry_kind: 'staff_record', author_name: '김진로' }), '작성: 김진로');
+  // 그 기록을 다른 사람이 고친 정정본 (정정본의 entry_kind 는 'revision' — 담당자 기록은 program_ref 로 가린다)
+  assert.equal(recordWriter({ ...observationRow, entry_kind: 'revision', supersedes_id: 'r1', author_name: '김진로', revised_by_name: '모아킷 관리자' }), '작성: 김진로 · 정정: 모아킷 관리자');
+  assert.equal(recordWriter({ program_ref: 'job-staff-record', entry_kind: 'revision', supersedes_id: 'r1', author_name: '김진로', revised_by_name: '모아킷 관리자' }), '작성: 김진로 · 정정: 모아킷 관리자');
+  // 학생이 쓴 기록을 담당자가 고친 정정본: 고친 사람만
+  const student = { source: 'job', program_ref: 'job-deck:7', entry_kind: 'revision', supersedes_id: 'r2', observation: null };
+  assert.equal(recordWriter({ ...student, revised_by_name: '모아킷 관리자' }), '정정: 모아킷 관리자');
+  assert.equal(recordWriter({ source: 'hub', program_ref: 'science-observation-ai-03', entry_kind: 'revision', supersedes_id: 'r3', revised_by_name: '모아킷 관리자' }), '정정: 모아킷 관리자');
+  // 예전 정정본(revised_by_name 없음)은 author_name 이 고친 사람이었다 — '정정:'으로 읽는다
+  assert.equal(recordWriter({ ...student, author_name: '예전에 고친 사람' }), '정정: 예전에 고친 사람');
+  assert.equal(recordWriter({ ...observationRow, entry_kind: 'revision', supersedes_id: 'r1', author_name: '예전에 고친 사람' }), '정정: 예전에 고친 사람');
+  // 학생이 직접 쓴 기록에는 쓴 사람 줄이 없다 (값이 끼어 있어도)
+  assert.equal(recordWriter({ source: 'job', program_ref: 'job-deck:7', entry_kind: 'student_reflection', author_name: '끼어든 이름' }), '');
+  assert.equal(recordWriter({ ...observationRow, author_name: null }), '');
+});
+
+test('담당자 기록 화면(public/school-accounts-ui.js)도 같은 쓴 사람 규칙을 가져다 쓴다', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'school-accounts-ui.js'), 'utf8');
+  assert.ok(source.includes("import { recordWriter, recordSession } from './career-log-ui.js';"));
+  assert.match(source, /const subLine = \(r, heading\) => \[recordSession\(r, heading\), recordWriter\(r\)/);
+  assert.equal(/r\.author_name/.test(source), false, '작성자 이름을 규칙 없이 그대로 붙이지 않는다');
+});
+
+// E2E 화면 확인에서 나온 것: 담당자 기록·웹앱 기록은 수업 이름(session_title)이 제목과 같아 제목이 두 줄 연달아 보였다.
+test('제목 아래 수업 이름 줄은 제목과 같으면 싣지 않는다 (학생 화면·담당자 화면 공통)', async () => {
+  const path = require('node:path');
+  const { pathToFileURL } = require('node:url');
+  process.removeAllListeners('warning');
+  const { recordSession, recordHeading } = await import(pathToFileURL(path.join(__dirname, '..', 'public', 'career-log-ui.js')).href);
+  const observation = { ...observationRow, title: '직업 탐색 카드 활동 관찰', session_title: '직업 탐색 카드 활동 관찰', deck_title: '직업 탐색 카드' };
+  assert.equal(recordSession(observation, recordHeading(observation)), '');
+  const student = { source: 'job', program_ref: 'job-deck:1', entry_kind: 'student_reflection', title: null, deck_title: '직업 탐색 카드', session_title: '직업 탐색 카드', observation: null };
+  assert.equal(recordSession(student, recordHeading(student)), '');
+  // 수업 코드로 참여한 수업처럼 이름이 다르면 그대로 보인다. 앞뒤 공백은 같은 것으로 본다.
+  assert.equal(recordSession({ ...student, session_title: '3학년 2반 진로 수업' }, recordHeading(student)), '3학년 2반 진로 수업');
+  assert.equal(recordSession({ ...student, session_title: ' 직업 탐색 카드 ' }, '직업 탐색 카드'), '');
+  assert.equal(recordSession({ ...student, session_title: null }, '직업 탐색 카드'), '');
+  const fs = require('node:fs');
+  const ui = fs.readFileSync(path.join(__dirname, '..', 'public', 'career-log-ui.js'), 'utf8');
+  assert.match(ui, /recordSession\(record, heading\)/);
+  assert.equal(ui.includes("esc(record.session_title || '')"), false, '수업 이름을 규칙 없이 그대로 싣지 않는다');
+});

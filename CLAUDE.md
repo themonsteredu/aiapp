@@ -25,6 +25,18 @@
 - 이 앱은 **해시 라우팅**이다. 루트를 랜딩으로 바꾸면서 예전 `/#/...` 링크가 죽지 않도록, 랜딩 `<head>`에 `#/`로 시작하는 해시만 `/class`로 넘기는 스크립트를 둔다. 페이지 내부 앵커(`#core` 등)는 건드리지 않는다
 - 공유 링크 형태를 바꿀 때는 **서버에서 QR을 만드는 `lib/project-api.js`의 `publicAppUrl()`**, 배포 API 응답의 `url`, `public/project-ui.js`의 주소 표기를 함께 고친다
 
+## 업로드형 HTML 웹앱 샌드박스
+
+- 강사가 올린 HTML 웹앱(`decks.kind='html'`)은 플랫폼과 같은 주소(`/api/webapp/<id>`)에서 나간다. **같은 출처로 돌면 보는 사람의 로그인으로 진로기록·학생 기록·관리자 API를 부를 수 있으므로 불투명 출처로 격리한다. `allow-same-origin`을 다시 넣지 않는다**
+- 화면은 `public/app.js` `mountWebappFrame`이 HTML을 `fetch`로 받아 `allow-same-origin` 없는 `sandbox` iframe의 **`srcdoc`**으로 넣는다. `src`로 넣지 않는다 — 불투명 출처 문서를 다시 읽을 때 SameSite=Strict 세션 쿠키가 안 실려 401. 주소로 바로 열면 응답 헤더 `Content-Security-Policy: sandbox …`(`webappHeaders`)가 같은 격리를 건다
+- **두 곳이 같아야 한다**: `WEBAPP_SANDBOX`(iframe sandbox = CSP sandbox 토큰)·저장 표식·`WEBAPP_ALLOW`·`LINK_ALLOW`·`LINK_ALLOW_MEDIA`(iframe `allow`)가 `lib/webapp-sandbox.js`와 `public/app.js`에 따로 있다. 한쪽만 바꾸면 플랫폼 화면과 직접 열기가 다르게 돈다 (`test/webapp-sandbox.test.js`가 두 파일의 값을 맞춰 본다)
+- 막히는 `localStorage`·`sessionStorage`·`document.cookie`·`reportApiUsage()`는 서버가 HTML 첫 스크립트로 넣는 보조 스크립트(`injectSandboxShim`, doctype 뒤·`<head>` 첫머리)가 대신한다. 저장 내용은 `window.name`과 `postMessage`로 부모가 보관한다 — localStorage 는 부모 localStorage `moalab:webapp:<사용자>:<웹앱>`(JSON 1,000,000자까지), sessionStorage 는 부모 페이지 메모리(5분마다 iframe을 다시 만들어도 이어진다). 새 iframe 에는 `name`으로 돌려주며 **`name`은 문서에 붙이기 전에 정한다**(크롬은 붙인 뒤 바꾼 값을 안 넘긴다). 부모는 그 iframe·그 웹앱 번호의 메시지만 받는다
+- `<base href="about:srcdoc">`는 **srcdoc 끝에만** 붙인다. 없으면 `#앵커` 링크가 부모 주소 기준이라 iframe을 플랫폼 화면으로 바꾼다. 앞에 두면 앱의 `//cdn…` 스크립트·자기 `<base>`가 깨진다. 직접 열기 응답에는 넣지 않는다
+- **알려진 제약**: 업로드형 앱에서는 카메라·마이크(`getUserMedia`)·IndexedDB 가 안 되고 `location`은 `about:srcdoc`, 읽기를 마친 뒤의 상대 주소는 풀리지 않는다. 자세한 건 `docs/job-career-log.md` 2026-10-02 항목
+- **카메라·마이크는 외부 링크(`kind='link'`) + 자료별 `decks.media_access`로만** 연다(기본 끔, 자료 주인·관리자만 바꾸며 접속 기록에 남는다, 켠 자료만 `LINK_ALLOW_MEDIA`). 크롬은 학생이 플랫폼에 준 카메라 허용을 위임받은 iframe 과 함께 쓰므로 **모든 링크에 기본으로 열지 않는다**
+- 앱이 여는 새 창은 `allow-popups-to-escape-sandbox`로 샌드박스를 벗는다(외부 사이트의 저장소·로그인이 깨지지 않게). 새 창에서 `/api/webapp/<id>`를 열어도 CSP sandbox 가 다시 걸린다
+- `/api/assets/<id>`는 `text/html` 자산에 404 — 웹앱 HTML 도 `assets`에 있어 그 경로로 열면 샌드박스 없이 같은 출처로 돈다. DB 에서 직접 내주는 자산 응답에는 `X-Content-Type-Options: nosniff`
+
 ## 브랜드
 
 - 심볼: `public/brand/moakit-symbol.svg` — pinpoint의 `apps/portal/public/brand/moakit-symbol.svg`와 같은 파일. 랜딩·사이드바·로그인 마크가 공유한다
@@ -59,7 +71,12 @@
 - **활동 사진은 모아랩 쪽 `career_record_photos`에 넣는다** — `career_log.records`는 append-only 라 거기에 붙이지 않는다. 목록 응답에는 `{id, mime, caption}`만 싣고 이미지는 `GET /api/career-photos/<id>`로만 연다(학생 본인 = 자기 `student_uuid`, 담당자 = `record_access` 있는 학교). 정정하면 `keep_photo_ids`로 고른 사진만 새 버전으로 복사되고 이전 버전에는 전부 남는다
 - **사진 크기는 Vercel 요청 본문 4.5MB 한도가 정한다.** 장당 상한만 두면 여러 장을 올릴 때 요청이 잘려 핸들러에 닿지도 않는다 — 장당(900,000자)과 **한 요청 합계**(3,200,000자)를 함께 막고, 브라우저(1280px·JPEG 0.75, 크면 단계적으로 더 축소)도 같은 값을 쓴다. 한쪽만 바꾸면 사용자에게는 이유 없는 실패로 보인다
 - 정정(`reviseRecord`)은 `addRecord` 와 같은 규칙을 받아야 한다 — 관찰 기록이 아니면 사진 거부, 장수는 **이어받는 것 + 새로 넣는 것**을 합쳐서 센다
-- 모아허브 학생 화면(`teacher-s-project public/student-accounts.js`)은 `artifact`를 제목으로 쓰므로, 관찰 기록은 `observationOf()`로 가려내 제목·이름표를 따로 붙인다. **한쪽 표시 규칙을 바꾸면 다른 쪽도 맞춘다**
+- **담당자 저장(추가·정정·반 전체 기록)도 `attempt_id`로 한 번만 남는다.** 다시 보낸 같은 내용은 200 `duplicate: true`, 같은 시도 번호에 다른 내용이면 추가는 409 `code: 'attempt_conflict'`(정정은 '이미 정정된 기록' 409). 화면은 연결이 끊긴 실패만 '저장 확인 필요'로 두고 같은 번호로 다시 보내므로(`classifySaveError`), 반 전체 기록은 저장됐거나 확인이 필요한 학생이 있으면 제목·날짜·웹앱을 잠근다(`bulkSharedLocked`) — 바꾼 채 다시 보내면 저장된 학생이 모두 409 가 된다
+- **사진 더하기**는 `POST …/records/<id>/photos`(`addPhotos`) — 정정을 만들지 않고 `career_record_photos`에만 넣는다. 같은 내용 사진은 건너뛰고(재시도해도 두 번 안 붙는다) 장수는 이미 붙은 것까지 센다. 반 전체 기록은 4.5MB 한도 때문에 사진을 받지 않고 이 경로로 안내한다. 경로가 `/records/` 아래라 `PARTNER_ALLOW`에 이미 걸린다 — **기록 경로를 `/records/` 밖에 만들면 목록에 따로 넣어야 한다**
+- **웹앱 잇기**(`deck_id`, 관찰 기록에만): 아무 웹앱이나 잇는 것은 **관리자만**, 강사·진로업체 담당자는 그 학생이 기록을 남긴 웹앱(`job-deck:<id>`)만 — 볼 수 없는 웹앱 제목이 기록에 실려 새지 않게. 이 확인은 웹앱 조회보다 먼저다(없는 번호와 남의 웹앱이 같은 403). 화면도 `GET /api/decks`와 반 전체 기록의 웹앱 칸은 관리자만
+- **반 전체 기록**은 새 API 없이 학생마다 기록 추가 API를 차례로 부른다(줄마다 `attempt_id`). 작성 내용은 `sessionStorage`에만 — 공용 아이패드라 `localStorage`에 두지 않는다
+- **쓴 사람과 고친 사람을 나눈다**: 정정해도 `author_name`은 처음 쓴 사람 그대로, 고친 사람은 `revised_by`·`revised_by_name`(늘 값을 둔다). 담당자 기록인지는 `program_ref`로 가린다(정정본 `entry_kind`는 늘 `revision`). 학생 글의 정정본에는 `author_name`을 넣지 않는다
+- **학생 화면 표시는 모아허브와 같은 규칙이다**: 관찰은 학교 선생님이 아니라 진로 강사가 쓴다 — `진로 강사 관찰`·`강사가 본 나의 강점·흥미`, 제목은 `job.title`(웹앱 이름은 제목이 아니라 `웹앱:` 줄), 쓴 사람 줄 `작성: A · 정정: B`/`정정: B`. 모아랩 `public/career-log-ui.js`(`recordHeading`·`recordDeckLine`·`recordWriter`, 담당자 화면도 `recordWriter`) ↔ 모아허브 `teacher-s-project public/student-accounts.js`(`observationOf`·`writerOf`). 모아허브는 `artifact`를 제목으로 쓰므로 관찰 기록을 `observationOf()`로 가려낸다. **한쪽 문구·규칙을 바꾸면 다른 쪽도 맞춘다** — 설계는 `docs/job-career-log.md` 2026-10-02 항목
 
 ## 문구 원칙
 

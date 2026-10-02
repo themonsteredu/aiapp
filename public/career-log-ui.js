@@ -1,3 +1,33 @@
+// 모아허브에서 들어온 학교 수업 기록의 이름표. 제목이 없는 기록은 프로그램 이름으로 보여준다.
+const PROGRAM_LABELS = { 'history-ai-01': '역사 AI 수업', 'science-observation-ai-03': '자연을 관찰하는 AI', 'aviation-mobility-01': '항공 모빌리티', 'hub-submission-v1': '활동 결과물 제출', 'job-staff-record': '담당자 기록', 'job-career-observation': '진로 관찰 기록' };
+// 담당자(모아킷 관리자·진로업체)가 남긴 진로 관찰 기록. 정정본은 entry_kind 가 'revision' 이라 observation 값도 함께 본다.
+const isObservation = record => !!record.observation || record.entry_kind === 'career_observation' || record.program_ref === 'job-career-observation';
+// 제목·웹앱 줄은 모아허브 학생 화면(teacher-s-project public/student-accounts.js)과 같은 규칙이다. 한쪽을 바꾸면 다른 쪽도 맞춘다.
+// 관찰 기록은 담당자가 붙인 제목만 쓰고, 이어 둔 웹앱 이름은 제목이 아니라 '웹앱:' 줄로 보여준다.
+export const recordHeading = record => (isObservation(record)
+  ? record.title || '진로 관찰 기록'
+  : record.title || record.deck_title || PROGRAM_LABELS[record.program_ref] || '진로 활동');
+export const recordDeckLine = record => (isObservation(record) && record.deck_title ? `웹앱: ${record.deck_title}` : '');
+// 쓴 사람 줄. 모아허브 학생 화면(writerOf)·담당자 기록 화면(public/school-accounts-ui.js)과 같은 규칙이다.
+//  - 담당자가 쓴 기록(관찰·담당자 기록): '작성: 처음 쓴 사람', 정정됐으면 '· 정정: 고친 사람'
+//  - 학생이 쓴 기록을 담당자가 고친 정정본: '정정: 고친 사람' (학생 글에 담당자 이름을 쓴 사람으로 붙이지 않는다)
+//  - 예전 정정본(revised_by_name 없음)은 author_name 에 고친 사람이 들어 있었다 — '정정:'으로 읽는다
+const staffWritten = record => isObservation(record) || record.entry_kind === 'staff_record' || record.program_ref === 'job-staff-record';
+const nameOf = value => (typeof value === 'string' ? value.trim() : '');
+export function recordWriter(record) {
+  const author = nameOf(record.author_name), reviser = nameOf(record.revised_by_name);
+  const revision = !!record.supersedes_id || record.entry_kind === 'revision';
+  if (!revision) return staffWritten(record) && author ? `작성: ${author}` : '';
+  if (!reviser) return author ? `정정: ${author}` : '';
+  return staffWritten(record) && author ? `작성: ${author} · 정정: ${reviser}` : `정정: ${reviser}`;
+}
+// 제목 아래 수업 이름 줄. 담당자가 쓴 기록과 학생이 웹앱에서 쓴 기록은 수업 이름이 제목과 같아서 그대로 두면
+// 같은 글이 두 줄 연달아 보인다 — 제목과 같으면 싣지 않는다. 담당자 기록 화면(public/school-accounts-ui.js subLine)도 쓴다.
+export function recordSession(record, heading) {
+  const session = nameOf(record.session_title);
+  return session && session !== nameOf(heading) ? session : '';
+}
+
 export function registerCareerLogUI({ route, api, shell, state, esc, toast, navigate, isStaff }) {
   const recordUrl = '#/career-records';
   let currentClass = '';
@@ -6,11 +36,8 @@ export function registerCareerLogUI({ route, api, shell, state, esc, toast, navi
     const version = ++renderVersion, hash = location.hash, actor = state.me?.id;
     return () => version === renderVersion && location.hash === hash && state.me?.id === actor;
   }
-  // 모아허브에서 들어온 학교 수업 기록의 이름표. 제목이 없는 기록은 프로그램 이름으로 보여준다.
-  const PROGRAM_LABELS = { 'history-ai-01': '역사 AI 수업', 'science-observation-ai-03': '자연을 관찰하는 AI', 'aviation-mobility-01': '항공 모빌리티', 'hub-submission-v1': '활동 결과물 제출', 'job-staff-record': '담당자 기록', 'job-career-observation': '진로 관찰 기록' };
-  // 담당자(모아킷 관리자·진로업체)가 남긴 진로 관찰 기록. 정정본은 entry_kind 가 'revision' 이라 observation 값도 함께 본다.
-  const isObservation = record => !!record.observation || record.entry_kind === 'career_observation' || record.program_ref === 'job-career-observation';
-  const OBS_LABELS = [['activity', 'process', '수업에서 한 활동과 나의 모습'], ['strengths', 'artifact', '선생님이 본 나의 강점·흥미'], ['next_step', 'reflection', '추천받은 다음 활동']];
+  // 관찰은 학교 선생님이 아니라 수업에 찾아온 진로 강사가 쓴다.
+  const OBS_LABELS = [['activity', 'process', '수업에서 한 활동과 나의 모습'], ['strengths', 'artifact', '강사가 본 나의 강점·흥미'], ['next_step', 'reflection', '추천받은 다음 활동']];
   const sourceLabel = record => (record.source === 'hub' || record.original_source === 'hub') ? '모아허브 · 학교 수업'
     : (!record.source || record.source === 'job') ? '모아랩 · 진로 수업' : record.source;
   const status = (message, error = false) => `<p class="career-message${error ? ' is-error' : ''}" role="${error ? 'alert' : 'status'}">${esc(message)}</p>`;
@@ -67,12 +94,17 @@ export function registerCareerLogUI({ route, api, shell, state, esc, toast, navi
   function recordHtml(record, staff) {
     const date = new Date(record.occurred_at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', dateStyle: 'medium', timeStyle: 'short' });
     // 정정 표시가 종류를 대신하면 안 된다 — 정정된 관찰 기록도 관찰 기록임을 알 수 있어야 한다.
-    const kind = record.supersedes_id ? (isObservation(record) ? '담당 선생님 관찰 · 정정' : '담당자 정정')
+    const kind = record.supersedes_id ? (isObservation(record) ? '진로 강사 관찰 · 정정' : '담당자 정정')
       : record.source === 'hub' ? '수업 활동 기록'
-      : isObservation(record) ? '담당 선생님 관찰' : record.entry_kind === 'staff_record' ? '담당자 기록' : '학생 작성';
+      : isObservation(record) ? '진로 강사 관찰' : record.entry_kind === 'staff_record' ? '담당자 기록' : '학생 작성';
+    const heading = recordHeading(record);
+    const lead = [staff ? record.student_name || '학생' : '', recordSession(record, heading)].filter(Boolean).join(' · ');
+    // 담당자가 쓴 기록은 누가 썼는지(정정본은 누가 고쳤는지)와 이어 둔 웹앱을 한 줄로 보여준다 — 담당자 화면과 같은 순서.
+    const byline = [recordWriter(record), recordDeckLine(record)].filter(Boolean).join(' · ');
     return `<article class="career-record">
       <div class="career-record-meta"><span>${esc(date)}</span><span>${esc(sourceLabel(record))}</span><span>${esc(kind)}</span></div>
-      <h2>${esc(record.title || PROGRAM_LABELS[record.program_ref] || '진로 활동')}</h2><p class="career-record-sub">${staff ? `${esc(record.student_name || '학생')} · ` : ''}${esc(record.session_title || '')}</p>
+      <h2>${esc(heading)}</h2>${lead ? `<p class="career-record-sub">${esc(lead)}</p>` : ''}
+      ${byline ? `<p class="career-record-sub">${esc(byline)}</p>` : ''}
       ${bodyHtml(record)}
       ${photoStrip(record)}
       <details class="career-receipt"><summary>저장 접수번호</summary><code>${esc(record.id)}</code></details>

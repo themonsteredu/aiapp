@@ -120,6 +120,7 @@ async function api(method, url, body) {
   if (!res.ok) {
     const err = new Error(data.error || '요청에 실패했습니다.');
     err.data = data;
+    err.status = res.status;
     throw err;
   }
   return data;
@@ -627,6 +628,14 @@ function shell(title, contentHtml) {
 
   document.getElementById('btn-logout').onclick = async () => {
     await api('POST', '/api/logout').catch(() => {});
+    // 공용 기기: 다음 사람이 이 탭에서 앞 사람의 반 전체 기록 초안·웹앱 세션 값을 보지 않게 지운다
+    try {
+      for (let i = sessionStorage.length - 1; i >= 0; i -= 1) {
+        const k = sessionStorage.key(i);
+        if (k && k.startsWith('moalab:student-records:bulk:')) sessionStorage.removeItem(k);
+      }
+    } catch {}
+    WEBAPP_SESSIONS.clear();
     state.me = null;
     state.dash = null;
     Live.stop();
@@ -1840,11 +1849,13 @@ route(/^#\/decks$/, async () => {
             <option value="link">외부 배포 웹앱 (주소 연결 · 유출 방지 게이트)</option>
           </select></div>
         <div><label>제목</label><input id="nd-title" placeholder="예: AI 프롬프트 연습"></div>
-        <div id="nd-url-row" style="display:none"><label>웹앱 주소 (https://)</label>
-          <input id="nd-url" placeholder="예: https://ai-prompt-practice.vercel.app"></div>
-        <div id="nd-html-row" style="display:none"><label>HTML 파일 (.html, 3MB 이하)</label>
-          <input id="nd-html" type="file" accept=".html,.htm,text/html">
-          <div class="small muted" style="margin-top:5px">CSS·자바스크립트가 파일 안에 포함된 단일 HTML이어야 합니다. (AI로 만든 웹앱 파일 그대로 OK)</div></div>
+        <div id="nd-url-row" style="display:none"><label for="nd-url">웹앱 주소 (https://)</label>
+          <input id="nd-url" placeholder="예: https://ai-prompt-practice.vercel.app">
+          <div style="margin-top:12px">${mediaAccessField('nd-media', false)}</div></div>
+        <div id="nd-html-row" style="display:none"><label for="nd-html">HTML 파일 (.html, 3MB 이하)</label>
+          <input id="nd-html" type="file" accept=".html,.htm,text/html" aria-describedby="nd-html-help nd-html-media">
+          <div class="small muted" id="nd-html-help" style="margin-top:5px;word-break:keep-all">CSS·자바스크립트가 파일 안에 포함된 단일 HTML이어야 합니다. (AI로 만든 웹앱 파일 그대로 OK)</div>
+          <div class="small muted" id="nd-html-media" style="margin-top:5px;word-break:keep-all">카메라·마이크가 필요한 웹앱은 HTML 업로드로는 동작하지 않습니다. 웹에 배포한 뒤 '외부 배포 웹앱'으로 등록하고 '카메라·마이크 사용'을 켜 주세요.</div></div>
         <div><label>과목 (폴더)</label>
           <input id="nd-subject" list="subject-list" placeholder="예: 진로교육 / AI 기초 — / 로 하위 폴더 구분">
           <datalist id="subject-list">${subjects.map((s) => `<option value="${esc(s)}">`).join('')}</datalist></div>
@@ -1886,6 +1897,7 @@ route(/^#\/decks$/, async () => {
         const r = await api('POST', '/api/decks', {
           title, kind, html,
           external_url: back.querySelector('#nd-url').value,
+          media_access: kind === 'link' && back.querySelector('#nd-media').checked,
           description: back.querySelector('#nd-desc').value,
           subject: back.querySelector('#nd-subject').value,
           cost_type: back.querySelector('#nd-cost').value,
@@ -2057,12 +2069,24 @@ function openCostModal(deck, onSaved) {
   };
 }
 
+// 외부 링크 자료의 '카메라·마이크 사용' (decks.media_access). 켠 자료만 iframe allow 에 camera·microphone 을 넣는다(LINK_ALLOW_MEDIA).
+function mediaAccessField(id, checked) {
+  return `<label for="${id}" style="display:flex;gap:8px;align-items:center;font-weight:600;font-size:13px">
+      <input type="checkbox" id="${id}" aria-describedby="${id}-help" ${checked ? 'checked' : ''} style="width:16px;height:16px;padding:0;margin:0;flex:none;accent-color:var(--brand-600)">
+      카메라·마이크 사용
+    </label>
+    <div class="small muted" id="${id}-help" style="line-height:1.7;word-break:keep-all;margin-top:6px">
+      얼굴 인식·음성 녹음처럼 카메라·마이크가 꼭 필요한 웹앱에만 켜 주세요.
+      학생에게는 이 플랫폼 이름으로 권한 요청이 뜨고, 학생이 이미 이 플랫폼에 허용했다면 다시 묻지 않고 그 허용을 함께 씁니다.
+    </div>`;
+}
+
 function openLinkModal(deck) {
   const back = openModal(`
     <h3>외부 웹앱 설정 — ${esc(deck.title)}</h3>
     <div class="m-sub">학생은 이 플랫폼을 통해서만 웹앱을 열게 됩니다.</div>
     <div class="form-grid" style="grid-template-columns:1fr">
-      <div><label>웹앱 주소 (https://)</label><input id="lm-url" value="${esc(deck.external_url)}"></div>
+      <div><label for="lm-url">웹앱 주소 (https://)</label><input id="lm-url" value="${esc(deck.external_url)}"></div>
     </div>
     <div class="mt">
       <div class="field-label field-label-with-icon">${icon('shield')} 유출 방지 게이트 (강력 권장)</div>
@@ -2085,6 +2109,10 @@ function openLinkModal(deck) {
       <div class="snippet-box" id="lm-usnippet">${esc(usageSnippet())}</div>
       <button class="btn btn-ghost btn-sm mt" id="lm-ucopy">보고 스니펫 복사</button>
     </div>` : ''}
+    <div class="mt">
+      <div class="field-label field-label-with-icon">${icon('video')} 카메라·마이크 권한</div>
+      ${mediaAccessField('lm-media', deck.mediaAccess)}
+    </div>
     <div class="m-actions">
       <button class="btn btn-ghost" id="lm-cancel">닫기</button>
       <button class="btn btn-primary" id="lm-save">저장</button>
@@ -2101,12 +2129,108 @@ function openLinkModal(deck) {
   };
   back.querySelector('#lm-save').onclick = async () => {
     try {
-      await api('PATCH', `/api/decks/${deck.id}`, { external_url: back.querySelector('#lm-url').value });
+      await api('PATCH', `/api/decks/${deck.id}`, {
+        external_url: back.querySelector('#lm-url').value,
+        media_access: back.querySelector('#lm-media').checked,
+      });
       back.remove();
       toast('저장되었습니다.');
       navigate();
     } catch (err) { toast(err.message, true); }
   };
+}
+
+/* ---------------- 업로드형 HTML 웹앱 연결 ---------------- */
+// 웹앱은 allow-same-origin 없는 sandbox(서버 CSP 도 같음)에서 불투명 출처로 돈다 — 보는 사람의 로그인으로 API 를 못 부른다.
+// HTML 은 부모가 받아 srcdoc 으로 넣는다. 불투명 출처의 새로고침에는 SameSite=Strict 세션 쿠키가 안 실려 src 로는 401 이 난다.
+// 앱의 localStorage 는 사용자·웹앱별 키로 여기서 보관해 iframe name 으로 넘기고(lib/webapp-sandbox.js 가 읽는다),
+// 앱이 보내는 저장·사용량 메시지는 이 iframe 에서 온 것만 받는다. 앱이 연 새 창은 샌드박스를 벗는다(lib/webapp-sandbox.js).
+// sessionStorage 는 이 페이지가 살아 있는 동안만 WEBAPP_SESSIONS 에 둔다 — 플랫폼은 5분마다(refreshMe) 화면을 다시 그려
+// iframe 을 새로 만드는데, 그때마다 비면 앱의 진행 상태가 날아간다. 다른 사용자의 몫은 다음에 열 때 지운다.
+// srcdoc 문서는 부모 주소(/class#/view/…)를 기준 주소로 써서 href="#sec2"·"#" 가 iframe 을 플랫폼 화면으로 바꿔 버린다.
+// 문서 끝에 about:srcdoc 기준을 붙여 같은 문서 안 이동으로 둔다 — 끝이라 읽어 들이는 동안의 주소(//cdn 스크립트 등)는
+// 예전대로 풀리고, 앱이 자기 <base href> 를 두었으면 그쪽이 앞이라 그대로 쓴다.
+const WEBAPP_SANDBOX = 'allow-scripts allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox';
+const WEBAPP_STORE_MARKER = 'moalab-storage:';
+const WEBAPP_SRCDOC_BASE = '<base href="about:srcdoc">';
+const WEBAPP_STORE_MAX = 1_000_000;
+const WEBAPP_SESSIONS = new Map(); // `${사용자 id}:${웹앱 id}` → sessionStorage JSON
+// iframe 권한 위임(allow) — lib/webapp-sandbox.js 와 같은 값. 카메라·마이크는 불투명 출처라 업로드형 앱에는 줘도 소용없고,
+// 외부 링크에는 자료별로 '카메라·마이크 사용'을 켠 것만 준다. 크롬은 학생이 이 플랫폼에 허용한 카메라를 위임받은 iframe 과
+// 함께 쓰므로, 모든 외부 링크에 열면 아무 강사 링크나 묻지 않고 그 허용을 다시 쓸 수 있다.
+const WEBAPP_ALLOW = 'fullscreen; clipboard-write; autoplay';
+const LINK_ALLOW = WEBAPP_ALLOW;
+const LINK_ALLOW_MEDIA = `${WEBAPP_ALLOW}; camera; microphone`;
+const isStoreObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
+async function mountWebappFrame(wrap, deckId) {
+  const userId = state.me.id;
+  const key = `moalab:webapp:${userId}:${deckId}`;
+  const sessionKey = `${userId}:${deckId}`;
+  for (const k of [...WEBAPP_SESSIONS.keys()]) if (!k.startsWith(`${userId}:`)) WEBAPP_SESSIONS.delete(k);
+  const restore = (json) => {
+    try { const v = JSON.parse(json || '{}'); return isStoreObject(v) ? v : {}; } catch { return {}; }
+  };
+  let local = {};
+  try { local = restore(localStorage.getItem(key)); } catch {}
+  const session = restore(WEBAPP_SESSIONS.get(sessionKey));
+  // name 은 문서에 붙이기 전에 정해야 한다 — 크롬은 붙인 뒤 바꾼 name 을 iframe 안에 넘기지 않는다
+  const frame = document.createElement('iframe');
+  frame.name = WEBAPP_STORE_MARKER + JSON.stringify({ app: deckId, local, session });
+  frame.setAttribute('sandbox', WEBAPP_SANDBOX);
+  frame.setAttribute('allow', WEBAPP_ALLOW);
+  frame.setAttribute('referrerpolicy', 'no-referrer');
+  wrap.prepend(frame);
+  let pendingCalls = 0;
+  let timer = null;
+  const flush = () => {
+    timer = null;
+    const calls = pendingCalls;
+    pendingCalls = 0;
+    if (calls > 0) {
+      fetch('/api/usage/report', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ deckId, calls }), keepalive: true }).catch(() => {});
+    }
+  };
+  const flushNow = () => { if (timer) { clearTimeout(timer); flush(); } };
+  const onMessage = (e) => {
+    if (!frame.isConnected) { detach(); return; }
+    const d = e.source === frame.contentWindow ? e.data : null;
+    if (!d || typeof d !== 'object' || d.app !== deckId) return;
+    if (d.type === 'moalab:storage') {
+      // 1MB 를 넘는 저장은 버리고 직전 것을 둔다
+      if (isStoreObject(d.local)) {
+        try {
+          const json = JSON.stringify(d.local);
+          if (json.length <= WEBAPP_STORE_MAX) localStorage.setItem(key, json);
+        } catch {}
+      }
+      if (isStoreObject(d.session)) {
+        try {
+          const json = JSON.stringify(d.session);
+          if (json.length <= WEBAPP_STORE_MAX) WEBAPP_SESSIONS.set(sessionKey, json);
+        } catch {}
+      }
+    } else if (d.type === 'moalab:usage') {
+      pendingCalls = Math.min(10000, pendingCalls + Math.max(1, Math.min(10000, Math.round(Number(d.calls)) || 1)));
+      if (!timer) timer = setTimeout(flush, 2000);
+    }
+  };
+  // 다른 화면으로 가면(hashchange) 떼고 모아 둔 사용량을 보낸다. iframe 이 빠졌으면 다음 메시지·pagehide 때 뗀다.
+  // pagehide 에서는 보내기만 하고 듣기는 계속한다 — 뒤로/앞으로 가기 캐시(bfcache)에서 페이지가 돌아오면 웹앱도 이어서 돈다.
+  const onPageHide = () => { if (frame.isConnected) flushNow(); else detach(); };
+  const detach = () => {
+    window.removeEventListener('message', onMessage);
+    window.removeEventListener('hashchange', detach);
+    window.removeEventListener('pagehide', onPageHide);
+    flushNow();
+  };
+  window.addEventListener('message', onMessage);
+  window.addEventListener('hashchange', detach);
+  window.addEventListener('pagehide', onPageHide);
+  try {
+    const res = await fetch(`/api/webapp/${deckId}`);
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || '웹앱을 불러오지 못했습니다.');
+    frame.srcdoc = (await res.text()) + WEBAPP_SRCDOC_BASE;
+  } catch (err) { toast(err.message, true); }
 }
 
 /* ---------------- 뷰어 + 프레젠테이션 ---------------- */
@@ -2124,9 +2248,9 @@ route(/^#\/view\/(\d+)$/, async (id) => {
         <div class="career-view-actions">${recordLink}<button class="btn btn-primary" id="btn-embed-full">${icon('play')} 전체화면</button></div>
       </div>
       <div class="embed-wrap no-select" id="embed-wrap">
-        <iframe src="/api/webapp/${data.deck.id}" sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups" allow="fullscreen" referrerpolicy="no-referrer"></iframe>
         ${wm ? watermarkDiv() : ''}
       </div>`);
+    mountWebappFrame(document.getElementById('embed-wrap'), data.deck.id);
     document.getElementById('btn-embed-full').onclick = () => {
       document.getElementById('embed-wrap').requestFullscreen?.().catch(() => {});
     };
@@ -2146,10 +2270,10 @@ route(/^#\/view\/(\d+)$/, async (id) => {
         </div>
       </div>
       <div class="embed-wrap no-select" id="embed-wrap">
-        <iframe src="${esc(gate.url)}" allow="fullscreen; clipboard-write" referrerpolicy="no-referrer"></iframe>
+        <iframe src="${esc(gate.url)}" allow="${data.deck.mediaAccess ? LINK_ALLOW_MEDIA : LINK_ALLOW}" referrerpolicy="no-referrer"></iframe>
         ${wm ? watermarkDiv() : ''}
       </div>
-      <p class="small muted mt">접속 토큰은 ${gate.expiresInMinutes}분간 유효합니다. 화면 위 워터마크로 열람자가 식별됩니다.</p>`);
+      <p class="small muted mt" style="word-break:keep-all">접속 토큰은 ${gate.expiresInMinutes}분간 유효합니다. 화면 위 워터마크로 열람자가 식별됩니다.${data.deck.mediaAccess ? ' 이 웹앱은 카메라·마이크 사용을 요청할 수 있습니다.' : ''}</p>`);
     document.getElementById('btn-embed-full').onclick = () => {
       document.getElementById('embed-wrap').requestFullscreen?.().catch(() => {});
     };
