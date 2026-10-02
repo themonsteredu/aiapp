@@ -11,8 +11,8 @@
 .career-record { min-width: 0; background: #fff; border: 1px solid #d8e3dd; border-radius: 10px; padding: 24px; }
 .career-record h2 { font-size: 19px; line-height: 1.6; margin: 12px 0 4px; font-weight: 600; }
 .career-record-meta { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; color: #5b6c65; font-size: 11px; }
-.career-record-sub { color: #5b6c65; margin: 0 0 16px; }
-.career-record dl { margin: 0; }
+.career-record-sub { color: #5b6c65; margin: 0 0 4px; }
+.career-record dl { margin: 12px 0 0; }
 .career-record dl > div { border-top: 1px solid #e6ece8; padding: 14px 0; }
 .career-record dt { color: #0a6f61; font-size: 12px; font-weight: 600; margin-bottom: 6px; }
 .career-record dd { margin: 0; font-size: 14px; line-height: 1.8; white-space: pre-wrap; }

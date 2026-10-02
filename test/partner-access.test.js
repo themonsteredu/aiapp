@@ -30,8 +30,24 @@ test('진로업체 담당자에게 열린 경로는 기록 화면과 내 계정�
     `/api/school-accounts/schools/${SCHOOL}/students/${STUDENT}/records`,
     `/api/school-accounts/schools/${SCHOOL}/students/${STUDENT}/records/${PHOTO}/history`,
     `/api/school-accounts/schools/${SCHOOL}/students/${STUDENT}/records/${PHOTO}/revise`,
+    // 저장된 진로 관찰 기록에 사진만 더하기 — 활동 사진은 진로업체 담당자의 주된 일이다.
+    `/api/school-accounts/schools/${SCHOOL}/students/${STUDENT}/records/${PHOTO}/photos`,
     `/api/career-photos/${PHOTO}`,
   ]) assert.ok(allowed(path), `열려 있어야 한다: ${path}`);
+});
+
+test('사진 더하기 경로는 서버에 등록돼 있고 진로업체 담당자 허용 목록이 그 경로를 연다', () => {
+  // 허용 목록만 열고 경로가 없거나, 경로만 있고 목록이 막으면 담당자는 사진을 넣지 못한다. 둘을 함께 확인한다.
+  const { registerSchoolRegistryRoutes } = require('../lib/school-registry-api');
+  const routes = [];
+  registerSchoolRegistryRoutes({ route: (method, pattern, minRole) => routes.push({ method, pattern, minRole }), one: async () => null, json: () => {}, log: async () => {}, registry: {} });
+  const photos = `/api/school-accounts/schools/${SCHOOL}/students/${STUDENT}/records/${PHOTO}/photos`;
+  const route = routes.find(item => item.method === 'POST' && item.pattern.test(photos));
+  assert.ok(route, '사진 더하기 경로');
+  assert.equal(route.minRole, 'partner');
+  assert.ok(allowed(photos));
+  // 사진 경로처럼 보여도 기록 번호가 아니면 서버 경로에 걸리지 않는다.
+  assert.equal(routes.some(item => item.method === 'POST' && item.pattern.test(`/api/school-accounts/schools/${SCHOOL}/students/${STUDENT}/records/x/photos`)), false);
 });
 
 test('수업 자료·계정 발급·운영 경로는 진로업체 담당자에게 막힌다', () => {

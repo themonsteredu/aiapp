@@ -11,8 +11,12 @@
 .sa-issued { border: 1px solid var(--brand-600, #0a6f61); }
 .sa-issued code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
 .sa-edit { border-top: 1px solid var(--line, #e4ecea); margin-top: 16px; padding-top: 12px; }
+/* 기록 추가·정정 폼의 글 칸은 .sa-roster 의 크기만 빌린다. 고정폭 글꼴은 명단 붙여넣기용이라 문장에는 쓰지 않는다. */
+.sa-edit .sa-roster { font-family: inherit; font-size: 14px; }
+/* 기록 추가 폼: '연결할 웹앱' 칸 아래 안내 문구 때문에 칸들이 아래 맞춤으로 어긋나지 않게 위로 맞춘다. */
+#rs-add-form .form-grid { align-items: start; }
 .sa-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
-@media (max-width: 600px) { .sa-actions > * { flex: 1 1 160px; } }
+@media (max-width: 600px) { .sa-actions > * { flex: 1 1 160px; justify-content: center; } }
 .sa-history { margin-top: 12px; padding: 12px; background: var(--bg-2, #f4f9f8); border: 1px dashed var(--line, #cfdcd7); border-radius: 8px; }
 .sa-history-item + .sa-history-item { border-top: 1px solid var(--line, #e4ecea); margin-top: 10px; padding-top: 10px; }
 .sa-page .career-records-list { margin: 16px 0; }
@@ -30,3 +34,43 @@
 .rs-photo-add { display: inline-flex; align-items: center; margin-top: 10px; cursor: pointer; }
 .rs-keep-photos .rs-photo-item label { display: flex; align-items: center; gap: 6px; line-height: 1.5; }
 .rs-keep-photos .rs-photo-item input[type="checkbox"] { width: auto; flex: none; }
+
+/* 반 전체 기록 (public/school-accounts-ui.js) — 한 반 학생 칸을 한 화면에. 좁은 화면에서는 세 칸이 위아래로 쌓인다. */
+.rs-sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.rs-bulk { word-break: keep-all; overflow-wrap: break-word; }
+.rs-bulk-common-fields { margin-top: 14px; }
+.rs-bulk-common { margin-top: 14px; padding: 14px; background: var(--bg-2, #f4f9f8); border: 1px solid var(--line, #e4ecea); border-radius: 10px; }
+.rs-bulk textarea.input { width: 100%; box-sizing: border-box; min-height: 84px; resize: vertical; line-height: 1.6; }
+.rs-bulk-count { margin: 14px 0 0; font-size: 13px; font-weight: 700; color: var(--text-2); }
+.rs-bulk-rows { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 10px; }
+.rs-bulk-row { min-width: 0; padding: 12px 14px; border: 1px solid var(--line, #e4ecea); border-radius: 10px; background: var(--card, #fff); }
+.rs-bulk-row.is-done { background: var(--bg-2, #f4f9f8); }
+.rs-bulk-row.is-failed { border-color: var(--red-600); }
+.rs-bulk-who { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-bottom: 8px; font-size: 14px; }
+.rs-bulk-no { min-width: 3em; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.rs-bulk-status { margin-left: auto; display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12.5px; }
+.rs-bulk-error { color: var(--red-600); line-height: 1.5; }
+.rs-bulk-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.rs-bulk-fields .field-label { margin-bottom: 4px; }
+.rs-bulk-row textarea[readonly] { background: transparent; color: var(--text-2); }
+.rs-bulk textarea[aria-invalid="true"] { border-color: var(--red-600); }
+.rs-bulk-row .sa-actions { margin-top: 8px; }
+/* 결석·제외: 채우기·저장에서 빠지는 학생. 칸은 읽기 전용(글자 대비는 그대로 두고 테두리·바탕으로만 구분). */
+.rs-bulk-skip { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-2); cursor: pointer; }
+.rs-bulk-skip input { width: auto; margin: 0; flex: none; }
+.rs-bulk-row.is-skipped { background: var(--bg-2, #f4f9f8); border-style: dashed; }
+@media (max-width: 760px) {
+  .rs-bulk-fields { grid-template-columns: 1fr; }
+  .rs-bulk-status { margin-left: 0; flex-basis: 100%; }
+  .rs-bulk-row { padding: 12px; }
+}
+/* '이미 저장됨 · 내용이 다름' 줄의 안내 — 오류가 아니라 확인 안내라 빨강을 쓰지 않는다. */
+.rs-bulk-note { color: var(--text-2); line-height: 1.5; }
+/* 저장을 마친 뒤 초점이 옮겨 오는 요약 줄. 비어 있을 때는 자리를 차지하지 않는다. */
+.rs-bulk-summary { font-weight: 700; line-height: 1.6; word-break: keep-all; }
+.rs-bulk-summary:empty { min-height: 0; margin: 0; }
+/* 웹앱 목록을 불러오는 중·실패 안내와 다시 불러오기 단추 */
+.rs-deck-state .msg { margin-top: 6px; line-height: 1.5; word-break: keep-all; }
+.rs-deck-state .msg:empty { min-height: 0; margin: 0; }
+.rs-deck-state .btn[hidden] { display: none; }
+.rs-deck-state .btn { margin-top: 6px; }
