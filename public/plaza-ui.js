@@ -1,7 +1,8 @@
 /* Native MoaLab screens. No uploaded HTML, localStorage, or student identity in URLs. */
+import {createPlazaStudent} from './plaza-student.js';
 export async function mountPlaza({ roomId, teacher, api, shell, esc }) {
   let disposed = false, terminated = false, busy = false, dirty = false, uncertain = null, timer, stream;
-  let state, participants = [], selected = 0;
+  let state, participants = [], selected = 0, studentFlow;
   const queue = [];
   const base = `/api/plaza/rooms/${roomId}`;
   const request = (method, suffix, body) => api(method, base + suffix, body);
@@ -9,12 +10,13 @@ export async function mountPlaza({ roomId, teacher, api, shell, esc }) {
   const root = document.getElementById('plaza-root');
   const connection = document.getElementById('plaza-connection');
   const $ = name => root.querySelector(`[data-plaza="${name}"]`);
-  const stateLabel = value => ({ planning: '구상하기', paused: '제작 중 · 잠시 멈춤', closed: '수업 종료' }[value]);
+  const stateLabel = value => ({ planning: '구상하기', paused: '제작 중 · 잠시 멈춤', returning:'개장 준비',exchange:'광장 교류',reflection:'돌아보기와 저장 확인',closed: '수업 종료' }[value]);
   function message(text) { if ($('message')) $('message').textContent = text; }
   function stopCamera() { stream?.getTracks().forEach(t => t.stop()); stream = null; }
+  function stopPresenting() { if(document.fullscreenElement&&root.contains(document.fullscreenElement))void document.exitFullscreen?.().catch(()=>{}); }
   function fatal(error) {
     if (disposed) return;
-    terminated = true; stopCamera(); queue.length = 0; uncertain = null; state = null; participants = []; dirty = false; clearInterval(timer);
+    terminated = true; studentFlow?.destroy(); studentFlow=null; stopPresenting();stopCamera(); queue.length = 0; uncertain = null; state = null; participants = []; dirty = false; clearInterval(timer);
     root.hidden = false; connection.hidden = true;
     root.innerHTML = `<h1>접속을 다시 확인해 주세요</h1><p>${esc(error.message)}</p><a class="btn btn-primary" href="#/decks">수업 자료로 돌아가기</a>`;
   }
@@ -67,6 +69,10 @@ export async function mountPlaza({ roomId, teacher, api, shell, esc }) {
   }
   function renderStudent(data) {
     state = data;
+    if(data.room.stage2) {
+      studentFlow=createPlazaStudent({root,data,request,esc,onDirty:value=>{dirty=value;},onFatal:fatal});
+      return;
+    }
     const d = data.draft.content;
     root.innerHTML = `${header(data.room, '내 작품을 구상해요')}<div class="plaza-layout">
       <section><p class="plaza-seat">내 자리 ${esc(data.participant.seat_order)}번</p>
@@ -159,12 +165,16 @@ export async function mountPlaza({ roomId, teacher, api, shell, esc }) {
     const previous = currentTarget()?.id;
     state = data; participants = data.participants;
     $('phase').textContent = stateLabel(data.room.state);
-    $('incomplete').textContent = `구상 미완료 ${data.incomplete}명 / 참여 ${participants.length}명`;
+    $('incomplete').textContent = data.counts ? `참여 ${participants.length}명 · 구상 미완료 ${data.counts.plan_missing}명 · 제작 확인 전 ${data.counts.actual_missing}명 · 교류 미완료 ${data.counts.exchange_missing}명 · 기록 저장 ${data.counts.record_saved}명 / 미완료 ${data.counts.record_missing}명 · 또래 교류 완료 ${data.counts.peer_complete}명 / 대체 완료 ${data.counts.substitute_complete}명` : `구상 미완료 ${data.incomplete}명 / 참여 ${participants.length}명`;
     $('target').innerHTML = participants.map(p => `<option value="${p.id}">${esc(p.seat_order)}번 · ${esc(p.store_name || '가게 이름 준비 중')}</option>`).join('');
     const idx = participants.findIndex(p => p.id === previous); selectTarget(idx >= 0 ? idx : selected);
-    $('roster').innerHTML = participants.map(p => `<tr><td>${esc(p.seat_order)}번</td><td>${esc(p.store_name || '이름 준비 중')}</td><td>${p.saved_at ? '구상 저장됨' : '구상 미완료'}</td><td>${p.current_photo_id ? '서버 저장 완료' : '작품 사진 준비 중'}</td></tr>`).join('');
+    $('roster').innerHTML = participants.map(p => {const progress=data.progress?.find(r=>r.id===p.id);return `<tr><td>${esc(p.seat_order)}번</td><td>${esc(p.store_name || '이름 준비 중')}</td><td>${p.saved_at ? '구상 저장됨' : '구상 미완료'}${progress?`<br>제작 확인 ${progress.actual?'완료':'전'} · 요청 ${progress.request?'완료':'전'} · 답장 ${progress.reply?'완료':'전'} · 반응 ${progress.reaction?'완료':'전'} · 돌아보기 ${progress.reflection?'완료':'전'} · 기록 ${progress.saved?'저장됨':'미완료'}`:''}</td><td>${p.current_photo_id ? '서버 저장 완료' : '작품 사진 준비 중'}</td></tr>`;}).join('');
     const closed = data.room.state === 'closed';
     $('pause').disabled = closed; $('pause').textContent = data.room.state === 'paused' ? '구상 다시 열기' : '제작하러 가기';
+    if(data.room.stage2) {
+      const next={planning:['paused','제작하러 가기'],paused:['returning','작품 확인 열기'],returning:['exchange','광장 열기'],exchange:['reflection','돌아보기 열기']}[data.room.state];
+      $('pause').disabled=!next;$('pause').textContent=next?.[1]||'돌아보기와 저장 확인 중';$('pause').dataset.next=next?.[0]||'';
+    }
     $('close').disabled = closed; $('camera').disabled = closed || !participants.length; $('file').disabled = closed || !participants.length; $('capture').disabled = closed || !stream || !participants.length;
     if (closed) stopCamera();
     renderQueue(data.photos);
@@ -174,7 +184,8 @@ export async function mountPlaza({ roomId, teacher, api, shell, esc }) {
     if (disposed) return;
     state = data;
     root.innerHTML = `${header(data.room, '구상에서 작품까지')}<p>자리 순서대로 작품만 촬영해 주세요. 얼굴과 이름표는 사진에 담지 않습니다.</p>
-      <div class="plaza-controls"><strong data-plaza="incomplete"></strong><button class="btn btn-primary" data-plaza="pause">제작하러 가기</button><button class="btn btn-ghost" data-plaza="close">수업 종료</button></div>
+      <div class="plaza-controls"><strong data-plaza="incomplete"></strong><button class="btn btn-primary" data-plaza="pause">제작하러 가기</button><button class="btn btn-ghost" data-plaza="close">수업 종료</button>${data.room.stage2?'<button class="btn btn-ghost" data-plaza="slides-open">강사용 슬라이드</button>':''}</div>
+      ${data.room.stage2?'<p class="plaza-help">1교시: 직업 소개 10분 → AI 구상 20분 → 제작 안내 15분 / 2교시: 제작 / 3교시: 마무리·촬영 20분 → 광장 활동 25분</p><section class="plaza-presenter" data-plaza="slides-panel" hidden></section>':''}
       <div class="plaza-layout"><section class="plaza-camera"><h2 data-plaza="target-title">촬영할 가게</h2><label>가게 선택<select data-plaza="target"></select></label>
       <video data-plaza="video" autoplay muted playsinline aria-label="작품 촬영 미리보기"></video>
       <div class="plaza-controls"><button class="btn btn-ghost" data-plaza="camera">카메라 켜기</button><button class="btn btn-primary" data-plaza="capture" disabled>찍고 다음 자리</button><button class="btn btn-ghost" data-plaza="skip">건너뛰기</button><button class="btn btn-ghost" data-plaza="back">이전 자리 · 다시 찍기</button></div>
@@ -194,14 +205,33 @@ export async function mountPlaza({ roomId, teacher, api, shell, esc }) {
     $('file').onclick = () => { fileTarget = currentTarget(); };
     $('file').onchange = e => { const file = e.target.files[0]; const target = fileTarget || currentTarget(); e.target.value = ''; if (file) void capture(file,target); };
     $('pause').onclick = async () => {
+      if(state.room.stage2) {
+        const next=$('pause').dataset.next;
+        if(!confirm(`구상 미완료 ${state.counts.plan_missing}명, 제작 확인 전 ${state.counts.actual_missing}명, 교류 미완료 ${state.counts.exchange_missing}명입니다. ${next==='exchange'?`현재 참여 ${participants.length}명의 방문을 한 번만 배정하여 광장을 열까요?`:'다음 수업 단계로 갈까요? 미완료 활동은 그대로 남습니다.'}`))return;
+        try{await request('POST','/state',{state:next,version:state.room.version,participant_ids:participants.map(p=>p.id)});await revalidate();}catch(error){message(error.message);}return;
+      }
       if (!confirm(`구상 미완료 ${state.incomplete}명입니다. ${state.room.state === 'paused' ? '구상을 다시 열까요?' : '제작하러 갈까요? 미완료 구상은 그대로 남습니다.'}`)) return;
       try { await request('POST','/state',{ state: state.room.state === 'paused' ? 'planning' : 'paused', version: state.room.version }); await revalidate(); }
       catch (error) { message(error.message); }
     };
     $('close').onclick = async () => {
-      if (!confirm(`구상 미완료 ${state.incomplete}명, 사진 저장 확인 필요 ${queue.filter(q => q.data).length}건입니다. 학생 접속을 끝낼까요? 종료 후 다시 열 수 없습니다.`)) return;
-      try { await request('POST','/state',{ state: 'closed', version: state.room.version }); await revalidate(); }
+      if (!confirm(`구상 미완료 ${state.incomplete}명${state.counts?`, 기록 미완료 ${state.counts.record_missing}명`:''}, 사진 저장 확인 필요 ${queue.filter(q => q.data).length}건입니다. 학생 접속을 끝낼까요? 종료 후 다시 열 수 없습니다.`)) return;
+      const reason=state.counts?.record_missing?prompt('기록 미완료 상태로 종료하는 사유를 적어 주세요.'):undefined;
+      if(state.counts?.record_missing&&!reason)return;
+      try { await request('POST','/state',{ state: 'closed', version: state.room.version,reason }); await revalidate(); }
       catch (error) { message(error.message); }
+    };
+    if($('slides-open'))$('slides-open').onclick=async()=>{
+      const panel=$('slides-panel');panel.hidden=!panel.hidden;if(panel.hidden)return;
+      try {
+        let {material}=await request('GET','/slides');let index=0;
+        const draw=()=>{
+          if(!material){panel.innerHTML='<h2>비공개 강사 교안 등록</h2><p>자료를 만든 강사가 교안 파일을 등록하면 담당 강사만 이 화면에서 발표할 수 있습니다.</p><label>교안 파일 선택<input type="file" accept="application/json,.json" data-slide-upload></label>';
+            panel.querySelector('input').onchange=async e=>{try{const file=e.target.files[0];if(!file||file.size>160000)throw new Error('교안 파일 크기를 확인해 주세요.');material=(await request('PUT','/slides',JSON.parse(await file.text()))).material;draw();}catch(error){message(error.message);}};return;}
+          const slide=material.slides[index];panel.innerHTML=`<p>${esc(material.title)} · ${index+1} / ${material.slides.length} · 약 ${slide.minutes}분</p><div class="plaza-slide"><h2>${esc(slide.title)}</h2><ul>${slide.lines.map(line=>`<li>${esc(line)}</li>`).join('')}</ul></div><details><summary>발표자 설명</summary><p class="plaza-preserve">${esc(slide.notes)}</p></details><div class="plaza-controls"><button class="btn btn-ghost" data-prev ${index===0?'disabled':''}>이전</button><button class="btn btn-primary" data-next ${index===material.slides.length-1?'disabled':''}>다음</button><button class="btn btn-ghost" data-full>발표 화면 크게 보기</button></div>`;
+          panel.querySelector('[data-prev]').onclick=()=>{index--;draw();};panel.querySelector('[data-next]').onclick=()=>{index++;draw();};panel.querySelector('[data-full]').onclick=()=>panel.querySelector('.plaza-slide').requestFullscreen?.();
+        };draw();
+      }catch(error){message(error.message);panel.hidden=true;}
     };
     updateTeacher(data);
   }
@@ -211,18 +241,19 @@ export async function mountPlaza({ roomId, teacher, api, shell, esc }) {
     validating = true;
     try {
       if (teacher) updateTeacher(await request('GET','/teacher'));
+      else if(studentFlow){studentFlow.update(await request('GET','/mine'));await studentFlow.poll();}
       else if ($('form')) updateStudent(await request('GET','/mine'));
       else await request('GET','/entry');
       if (!disposed) { root.hidden = false; connection.hidden = true; }
     } catch (error) {
-      if (error.status === 403 || error.status === 404 || !document.contains(root)) fatal(error);
+      if (error.status === 401 || error.status === 403 || error.status === 404 || !document.contains(root)) fatal(error);
       else { root.hidden = true; connection.hidden = false; }
     } finally { validating = false; }
   }
-  function visibility() { root.hidden = true; connection.hidden = false; if (document.hidden) stopCamera(); else void revalidate(); }
+  function visibility() { stopPresenting();root.hidden = true; connection.hidden = false; if (document.hidden) stopCamera(); else void revalidate(); }
   function beforeUnload(event) { if (dirty || uncertain || queue.some(q => q.data)) { event.preventDefault(); event.returnValue = ''; } }
   function destroy() {
-    disposed = true; clearInterval(timer); stopCamera(); queue.length = 0; uncertain = null; state = null; participants = [];
+    disposed = true; studentFlow?.destroy();studentFlow=null;clearInterval(timer);stopPresenting();stopCamera(); queue.length = 0; uncertain = null; state = null; participants = [];
     root.replaceChildren(); connection.remove(); document.removeEventListener('visibilitychange',visibility); window.removeEventListener('beforeunload',beforeUnload); window.removeEventListener('pagehide',destroy);
   }
   document.addEventListener('visibilitychange',visibility); window.addEventListener('beforeunload',beforeUnload); window.addEventListener('pagehide',destroy);
