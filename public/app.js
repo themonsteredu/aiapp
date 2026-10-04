@@ -534,6 +534,7 @@ function menuGroups() {
         ['#/decks', 'decks', '웹앱/PPT 관리'],
         ['#/sessions', 'hash', '수업 입장 코드'],
         ...(state.settings?.plaza_stage1 ? [['#/plaza-teacher', 'decks', '광장 수업 진행']] : []),
+        ...(isAdmin()&&state.settings?.plaza_stage4 ? [['#/plaza-retention','fileText','광장 보관·파기']] : []),
         ['#/career-records', 'fileText', '수업 진로기록'],
         ['#/projects', 'briefcase', 'AI 프로젝트'],
       ]],
@@ -551,6 +552,7 @@ function menuGroups() {
       ['#/courses', 'layers', '과정·강사배정'],
       ['#/sessions', 'hash', '수업 입장 코드'],
         ...(state.settings?.plaza_stage1 ? [['#/plaza-teacher', 'decks', '광장 수업 진행']] : []),
+        ...(isAdmin()&&state.settings?.plaza_stage4 ? [['#/plaza-retention','fileText','광장 보관·파기']] : []),
         ['#/career-records', 'fileText', '수업 진로기록'],
       ['#/projects', 'briefcase', 'AI 프로젝트'],
     ]],
@@ -869,6 +871,13 @@ route(/^#\/plaza(-teacher)?\/([0-9a-f-]{36})$/i, async (staff, roomId) => {
   if (location.hash !== hash) return;
   const screen = await mountPlaza({ roomId, teacher: !!staff, api, shell, esc });
   if (location.hash !== hash) screen.destroy(); else plazaScreen = screen;
+});
+route(/^#\/plaza-retention$/, async()=>{
+  if(!isAdmin()||!state.settings?.plaza_stage4){location.hash='#/decks';return;}
+  const hash=location.hash,{mountPlazaRetention}=await import('./plaza-retention.js');
+  if(location.hash!==hash)return;
+  const screen=await mountPlazaRetention({api,shell,esc});
+  if(location.hash!==hash)screen.destroy();else plazaScreen=screen;
 });
 route(/^#\/plaza-teacher$/, async () => {
   if (!isStaff() || !state.settings?.plaza_stage1) { location.hash = '#/decks'; return; }

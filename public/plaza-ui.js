@@ -98,8 +98,9 @@ export async function mountPlaza({ roomId, teacher, api, shell, esc }) {
     root.innerHTML = `${header(data.room, '내 자리로 들어가요')}<div class="plaza-entry">
       <p>이어 하던 활동인지, 처음 시작하는 활동인지 확인해 주세요.</p>
       ${data.can_resume ? '<button class="btn btn-primary" data-plaza="resume">내 구상 이어가기</button>' : ''}
-      <form data-plaza="entry"><label>자리 번호<input type="number" name="seat_order" min="1" max="${data.room.seat_count}" required inputmode="numeric"></label>
-      <button class="btn ${data.can_resume ? 'btn-ghost' : 'btn-primary'}" ${data.room.state !== 'planning' ? 'disabled' : ''}>${data.can_resume ? '새 학생으로 입장' : '처음 입장하기'}</button></form>
+      ${data.room.stage4?`<p class="plaza-pause-note">가짜 참여자만 사용하는 시험 화면입니다. 실제 학생의 사진·활동·기록은 수집하지 않습니다.</p><p>진로기록을 남기지 않아도 구상·교류·돌아보기를 모두 할 수 있습니다. 선택에 따라 진로기록용 학생 번호도 만들지 않습니다. 수업 중 활동은 임시로 처리하며, 사진 선택은 별도입니다.</p><p>${data.notice.policy?`수업 종료 또는 이용 만료부터 사진·임시 파일 ${data.notice.policy.photo_hours}시간, 활동 초안 ${data.notice.policy.activity_hours}시간, 운영 이력 ${data.notice.policy.audit_hours}시간 후 파기 대상입니다. 관리자가 파기 결과를 확인합니다.`:'관리자의 시험 보관 기간 등록을 기다리고 있습니다.'} 최종 진로기록·백업·내보내기의 운영 보관 정책은 확정 전입니다.</p>`:''}
+      <form data-plaza="entry">${data.room.stage4?`<fieldset><legend>이번 활동의 진로기록</legend><label><input type="radio" name="record_choice" value="record" required> 마지막에 내가 확인한 진로기록 남기기</label><label><input type="radio" name="record_choice" value="no-record" required> 진로기록 없이 활동하기</label></fieldset><fieldset><legend>작품 사진</legend><label><input type="radio" name="photo_allowed" value="yes" required> 작품만 촬영하여 이번 수업에 전시하기</label><label><input type="radio" name="photo_allowed" value="no" required> 사진 없이 참여하기</label></fieldset><label><input type="checkbox" name="notice" required> 시험 안내와 임시 보관 기간을 확인했습니다.</label>`:''}<label>자리 번호<input type="number" name="seat_order" min="1" max="${data.room.seat_count}" required inputmode="numeric"></label>
+      <button class="btn ${data.can_resume ? 'btn-ghost' : 'btn-primary'}" ${data.room.state !== 'planning'||(data.room.stage4&&!data.notice.policy) ? 'disabled' : ''}>${data.can_resume ? '새 학생으로 입장' : '처음 입장하기'}</button></form>
       ${data.room.stage3?'<form data-plaza="claim"><label>새 기기 연결값<input name="code" autocomplete="off" spellcheck="false" maxlength="40" required placeholder="강사가 보여 준 연결값"></label><button class="btn btn-ghost">이 기기에서 이어가기</button></form>':''}<p data-plaza="message" role="status"></p></div>`;
     let entryPending;
     async function enter(body,suffix='/enter') {
@@ -115,7 +116,8 @@ export async function mountPlaza({ roomId, teacher, api, shell, esc }) {
     $('entry').onsubmit = event => {
       event.preventDefault();
       if (data.can_resume && !confirm('이전 학생의 접속을 끝내고 새 학생으로 입장할까요?')) return;
-      enter({ mode: 'new', seat_order: Number(new FormData(event.target).get('seat_order')), replace_current: data.can_resume });
+      const form=new FormData(event.target);
+      enter({ mode: 'new', seat_order: Number(form.get('seat_order')), replace_current: data.can_resume,...(data.room.stage4?{record_choice:form.get('record_choice'),photo_allowed:form.get('photo_allowed')==='yes',notice_version:form.get('notice')?data.notice.version:null}: {}) });
     };
   }
   function currentTarget() { return participants[selected] ? { ...participants[selected] } : null; }
@@ -124,11 +126,12 @@ export async function mountPlaza({ roomId, teacher, api, shell, esc }) {
     if (!participants.length || !$('target')) return;
     selected = Math.max(0, Math.min(participants.length - 1, index));
     const p = currentTarget(); $('target').value = p.id;
-    $('target-title').textContent = `${p.seat_order}번 · ${p.store_name || '가게 이름 준비 중'}`;
+    $('target-title').textContent = `${p.seat_order}번 · ${p.store_name || '가게 이름 준비 중'}${p.photo_allowed===false?' · 사진 없이 참여':''}`;
+    for(const k of ['file','capture'])if($(k))$(k).disabled=p.photo_allowed===false||state?.room.state==='closed'||(k==='capture'&&!stream);
   }
   function renderQueue(serverPhotos = []) {
     if (!$('queue')) return;
-    for(const item of queue){const known=serverPhotos.find(p=>p.id===item.id);if(known?.invalidated_at){item.status='사진 대상 변경됨';item.failed=false;item.data=null;}else if(known?.status==='stored'){item.status='서버 저장 완료';item.failed=false;item.data=null;}}
+    for(const item of queue){if(participants.find(p=>p.id===item.target.id)?.photo_allowed===false){item.status='사진 없이 참여 · 전송 취소';item.failed=false;item.data=null;moveBytes.delete(item.id);continue;}const known=serverPhotos.find(p=>p.id===item.id);if(known?.invalidated_at){item.status='사진 대상 변경됨';item.failed=false;item.data=null;}else if(known?.status==='stored'){item.status='서버 저장 완료';item.failed=false;item.data=null;}}
     const rows = queue.map(item => `<li>${esc(item.target.seat_order)}번 · ${esc(item.target.store_name || '가게')} <span>${esc(item.status)}</span>${item.failed ? `<button type="button" class="btn btn-ghost" data-retry="${item.id}">다시 보내기</button>` : ''}</li>`);
     const localIds = new Set(queue.map(q => q.id));
     for (const p of serverPhotos.filter(p => p.status !== 'stored' && !p.invalidated_at && !localIds.has(p.id))) {
@@ -140,6 +143,7 @@ export async function mountPlaza({ roomId, teacher, api, shell, esc }) {
   }
   async function upload(item) {
     if (!item || item.sending || disposed) return;
+    if(participants.find(p=>p.id===item.target.id)?.photo_allowed===false){item.data=null;renderQueue(state.photos);return;}
     item.sending = true; item.failed = false; item.status = '전송 중'; renderQueue(state.photos);
     try {
       await request('POST','/photos', { capture_id: item.id, participant_id: item.target.id, target_version: item.target.target_version });
@@ -150,6 +154,7 @@ export async function mountPlaza({ roomId, teacher, api, shell, esc }) {
   }
   async function capture(source, target) {
     if (!target || disposed) return;
+    if(target.photo_allowed===false){message('이 학생은 사진 없이 참여합니다. 다음 가게를 선택해 주세요.');return;}
     let bitmap;
     try {
       bitmap = source instanceof Blob ? await createImageBitmap(source) : source;
@@ -173,17 +178,17 @@ export async function mountPlaza({ roomId, teacher, api, shell, esc }) {
     const previous = currentTarget()?.id;
     state = data; participants = data.participants;
     $('phase').textContent = stateLabel(data.room.state);
-    $('incomplete').textContent = data.counts ? `참여 ${data.counts.present??participants.length}명 · 결석 ${data.counts.absent??0}명 · 구상 미완료 ${data.counts.plan_missing}명 · 제작 확인 전 ${data.counts.actual_missing}명 · 교류 미완료 ${data.counts.exchange_missing}명 · 기록 저장 ${data.counts.record_saved}명 / 미완료 ${data.counts.record_missing}명 · 또래 교류 완료 ${data.counts.peer_complete}명 / 대체 완료 ${data.counts.substitute_complete}명` : `구상 미완료 ${data.incomplete}명 / 참여 ${participants.length}명`;
-    $('target').innerHTML = participants.map(p => `<option value="${p.id}">${esc(p.seat_order)}번 · ${esc(p.store_name || '가게 이름 준비 중')}</option>`).join('');
+    $('incomplete').textContent = data.counts ? `참여 ${data.counts.present??participants.length}명 · 결석 ${data.counts.absent??0}명 · 구상 미완료 ${data.counts.plan_missing}명 · 제작 확인 전 ${data.counts.actual_missing}명 · 교류 미완료 ${data.counts.exchange_missing}명 · 기록 저장 ${data.counts.record_saved}명 / 미완료 ${data.counts.record_missing}명 ${data.room.stage4?` · 기록 없이 참여 ${data.counts.no_record}명 / 활동 완료 ${data.counts.activity_completed}명`:''} · 또래 교류 완료 ${data.counts.peer_complete}명 / 대체 완료 ${data.counts.substitute_complete}명` : `구상 미완료 ${data.incomplete}명 / 참여 ${participants.length}명`;
+    $('target').innerHTML = participants.map(p => `<option value="${p.id}">${esc(p.seat_order)}번 · ${esc(p.store_name || '가게 이름 준비 중')}${p.photo_allowed===false?' · 사진 없이 참여':''}</option>`).join('');
     const idx = participants.findIndex(p => p.id === previous); selectTarget(idx >= 0 ? idx : selected);
-    $('roster').innerHTML = participants.map(p => {const progress=data.progress?.find(r=>r.id===p.id);return `<tr><td>${esc(p.seat_order)}번${p.attendance==='absent'?' · 결석':''}</td><td>${esc(p.store_name || '이름 준비 중')}</td><td>${p.saved_at ? '구상 저장됨' : '구상 미완료'}${progress?`<br>제작 확인 ${progress.actual?'완료':'전'} · 요청 ${progress.request?'완료':'전'} · 답장 ${progress.reply?'완료':'전'} · 반응 ${progress.reaction?'완료':'전'} · 돌아보기 ${progress.reflection?'완료':'전'} · 기록 ${progress.saved?'저장됨':'미완료'}`:''}</td><td>${p.current_photo_id ? '서버 저장 완료' : '작품 사진 준비 중'}</td></tr>`;}).join('');
+    $('roster').innerHTML = participants.map(p => {const progress=data.progress?.find(r=>r.id===p.id);return `<tr><td>${esc(p.seat_order)}번${p.attendance==='absent'?' · 결석':''}</td><td>${esc(p.store_name || '이름 준비 중')}</td><td>${p.saved_at ? '구상 저장됨' : '구상 미완료'}${progress?`<br>제작 확인 ${progress.actual?'완료':'전'} · 요청 ${progress.request?'완료':'전'} · 답장 ${progress.reply?'완료':'전'} · 반응 ${progress.reaction?'완료':'전'} · 돌아보기 ${progress.reflection?'완료':'전'} · 기록 ${p.record_choice==='no-record'?'남기지 않음':progress.saved?'저장됨':'미완료'}`:''}</td><td>${p.photo_allowed===false?'사진 없이 참여':p.current_photo_id ? '서버 저장 완료' : '작품 사진 준비 중'}</td></tr>`;}).join('');
     const closed = data.room.state === 'closed';
     $('pause').disabled = closed; $('pause').textContent = data.room.state === 'paused' ? '구상 다시 열기' : '제작하러 가기';
     if(data.room.stage2) {
       const next={planning:['paused','제작하러 가기'],paused:['returning','작품 확인 열기'],returning:['exchange','광장 열기'],exchange:['reflection','돌아보기 열기']}[data.room.state];
       $('pause').disabled=!next;$('pause').textContent=next?.[1]||'돌아보기와 저장 확인 중';$('pause').dataset.next=next?.[0]||'';
     }
-    $('close').disabled = closed; $('camera').disabled = closed || !participants.length; $('file').disabled = closed || !participants.length; $('capture').disabled = closed || !stream || !participants.length;
+    $('close').disabled = closed; $('camera').disabled = closed || !participants.length; $('file').disabled = closed || !participants.length||currentTarget()?.photo_allowed===false; $('capture').disabled = closed || !stream || !participants.length||currentTarget()?.photo_allowed===false;
     if (closed) stopCamera();
     recovery?.update(data);
     renderQueue(data.photos);
@@ -212,7 +217,7 @@ export async function mountPlaza({ roomId, teacher, api, shell, esc }) {
     $('skip').onclick = () => selectTarget(selected + 1); $('back').onclick = () => selectTarget(selected - 1);
     $('camera').onclick = async () => {
       try { stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
-        if (disposed) { stopCamera(); return; } $('video').srcObject = stream; $('capture').disabled = !participants.length;
+        if (disposed) { stopCamera(); return; } $('video').srcObject = stream; $('capture').disabled = !participants.length||currentTarget()?.photo_allowed===false;
       } catch { message('카메라를 열지 못했습니다. 아래 사진 선택을 이용하거나 기기 권한을 확인해 주세요.'); }
     };
     $('capture').onclick = () => { const target = currentTarget(); void capture($('video'), target); };
@@ -262,7 +267,7 @@ export async function mountPlaza({ roomId, teacher, api, shell, esc }) {
       else await request('GET','/entry');
       if (!disposed&&!terminated&&!document.hidden&&epoch===visibilityEpoch&&navigator.onLine!==false) { root.hidden = false; connection.hidden = true; }
     } catch (error) {
-      if (error.status === 401 || error.status === 403 || error.status === 404 || !document.contains(root)) fatal(error);
+      if (error.status === 401 || error.status === 403 || error.status === 404 || error.status === 410 || !document.contains(root)) fatal(error);
       else { root.hidden = true; connection.hidden = false; }
     } finally { validating = false;if(epoch!==visibilityEpoch&&!disposed&&!terminated&&!document.hidden&&navigator.onLine!==false)void revalidate(); }
   }

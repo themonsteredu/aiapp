@@ -24,7 +24,7 @@ export function createPlazaStudent({root,data,request,esc,onDirty,onFatal}) {
       return result;
     }catch(error){
       if(disposed)return;
-      if([401,403,404].includes(error.status)){onFatal(error);return;}
+      if([401,403,404,410].includes(error.status)){onFatal(error);return;}
       if(error.status&&error.status<500)pending.delete(key);
       status('message',error.status&&error.status<500?error.message:'저장 확인 필요 · 같은 버튼으로 다시 확인해 주세요.');changed();
     }finally{busy=false;if(!disposed)lock();}
@@ -33,6 +33,7 @@ export function createPlazaStudent({root,data,request,esc,onDirty,onFatal}) {
   root.innerHTML=`<header class="plaza-heading"><p class="plaza-kicker">모아킷 · 모아랩</p><h1>조향사 광장</h1><p data-flow="phase"></p></header>
     <p class="plaza-seat">내 자리 ${esc(data.participant.seat_order)}번</p><p>${esc(card.problem||'서로 다른 손님을 배려하는 제품과 설명을 생각해요.')}</p>
     <p class="plaza-pause-note" data-flow="kit">${card.materials_status==='test-approved'?'시험용 재료로 진행하는 개발 화면입니다. 실제 향 목록은 확인 대기입니다.':esc(card.materials_status)}</p>
+    ${data.room.stage4?`<section aria-label="내 기록과 사진 선택"><p data-flow="privacy-status"></p><button type="button" class="btn btn-ghost" data-flow="withdraw-photo">작품 사진 사용 중지·삭제 요청</button><p data-flow="photo-purge" role="status"></p></section>`:''}
     <nav class="plaza-controls" aria-label="활동 이동">${[['plan-section','구상'],['actual-section','제작 확인'],['exchange-section','방문과 답장'],['reflection-section','돌아보기']].map(([id,title])=>`<button type="button" class="btn btn-ghost" data-jump="${id}">${title}</button>`).join('')}</nav>
     <p role="status" aria-live="polite" data-flow="message">쓴 내용은 저장 버튼을 눌러 서버 확인을 받아 주세요.</p>
     <section data-flow="plan-section"><h2>1. 손님을 생각하며 구상해요</h2>
@@ -57,7 +58,7 @@ export function createPlazaStudent({root,data,request,esc,onDirty,onFatal}) {
       <form data-flow="reply"><fieldset data-fields="reply"><label>도움이 필요하면 시작 문장을 골라 보세요<select data-flow="reply-help"><option value="">직접 적기</option>${option(card.reply_options||[])}</select></label><label>초안을 바꾼 내 답장<textarea name="text" maxlength="300" rows="3" required>${esc(data.exchange.incoming?.reply?.text||'')}</textarea></label><p class="plaza-help">향의 효능을 약속하지 말고, 키트에서 확인한 안내로 설명해 주세요.</p><button class="btn btn-primary">내 답장 보내기</button></fieldset></form><p data-flow="reply-saved"></p>
       <h3>내 요청에 온 답장</h3><blockquote data-flow="received-reply"></blockquote><form data-flow="reaction"><fieldset data-fields="reaction"><label>답장을 읽고 고른 반응<select name="reaction_id">${option(card.reactions||[])}</select></label><button class="btn btn-primary">반응 보내기</button></fieldset></form><p data-flow="reaction-saved"></p></section>
     <section class="plaza-step" data-flow="reflection-section"><h2>4. 오늘의 경험을 돌아봐요</h2><form data-flow="reflection"><fieldset data-fields="reflection">${questions.map((q,i)=>`<label>${q}<select data-answer-help="${i}"><option value="">직접 적기</option>${(card.reflection_options?.[i]||[]).map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join('')}</select><textarea aria-label="${q}" name="answer${i}" rows="2" maxlength="220" required>${esc(a.reflection?.answers[i]||'')}</textarea></label>`).join('')}<button class="btn btn-primary">돌아보기 저장하기</button></fieldset></form><p data-flow="reflection-saved"></p>
-      <button type="button" class="btn btn-ghost" data-flow="preview">최종 기록 확인하기</button><p class="plaza-help">확인할 기록을 만들면 활동 내용이 고정됩니다. 저장할 내용을 먼저 살펴보세요.</p><div data-flow="record-preview"></div><button type="button" class="btn btn-primary" data-flow="final" hidden>확인한 진로기록 저장하기</button><p data-flow="receipt" role="status"></p></section>`;
+      <button type="button" class="btn btn-ghost" data-flow="preview">최종 기록 확인하기</button><p class="plaza-help" data-flow="finish-help">확인할 기록을 만들면 활동 내용이 고정됩니다. 저장할 내용을 먼저 살펴보세요.</p><div data-flow="record-preview"></div><button type="button" class="btn btn-primary" data-flow="final" hidden>확인한 진로기록 저장하기</button><p data-flow="receipt" role="status"></p></section>`;
   function setSection(key) {
     for(const id of ['plan-section','actual-section','exchange-section','reflection-section'])$(id).hidden=id!==key;
     root.querySelectorAll('[data-jump]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.jump===key)));
@@ -73,13 +74,14 @@ export function createPlazaStudent({root,data,request,esc,onDirty,onFatal}) {
   $('reply').onsubmit=e=>{e.preventDefault();void action('reply','POST','/message',{...values('reply'),kind:'reply',visit_id:state.exchange.incoming?.id,...medium()});};
   $('reaction').onsubmit=e=>{e.preventDefault();void action('reaction','POST','/message',{...values('reaction'),kind:'reaction',visit_id:state.exchange.outgoing?.id,...medium()});};
   $('reflection').onsubmit=e=>{e.preventDefault();const v=values('reflection');void action('reflection','PUT','/activity',{kind:'reflection',version:state.activity.version,answers:questions.map((_,i)=>v[`answer${i}`])});};
-  $('preview').onclick=()=>{if(dirty.size||pending.size){status('message','수정 중인 내용을 먼저 저장하고 확인해 주세요.');return;}void action('preview','POST','/record-preview',{});};
+  $('preview').onclick=()=>{if(dirty.size||[...pending.keys()].some(k=>k!=='preview')){status('message','수정 중인 내용을 먼저 저장하고 확인해 주세요.');return;}void action('preview','POST',state.privacy?.record_choice==='no-record'?'/finish':'/record-preview',{});};
   $('final').onclick=()=>void action('final','POST','/record',{attempt_id:state.receipt.attempt_id,digest:state.receipt.digest});
+  if($('withdraw-photo'))$('withdraw-photo').onclick=()=>{if(!confirm('사진 조회와 새 촬영을 막고 저장된 작품 사진 삭제를 요청할까요? 활동은 계속할 수 있습니다.'))return;void action('withdraw-photo','POST','/photo-choice',{photo_allowed:false,version:state.privacy.privacy_version});};
   $('reply-help').onchange=e=>{const option=card.reply_options.find(o=>o.id===e.target.value);if(option){$('reply').elements.text.value=option.text;dirty.add('reply');changed();}};
   $('actual-help').onchange=e=>{if(e.target.value){$('actual').elements.note.value=e.target.value;dirty.add('actual');changed();}};
   root.querySelectorAll('[data-answer-help]').forEach(select=>select.onchange=()=>{if(select.value){$('reflection').elements[`answer${select.dataset.answerHelp}`].value=select.value;dirty.add('reflection');changed();}});
   function lock() {
-    const phase=state.room.state,frozen=!!state.receipt,ex=state.exchange;
+    const phase=state.room.state,frozen=!!state.receipt||!!state.privacy?.activity_completed_at,ex=state.exchange;
     const allowed={ideas:phase==='planning'&&state.ai.ideas?.status!=='ready',plan:phase==='planning'&&state.ai.ideas?.status==='ready',actual:['returning','exchange','reflection'].includes(phase),
       request:['exchange','reflection'].includes(phase)&&ex.outgoing&&!ex.outgoing.request,reply:['exchange','reflection'].includes(phase)&&state.ai.reply?.status==='ready'&&!ex.incoming?.reply,
       reaction:['exchange','reflection'].includes(phase)&&ex.outgoing?.reply&&!ex.outgoing.reaction,reflection:phase==='reflection'};
@@ -91,6 +93,7 @@ export function createPlazaStudent({root,data,request,esc,onDirty,onFatal}) {
     $('reply-ai').disabled=busy||frozen||!['exchange','reflection'].includes(phase)||!ex.incoming?.request||state.ai.reply?.status==='ready';
     $('preview').disabled=busy||phase!=='reflection'||frozen;
     $('final').disabled=busy||!state.receipt||state.receipt.saved;
+    if($('withdraw-photo'))$('withdraw-photo').disabled=busy||(!state.privacy.photo_allowed&&state.privacy.photo_purge?.status!=='retry');
   }
   function showStore(id,scroll=true) {
     const s=stores.find(s=>s.id===id);if(!s){status('message','가게 소개를 준비하고 있어요. 잠시 뒤 확인해 주세요.');return;}
@@ -116,6 +119,14 @@ export function createPlazaStudent({root,data,request,esc,onDirty,onFatal}) {
   function update(next) {
     if(disposed||next.room.version<state.room.version)return;
     state=next;status('phase',label(state.room.state));
+    if(state.privacy){
+      const p=state.privacy,noRecord=p.record_choice==='no-record';
+      status('privacy-status',`${noRecord?'진로기록 없이 참여':'마지막에 확인한 진로기록 남기기'} · ${p.photo_allowed?'작품 사진 전시 허용':'사진 없이 참여'}`);
+      status('photo-purge',p.photo_purge?(p.photo_purge.status==='verified'?'광장 사진 파일의 삭제를 확인했습니다. 백업·내보내기는 별도 확인 대상입니다.':'사진 조회는 중지되었습니다. 파일 삭제 확인이 필요합니다. 같은 버튼으로 다시 확인해 주세요.'):'');
+      status('preview',noRecord?'진로기록 없이 활동 완료하기':'최종 기록 확인하기');
+      status('finish-help',noRecord?'활동을 완료하면 내용을 고정합니다. 진로기록용 학생 번호와 최종 기록은 만들지 않습니다.':'확인할 기록을 만들면 활동 내용이 고정됩니다. 저장할 내용을 먼저 살펴보세요.');
+      if(p.activity_completed_at)status('receipt','활동 완료 · 진로기록을 남기지 않았습니다.');
+    }
     if(displayPhase!==state.room.state){displayPhase=state.room.state;setSection(({planning:'plan-section',paused:'plan-section',returning:'actual-section',exchange:'exchange-section',reflection:'reflection-section'})[displayPhase]||'reflection-section');}
     $('pause-note').hidden=state.room.state!=='paused';
     status('plan-saved',dirty.has('plan')?'수정한 구상은 저장 전입니다.':state.draft.saved_at?'구상 저장됨 · 서버에서 확인했습니다.':'구상 저장 전');

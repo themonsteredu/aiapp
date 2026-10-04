@@ -12,7 +12,7 @@ function client(base,cookiePairs=[]) {
   }};
 }
 async function ok(response){const r=await response;if(r.status!==200)throw new Error(`시험 요청 실패 (${r.status}): ${r.data.error||'응답 확인 필요'}`);return r.data;}
-async function prepare({base,fixture,count=5}) {
+async function prepare({base,fixture,count=5,choices=[]}) {
   if(!plazaConfig()?.stage3||!Number.isInteger(count)||count<1||count>30)throw new Error('3단계에서 가짜 참여자 1~30명을 준비합니다.');
   const teacher=client(base);await ok(teacher.request('POST','/api/login',fixture.teacher));
   const room=`/api/plaza/rooms/${fixture.roomId}`,initial=await ok(teacher.request('GET',room+'/teacher'));
@@ -20,7 +20,7 @@ async function prepare({base,fixture,count=5}) {
   const people=[];
   for(let i=1;i<=count;i++){
     const person=client(base);await ok(person.request('POST','/api/join',{code:fixture.code,name:`리허설 가짜 참여자 ${i}`}));
-    const joined=await ok(person.request('POST',room+'/enter',{mode:'new',seat_order:i,attempt_id:crypto.randomUUID()}));
+    const joined=await ok(person.request('POST',room+'/enter',{mode:'new',seat_order:i,attempt_id:crypto.randomUUID(),...(plazaConfig().stage4?{record_choice:choices[i-1]?.record_choice||'record',photo_allowed:choices[i-1]?.photo_allowed??true,notice_version:'stage4-test-1'}:{})}));
     if(joined.card.materials_status!=='test-approved')throw new Error('가짜 키트 선택지에서만 자동 리허설합니다.');
     const ideas=await ok(person.request('POST',room+'/ai',{kind:'ideas',customer_id:'gentle',material_ids:['test-a','test-b'],attempt_id:crypto.randomUUID()}));
     const draft={version:0,attempt_id:crypto.randomUUID(),idea_id:ideas.output.ideas[0].id,combination_id:ideas.output.ideas[0].combination_id,introduction_id:'guide',artwork_seed_id:'piece',artwork_name:`리허설 작품 ${i}`,store_seed_id:'workshop',store_name:`리허설 가게 ${i}`};
@@ -38,7 +38,7 @@ async function advance({people,room}) {
   for(const p of people){let m=await view(p);if(['exchange','reflection'].includes(m.room.state)&&m.exchange.outgoing?.reply&&!m.exchange.outgoing.reaction)await send(p,'/message',{kind:'reaction',visit_id:m.exchange.outgoing.id,reaction_id:'understood'});
     if(m.room.state==='reflection'){
       if(!m.activity.reflection)await ok(p.client.request('PUT',room+'/activity',{attempt_id:crypto.randomUUID(),kind:'reflection',version:m.activity.version,answers:['가짜 참여자 리허설입니다.','예외 처리를 확인했습니다.','실제 학생 활동이 아닙니다.']}));
-      m=await view(p);if(m.exchange.outgoing?.reaction&&m.exchange.incoming?.reply){const receipt=m.receipt||await send(p,'/record-preview',{});if(!receipt.saved)await ok(p.client.request('POST',room+'/record',{attempt_id:receipt.attempt_id,digest:receipt.digest}));}
+      m=await view(p);if(m.exchange.outgoing?.reaction&&m.exchange.incoming?.reply){if(m.privacy?.record_choice==='no-record'){if(!m.privacy.activity_completed_at)await send(p,'/finish',{});}else{const receipt=m.receipt||await send(p,'/record-preview',{});if(!receipt.saved)await ok(p.client.request('POST',room+'/record',{attempt_id:receipt.attempt_id,digest:receipt.digest}));}}
     }
   }
 }

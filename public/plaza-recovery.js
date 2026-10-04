@@ -39,6 +39,7 @@ export function createPlazaRecovery({root,request,esc,onChanged,onMove,onMoveSta
   $('move').onclick=()=>action('move','/photo-move',()=>{
     const f=data.photos.find(p=>p.id===$('photo').value),target=data.participants.find(p=>p.id===$('destination').value),source=data.participants.find(p=>p.id===f?.participant_id);
     if(!f||!target||!source||source.id===target.id){note('서로 다른 두 가게를 확인해 주세요.');return;}
+    if(target.photo_allowed===false||source.photo_allowed===false){note('사진 없이 참여하는 학생은 사진을 옮길 수 없습니다.');return;}
     if(!confirm(`${source.seat_order}번 · ${source.store_name||'가게'}의 사진을 ${target.seat_order}번 · ${target.store_name||'가게'}로 옮길까요? 이전 가게 전시가 내려갑니다.`))return;
     return {capture_id:f.id,participant_id:target.id,source_version:source.target_version,target_version:target.target_version,confirm:true};
   },async(result,body)=>{await onMove(result,body);note(result.saved?'사진을 옮겨 서버 저장을 확인했습니다.':'사진 대상을 바꿨습니다. 기기에 남은 사진을 보내거나 새로 촬영해 주세요.');});
