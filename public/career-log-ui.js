@@ -107,6 +107,7 @@ export function registerCareerLogUI({ route, api, shell, state, esc, toast, navi
       ${byline ? `<p class="career-record-sub">${esc(byline)}</p>` : ''}
       ${bodyHtml(record)}
       ${photoStrip(record)}
+      ${state.settings?.plaza_stage5&&record.plaza_record?`<p><a class="btn btn-ghost" href="#/plaza-record/${esc(record.id)}">QR 진로 카드 확인·인쇄</a></p>`:''}
       <details class="career-receipt"><summary>저장 접수번호</summary><code>${esc(record.id)}</code></details>
     </article>`;
   }

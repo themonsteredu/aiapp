@@ -30,15 +30,15 @@ export function createPlazaStudent({root,data,request,esc,onDirty,onFatal}) {
     }finally{busy=false;if(!disposed)lock();}
   }
   const d=data.draft.content,a=data.activity;
-  root.innerHTML=`<header class="plaza-heading"><p class="plaza-kicker">모아킷 · 모아랩</p><h1>조향사 광장</h1><p data-flow="phase"></p></header>
+  root.innerHTML=`<header class="plaza-heading"><p class="plaza-kicker">모아킷 · 모아랩</p><h1>${esc(card.display?.profession||'조향사')} 광장</h1><p data-flow="phase"></p></header>
     <p class="plaza-seat">내 자리 ${esc(data.participant.seat_order)}번</p><p>${esc(card.problem||'서로 다른 손님을 배려하는 제품과 설명을 생각해요.')}</p>
-    <p class="plaza-pause-note" data-flow="kit">${card.materials_status==='test-approved'?'시험용 재료로 진행하는 개발 화면입니다. 실제 향 목록은 확인 대기입니다.':esc(card.materials_status)}</p>
+    <p class="plaza-pause-note" data-flow="kit">${card.materials_status==='test-approved'?'시험용 재료로 진행하는 개발 화면입니다. 실제 키트 목록은 확인 대기입니다.':esc(card.materials_status)}</p>
     ${data.room.stage4?`<section aria-label="내 기록과 사진 선택"><p data-flow="privacy-status"></p><button type="button" class="btn btn-ghost" data-flow="withdraw-photo">작품 사진 사용 중지·삭제 요청</button><p data-flow="photo-purge" role="status"></p></section>`:''}
     <nav class="plaza-controls" aria-label="활동 이동">${[['plan-section','구상'],['actual-section','제작 확인'],['exchange-section','방문과 답장'],['reflection-section','돌아보기']].map(([id,title])=>`<button type="button" class="btn btn-ghost" data-jump="${id}">${title}</button>`).join('')}</nav>
     <p role="status" aria-live="polite" data-flow="message">쓴 내용은 저장 버튼을 눌러 서버 확인을 받아 주세요.</p>
     <section data-flow="plan-section"><h2>1. 손님을 생각하며 구상해요</h2>
       <form data-flow="ideas"><fieldset data-fields="ideas"><label>내 손님<select name="customer_id">${option(card.customers,d.customer_id||state.ai.ideas?.selection?.customer_id)}</select></label>
-      <p>책상의 시향지를 맡고, 사용할 재료를 골라 주세요.</p><div class="plaza-materials">${(card.materials||[]).map(m=>`<label><input type="checkbox" name="material_ids" value="${esc(m.id)}" ${(d.material_ids||state.ai.ideas?.selection?.material_ids||[]).includes(m.id)?'checked':''}><span class="plaza-material-mark" aria-hidden="true">시향지</span><strong>${esc(m.title)}</strong><span>${esc(m.description)}</span></label>`).join('')}</div>
+      <p>${esc(card.display?.material_prompt||'책상의 시향지를 맡고, 사용할 재료를 골라 주세요.')}</p><div class="plaza-materials">${(card.materials||[]).map(m=>`<label><input type="checkbox" name="material_ids" value="${esc(m.id)}" ${(d.material_ids||state.ai.ideas?.selection?.material_ids||[]).includes(m.id)?'checked':''}><span class="plaza-material-mark" aria-hidden="true">${esc(card.display?.material_label||'시향지')}</span><strong>${esc(m.title)}</strong><span>${esc(m.description)}</span></label>`).join('')}</div>
       <button class="btn btn-primary">두 구상 확인하기</button></fieldset></form>
       <p data-flow="ai-source"></p><div class="plaza-ideas" data-flow="idea-list"></div>
       <form data-flow="plan"><fieldset data-fields="plan"><label>내가 고른 구상<select name="idea_id" data-flow="idea-select"></select></label>
@@ -55,10 +55,10 @@ export function createPlazaStudent({root,data,request,esc,onDirty,onFatal}) {
     <section class="plaza-step" data-flow="exchange-section"><h2>3. 한 가게를 방문하고 손님을 맞아요</h2><p data-flow="assignment"></p>${data.room.stage3?'<label class="plaza-help"><input type="checkbox" data-flow="paper-confirm">종이로 한 교류 내용을 내가 확인해 입력합니다.</label>':''}
       <form data-flow="request"><fieldset data-fields="request"><label>방문할 가게에 보낼 요청<select name="request_id">${option(card.requests||[])}</select></label><button class="btn btn-primary">요청 보내기</button></fieldset></form><p data-flow="sent-request"></p>
       <h3>내 가게에 도착한 요청</h3><p data-flow="incoming-request"></p><button type="button" class="btn btn-ghost" data-flow="reply-ai">답장 초안 한 번 확인하기</button><blockquote data-flow="reply-draft"></blockquote>
-      <form data-flow="reply"><fieldset data-fields="reply"><label>도움이 필요하면 시작 문장을 골라 보세요<select data-flow="reply-help"><option value="">직접 적기</option>${option(card.reply_options||[])}</select></label><label>초안을 바꾼 내 답장<textarea name="text" maxlength="300" rows="3" required>${esc(data.exchange.incoming?.reply?.text||'')}</textarea></label><p class="plaza-help">향의 효능을 약속하지 말고, 키트에서 확인한 안내로 설명해 주세요.</p><button class="btn btn-primary">내 답장 보내기</button></fieldset></form><p data-flow="reply-saved"></p>
+      <form data-flow="reply"><fieldset data-fields="reply"><label>도움이 필요하면 시작 문장을 골라 보세요<select data-flow="reply-help"><option value="">직접 적기</option>${option(card.reply_options||[])}</select></label><label>초안을 바꾼 내 답장<textarea name="text" maxlength="300" rows="3" required>${esc(data.exchange.incoming?.reply?.text||'')}</textarea></label><p class="plaza-help">${esc(card.display?.reply_help||'향의 효능을 약속하지 말고, 키트에서 확인한 안내로 설명해 주세요.')}</p><button class="btn btn-primary">내 답장 보내기</button></fieldset></form><p data-flow="reply-saved"></p>
       <h3>내 요청에 온 답장</h3><blockquote data-flow="received-reply"></blockquote><form data-flow="reaction"><fieldset data-fields="reaction"><label>답장을 읽고 고른 반응<select name="reaction_id">${option(card.reactions||[])}</select></label><button class="btn btn-primary">반응 보내기</button></fieldset></form><p data-flow="reaction-saved"></p></section>
     <section class="plaza-step" data-flow="reflection-section"><h2>4. 오늘의 경험을 돌아봐요</h2><form data-flow="reflection"><fieldset data-fields="reflection">${questions.map((q,i)=>`<label>${q}<select data-answer-help="${i}"><option value="">직접 적기</option>${(card.reflection_options?.[i]||[]).map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join('')}</select><textarea aria-label="${q}" name="answer${i}" rows="2" maxlength="220" required>${esc(a.reflection?.answers[i]||'')}</textarea></label>`).join('')}<button class="btn btn-primary">돌아보기 저장하기</button></fieldset></form><p data-flow="reflection-saved"></p>
-      <button type="button" class="btn btn-ghost" data-flow="preview">최종 기록 확인하기</button><p class="plaza-help" data-flow="finish-help">확인할 기록을 만들면 활동 내용이 고정됩니다. 저장할 내용을 먼저 살펴보세요.</p><div data-flow="record-preview"></div><button type="button" class="btn btn-primary" data-flow="final" hidden>확인한 진로기록 저장하기</button><p data-flow="receipt" role="status"></p></section>`;
+      <button type="button" class="btn btn-ghost" data-flow="preview">최종 기록 확인하기</button><p class="plaza-help" data-flow="finish-help">확인할 기록을 만들면 활동 내용이 고정됩니다. 저장할 내용을 먼저 살펴보세요.</p><div data-flow="record-preview"></div><button type="button" class="btn btn-primary" data-flow="final" hidden>확인한 진로기록 저장하기</button><p data-flow="receipt" role="status"></p><a class="btn btn-ghost" data-flow="career-card" hidden>내 QR 진로 카드 확인·인쇄</a></section>`;
   function setSection(key) {
     for(const id of ['plan-section','actual-section','exchange-section','reflection-section'])$(id).hidden=id!==key;
     root.querySelectorAll('[data-jump]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.jump===key)));
@@ -152,6 +152,9 @@ export function createPlazaStudent({root,data,request,esc,onDirty,onFatal}) {
     status('reaction-saved',ex.outgoing?.reaction?'내 반응 · 서버 저장 완료':'');
     if(state.receipt){const r=state.receipt;if($('record-preview').dataset.attempt!==r.attempt_id){$('record-preview').dataset.attempt=r.attempt_id;$('record-preview').innerHTML=['process','artifact','reflection'].map((k,i)=>`<h3>${['활동 과정','결과물','돌아보기'][i]}</h3><p class="plaza-preserve">${esc(r.snapshot[k])}</p>`).join('');}
       $('final').hidden=r.saved;status('receipt',r.saved?'진로기록 · 서버 저장 완료. 오늘의 활동을 마쳤어요.':'확인한 내용이 고정됐습니다. 저장 버튼을 눌러 마쳐 주세요.');}
+    const careerCard=$('career-card'),recordId=state.receipt?.record_id;
+    careerCard.hidden=!(state.room.stage5&&state.receipt?.saved&&recordId&&state.privacy?.record_choice!=='no-record');
+    if(!careerCard.hidden)careerCard.href=`#/plaza-record/${recordId}`;else careerCard.removeAttribute('href');
     lock();
   }
   update(data);

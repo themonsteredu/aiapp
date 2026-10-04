@@ -22,8 +22,8 @@ async function prepare({base,fixture,count=5,choices=[]}) {
     const person=client(base);await ok(person.request('POST','/api/join',{code:fixture.code,name:`리허설 가짜 참여자 ${i}`}));
     const joined=await ok(person.request('POST',room+'/enter',{mode:'new',seat_order:i,attempt_id:crypto.randomUUID(),...(plazaConfig().stage4?{record_choice:choices[i-1]?.record_choice||'record',photo_allowed:choices[i-1]?.photo_allowed??true,notice_version:'stage4-test-1'}:{})}));
     if(joined.card.materials_status!=='test-approved')throw new Error('가짜 키트 선택지에서만 자동 리허설합니다.');
-    const ideas=await ok(person.request('POST',room+'/ai',{kind:'ideas',customer_id:'gentle',material_ids:['test-a','test-b'],attempt_id:crypto.randomUUID()}));
-    const draft={version:0,attempt_id:crypto.randomUUID(),idea_id:ideas.output.ideas[0].id,combination_id:ideas.output.ideas[0].combination_id,introduction_id:'guide',artwork_seed_id:'piece',artwork_name:`리허설 작품 ${i}`,store_seed_id:'workshop',store_name:`리허설 가게 ${i}`};
+    const ideas=await ok(person.request('POST',room+'/ai',{kind:'ideas',customer_id:joined.card.customers[0].id,material_ids:joined.card.materials.map(m=>m.id),attempt_id:crypto.randomUUID()}));
+    const draft={version:0,attempt_id:crypto.randomUUID(),idea_id:ideas.output.ideas[0].id,combination_id:ideas.output.ideas[0].combination_id,introduction_id:joined.card.introductions.find(v=>v.id!==ideas.output.ideas[0].introduction_id).id,artwork_seed_id:joined.card.names.artwork[0].id,artwork_name:`리허설 작품 ${i}`,store_seed_id:joined.card.names.store[0].id,store_name:`리허설 가게 ${i}`};
     await ok(person.request('PUT',room+'/draft',draft));people.push({seat:i,client:person,joined,draft});
   }
   return {teacher,people,room};
@@ -32,10 +32,10 @@ async function advance({people,room}) {
   const view=async p=>ok(p.client.request('GET',room+'/mine'));
   const send=async(p,path,body)=>ok(p.client.request('POST',room+path,{attempt_id:crypto.randomUUID(),...body}));
   for(const p of people){const m=await view(p);if(['returning','exchange','reflection'].includes(m.room.state)&&!m.activity.actual)await ok(p.client.request('PUT',room+'/activity',{attempt_id:crypto.randomUUID(),kind:'actual',version:m.activity.version,result:'not_made',note:'가짜 참여자로 설명 흐름만 리허설했습니다.'}));}
-  for(const p of people){const m=await view(p);if(['exchange','reflection'].includes(m.room.state)&&m.exchange.outgoing&&!m.exchange.outgoing.request)await send(p,'/message',{kind:'request',visit_id:m.exchange.outgoing.id,request_id:'gentle'});}
+  for(const p of people){const m=await view(p);if(['exchange','reflection'].includes(m.room.state)&&m.exchange.outgoing&&!m.exchange.outgoing.request)await send(p,'/message',{kind:'request',visit_id:m.exchange.outgoing.id,request_id:m.card.requests[0].id});}
   for(const p of people){const m=await view(p);if(['exchange','reflection'].includes(m.room.state)&&m.exchange.incoming?.request&&!m.exchange.incoming.reply){
     await send(p,'/ai',{kind:'reply',visit_id:m.exchange.incoming.id});await send(p,'/message',{kind:'reply',visit_id:m.exchange.incoming.id,text:`리허설 답장 ${p.seat} · 키트 설명을 함께 읽어 볼까요?`});}}
-  for(const p of people){let m=await view(p);if(['exchange','reflection'].includes(m.room.state)&&m.exchange.outgoing?.reply&&!m.exchange.outgoing.reaction)await send(p,'/message',{kind:'reaction',visit_id:m.exchange.outgoing.id,reaction_id:'understood'});
+  for(const p of people){let m=await view(p);if(['exchange','reflection'].includes(m.room.state)&&m.exchange.outgoing?.reply&&!m.exchange.outgoing.reaction)await send(p,'/message',{kind:'reaction',visit_id:m.exchange.outgoing.id,reaction_id:m.card.reactions[0].id});
     if(m.room.state==='reflection'){
       if(!m.activity.reflection)await ok(p.client.request('PUT',room+'/activity',{attempt_id:crypto.randomUUID(),kind:'reflection',version:m.activity.version,answers:['가짜 참여자 리허설입니다.','예외 처리를 확인했습니다.','실제 학생 활동이 아닙니다.']}));
       m=await view(p);if(m.exchange.outgoing?.reaction&&m.exchange.incoming?.reply){if(m.privacy?.record_choice==='no-record'){if(!m.privacy.activity_completed_at)await send(p,'/finish',{});}else{const receipt=m.receipt||await send(p,'/record-preview',{});if(!receipt.saved)await ok(p.client.request('POST',room+'/record',{attempt_id:receipt.attempt_id,digest:receipt.digest}));}}

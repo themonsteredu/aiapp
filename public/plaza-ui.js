@@ -8,7 +8,7 @@ export async function mountPlaza({ roomId, teacher, api, shell, esc }) {
   const moveBytes = new Map();
   const base = `/api/plaza/rooms/${roomId}`;
   const request = (method, suffix, body) => api(method, base + suffix, body);
-  shell(teacher ? '광장 수업 진행' : '조향사 광장', '<p class="plaza" id="plaza-connection" role="status" hidden>접속을 확인하고 있습니다. 연결이 돌아오면 쓰던 화면으로 돌아갑니다. 인터넷이 끊기면 선생님과 종이 활동을 이어가세요. 아직 확인하지 못한 내용은 서버 저장 전입니다. 이 화면을 닫으면 전송하지 못한 글과 사진이 사라질 수 있습니다.</p><main class="plaza" id="plaza-root">접속을 확인하고 있습니다.</main>');
+  shell(teacher ? '광장 수업 진행' : '우리 반 광장', '<p class="plaza" id="plaza-connection" role="status" hidden>접속을 확인하고 있습니다. 연결이 돌아오면 쓰던 화면으로 돌아갑니다. 인터넷이 끊기면 선생님과 종이 활동을 이어가세요. 아직 확인하지 못한 내용은 서버 저장 전입니다. 이 화면을 닫으면 전송하지 못한 글과 사진이 사라질 수 있습니다.</p><main class="plaza" id="plaza-root">접속을 확인하고 있습니다.</main>');
   const root = document.getElementById('plaza-root');
   const connection = document.getElementById('plaza-connection');
   const $ = name => root.querySelector(`[data-plaza="${name}"]`);

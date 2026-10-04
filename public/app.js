@@ -92,7 +92,7 @@ function deckKindIcon(kind) {
 }
 
 /* ---------------- API ---------------- */
-let afterLoginHash = /^#\/(?:career-records(?:\/new(?:\/\d+)?)?|plaza(?:-teacher)?\/[0-9a-f-]{36})$/.test(location.hash) ? location.hash : '';
+let afterLoginHash = /^#\/(?:career-records(?:\/new(?:\/\d+)?)?|plaza(?:-teacher|-record)?\/[0-9a-f-]{36})$/.test(location.hash) ? location.hash : '';
 
 async function api(method, url, body) {
   const res = await fetch(url, {
@@ -102,7 +102,7 @@ async function api(method, url, body) {
   });
   const data = await res.json().catch(() => ({}));
   if (res.status === 401 && !url.endsWith('/api/login')) {
-    if (/^#\/(?:career-records(?:\/new(?:\/\d+)?)?|plaza(?:-teacher)?\/[0-9a-f-]{36})$/.test(location.hash)) afterLoginHash = location.hash;
+    if (/^#\/(?:career-records(?:\/new(?:\/\d+)?)?|plaza(?:-teacher|-record)?\/[0-9a-f-]{36})$/.test(location.hash)) afterLoginHash = location.hash;
     state.me = null;
     if (!/^#\/p\/[a-z0-9-]+$/.test(location.hash || '')) location.hash = '#/login';
     throw new Error(data.error || '로그인이 필요합니다.');
@@ -318,7 +318,7 @@ const Protect = {
       }
     });
     window.addEventListener('beforeprint', () => {
-      if (this.shouldBlock()) this.report('print', location.hash);
+      if (this.shouldBlock() && !plazaScreen?.printingOwnRecord?.()) this.report('print', location.hash);
     });
     // 발표 중 창 이탈 시 블랙아웃
     const onLeave = () => {
@@ -408,7 +408,7 @@ async function navigate() {
   const hash = location.hash || '#/';
   const isPublicProjectApp = /^#\/p\/[a-z0-9-]+$/.test(hash);
   if (!state.me && hash !== '#/login' && !isPublicProjectApp) {
-    if (/^#\/(?:career-records(?:\/new(?:\/\d+)?)?|plaza(?:-teacher)?\/[0-9a-f-]{36})$/.test(hash)) afterLoginHash = hash;
+    if (/^#\/(?:career-records(?:\/new(?:\/\d+)?)?|plaza(?:-teacher|-record)?\/[0-9a-f-]{36})$/.test(hash)) afterLoginHash = hash;
     location.hash = '#/login'; return;
   }
   if (state.me && state.me.mustChangePassword && hash !== '#/password' && hash !== '#/login') {
@@ -872,6 +872,20 @@ route(/^#\/plaza(-teacher)?\/([0-9a-f-]{36})$/i, async (staff, roomId) => {
   const screen = await mountPlaza({ roomId, teacher: !!staff, api, shell, esc });
   if (location.hash !== hash) screen.destroy(); else plazaScreen = screen;
 });
+route(/^#\/plaza-record\/([0-9a-f-]{36})$/i,async recordId=>{
+  if(!state.settings?.plaza_stage5){location.hash='#/career-records';return;}
+  const hash=location.hash,{mountPlazaRecordCard}=await import('./plaza-record-card.js');
+  if(location.hash!==hash)return;
+  const screen=await mountPlazaRecordCard({recordId,api,shell,esc});
+  if(location.hash!==hash)screen.destroy();else {screen.hash=hash;plazaScreen=screen;}
+});
+route(/^#\/plaza-programs$/,async()=>{
+  if(!isStaff()||!state.settings?.plaza_stage5){location.hash='#/decks';return;}
+  const hash=location.hash,{mountPlazaPrograms}=await import('./plaza-programs.js');
+  if(location.hash!==hash)return;
+  const screen=await mountPlazaPrograms({api,shell,esc});
+  if(location.hash!==hash)screen.destroy();else {screen.hash=hash;plazaScreen=screen;}
+});
 route(/^#\/plaza-retention$/, async()=>{
   if(!isAdmin()||!state.settings?.plaza_stage4){location.hash='#/decks';return;}
   const hash=location.hash,{mountPlazaRetention}=await import('./plaza-retention.js');
@@ -882,7 +896,7 @@ route(/^#\/plaza-retention$/, async()=>{
 route(/^#\/plaza-teacher$/, async () => {
   if (!isStaff() || !state.settings?.plaza_stage1) { location.hash = '#/decks'; return; }
   const data = await api('GET', '/api/plaza/rooms');
-  shell('광장 수업 진행', `<main class="plaza"><h1>진행할 수업을 선택해 주세요</h1>${data.rooms.map(room => `<p><a class="btn btn-ghost" href="#/plaza-teacher/${room.id}">${esc(room.title)} · 입장 코드 ${esc(room.code)}</a></p>`).join('') || '<p>준비된 광장이 없습니다.</p>'}</main>`);
+  shell('광장 수업 진행', `<main class="plaza"><h1>진행할 수업을 선택해 주세요</h1>${state.settings?.plaza_stage5?'<p><a class="btn btn-primary" href="#/plaza-programs">프로그램 카드와 수업 준비</a></p>':''}${data.rooms.map(room => `<p><a class="btn btn-ghost" href="#/plaza-teacher/${room.id}">${esc(room.title)} · 입장 코드 ${esc(room.code)}</a></p>`).join('') || '<p>준비된 광장이 없습니다.</p>'}</main>`);
 });
 window.addEventListener('pageshow', event => { if (event.persisted && /^#\/plaza/.test(location.hash)) navigate(); });
 

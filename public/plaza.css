@@ -10,3 +10,18 @@
 .plaza-reissue-code {padding:1rem;border:2px solid var(--brand-600);font-size:1.25rem;font-weight:700;letter-spacing:.04em;overflow-wrap:anywhere;}
 .plaza [data-recovery] select {max-width:100%;}
 .plaza pre.plaza-preserve {font:inherit;line-height:1.8;white-space:pre-wrap;word-break:keep-all;}
+
+.plaza-record-screen{max-width:900px}.plaza-career-card{margin:24px auto;padding:clamp(22px,5vw,48px);border:1px solid #bdcec6;background:#fffdf8;overflow-wrap:anywhere}
+.plaza-career-card header{padding-bottom:18px;border-bottom:2px solid var(--brand-600)}.plaza-career-card h2{font-size:26px;margin:8px 0}.plaza-career-card h3{font-size:17px;margin:24px 0 6px}.plaza-career-card p{margin:8px 0;line-height:1.85}
+.plaza-card-footer{display:grid;grid-template-columns:168px minmax(0,1fr);gap:24px;align-items:center;margin-top:30px;padding-top:20px;border-top:1px solid #bdcec6;font-size:12px}.plaza-card-footer img{display:block;width:168px;height:168px;max-width:none;background:#fff}.plaza-card-address{overflow-wrap:anywhere;font-size:10px}
+#plaza-program-root>section{padding:24px 0;border-top:1px solid #bdcec6}#plaza-program-root textarea{font-size:13px;line-height:1.7}
+@media(max-width:540px){.plaza-card-footer{grid-template-columns:1fr;gap:12px}.plaza-card-footer img{margin:auto}}
+@media print{
+  body.plaza-card-print .plaza-card-tools,body.plaza-card-print .sidebar,body.plaza-card-print .header,body.plaza-card-print .side-overlay{display:none!important}
+  body.plaza-card-print .plaza-record-screen{max-width:none;padding:0;color:#132f28}
+  body.plaza-card-print .plaza-career-card{margin:0;border:0;padding:8mm;background:#fff;font-size:10pt}
+  body.plaza-card-print .plaza-career-card h2{font-size:18pt}body.plaza-card-print .plaza-career-card h3{font-size:12pt;break-after:avoid}
+  body.plaza-card-print .plaza-career-card section,body.plaza-card-print .plaza-card-footer{break-inside:avoid}
+  body.plaza-card-print .plaza-card-footer{grid-template-columns:38mm minmax(0,1fr);font-size:8pt}
+  body.plaza-card-print .plaza-card-footer img{width:38mm;height:38mm}
+}
