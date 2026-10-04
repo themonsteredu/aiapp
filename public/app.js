@@ -92,7 +92,7 @@ function deckKindIcon(kind) {
 }
 
 /* ---------------- API ---------------- */
-let afterLoginHash = /^#\/career-records(?:\/new(?:\/\d+)?)?$/.test(location.hash) ? location.hash : '';
+let afterLoginHash = /^#\/(?:career-records(?:\/new(?:\/\d+)?)?|plaza(?:-teacher)?\/[0-9a-f-]{36})$/.test(location.hash) ? location.hash : '';
 
 async function api(method, url, body) {
   const res = await fetch(url, {
@@ -102,7 +102,7 @@ async function api(method, url, body) {
   });
   const data = await res.json().catch(() => ({}));
   if (res.status === 401 && !url.endsWith('/api/login')) {
-    if (/^#\/career-records(?:\/new(?:\/\d+)?)?$/.test(location.hash)) afterLoginHash = location.hash;
+    if (/^#\/(?:career-records(?:\/new(?:\/\d+)?)?|plaza(?:-teacher)?\/[0-9a-f-]{36})$/.test(location.hash)) afterLoginHash = location.hash;
     state.me = null;
     if (!/^#\/p\/[a-z0-9-]+$/.test(location.hash || '')) location.hash = '#/login';
     throw new Error(data.error || '로그인이 필요합니다.');
@@ -398,7 +398,9 @@ function route(pattern, fn) { routes.push({ pattern, fn }); }
 
 let presentExit = null; // 발표 모드 정리 함수 (라우팅 이동 시 잔여 오버레이 방지)
 
+let plazaScreen = null;
 async function navigate() {
+  if (plazaScreen) { plazaScreen.destroy(); plazaScreen = null; }
   if (presentExit) presentExit();
   window.__liveUpdate = null;
   window.__deckRefresh = null;
@@ -406,7 +408,7 @@ async function navigate() {
   const hash = location.hash || '#/';
   const isPublicProjectApp = /^#\/p\/[a-z0-9-]+$/.test(hash);
   if (!state.me && hash !== '#/login' && !isPublicProjectApp) {
-    if (/^#\/career-records(?:\/new(?:\/\d+)?)?$/.test(hash)) afterLoginHash = hash;
+    if (/^#\/(?:career-records(?:\/new(?:\/\d+)?)?|plaza(?:-teacher)?\/[0-9a-f-]{36})$/.test(hash)) afterLoginHash = hash;
     location.hash = '#/login'; return;
   }
   if (state.me && state.me.mustChangePassword && hash !== '#/password' && hash !== '#/login') {
@@ -531,6 +533,7 @@ function menuGroups() {
         ['#/my-courses', 'layers', '내 과정'],
         ['#/decks', 'decks', '웹앱/PPT 관리'],
         ['#/sessions', 'hash', '수업 입장 코드'],
+        ...(state.settings?.plaza_stage1 ? [['#/plaza-teacher', 'decks', '광장 수업 진행']] : []),
         ['#/career-records', 'fileText', '수업 진로기록'],
         ['#/projects', 'briefcase', 'AI 프로젝트'],
       ]],
@@ -547,6 +550,7 @@ function menuGroups() {
       ['#/decks', 'decks', '웹앱/PPT 관리'],
       ['#/courses', 'layers', '과정·강사배정'],
       ['#/sessions', 'hash', '수업 입장 코드'],
+        ...(state.settings?.plaza_stage1 ? [['#/plaza-teacher', 'decks', '광장 수업 진행']] : []),
         ['#/career-records', 'fileText', '수업 진로기록'],
       ['#/projects', 'briefcase', 'AI 프로젝트'],
     ]],
@@ -858,7 +862,23 @@ function renderBlocked() {
   setTimeout(refreshMe, 30000);
 }
 
+route(/^#\/plaza(-teacher)?\/([0-9a-f-]{36})$/i, async (staff, roomId) => {
+  if (!state.settings?.plaza_stage1 || (staff && !isStaff())) { location.hash = '#/decks'; return; }
+  const hash = location.hash;
+  const { mountPlaza } = await import('./plaza-ui.js');
+  if (location.hash !== hash) return;
+  const screen = await mountPlaza({ roomId, teacher: !!staff, api, shell, esc });
+  if (location.hash !== hash) screen.destroy(); else plazaScreen = screen;
+});
+route(/^#\/plaza-teacher$/, async () => {
+  if (!isStaff() || !state.settings?.plaza_stage1) { location.hash = '#/decks'; return; }
+  const data = await api('GET', '/api/plaza/rooms');
+  shell('광장 수업 진행', `<main class="plaza"><h1>진행할 수업을 선택해 주세요</h1>${data.rooms.map(room => `<p><a class="btn btn-ghost" href="#/plaza-teacher/${room.id}">${esc(room.title)} · 입장 코드 ${esc(room.code)}</a></p>`).join('') || '<p>준비된 광장이 없습니다.</p>'}</main>`);
+});
+window.addEventListener('pageshow', event => { if (event.persisted && /^#\/plaza/.test(location.hash)) navigate(); });
+
 async function refreshMe() {
+  const previousUserId = state.me?.id;
   try {
     const data = await api('GET', '/api/me');
     state.me = data.user;
@@ -866,7 +886,10 @@ async function refreshMe() {
     state.settings = data.settings;
     state.classSession = data.classSession || null;
     state.mustAgree = !!data.mustAgree;
-    navigate();
+    if (plazaScreen && plazaScreen.hash === location.hash && state.me?.id === previousUserId
+        && !state.me.mustChangePassword && !state.mustAgree && state.access?.allowed) {
+      await plazaScreen.revalidate();
+    } else navigate();
   } catch {}
 }
 
@@ -2236,6 +2259,7 @@ async function mountWebappFrame(wrap, deckId) {
 /* ---------------- 뷰어 + 프레젠테이션 ---------------- */
 route(/^#\/view\/(\d+)$/, async (id) => {
   const data = await api('GET', `/api/decks/${id}`);
+  if (data.plaza) { location.hash = '#/plaza/' + data.plaza.id; return; }
   const wm = state.settings && state.settings.watermark;
   const recordLink = state.me.role === 'student' ? `<a class="btn btn-ghost" href="#/career-records/new/${id}">활동 기록 남기기</a>` : '';
 
