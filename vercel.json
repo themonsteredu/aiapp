@@ -3,7 +3,8 @@
   "framework": "node",
   "regions": ["icn1"],
   "git": { "deploymentEnabled": { "feat/plaza-stage1-20261004": false,
-      "feat/plaza-stage2-20261004": false } },
+      "feat/plaza-stage2-20261004": false,
+      "feat/plaza-stage3-20261004": false } },
   "rewrites": [
     { "source": "/class", "destination": "/app.html" },
     { "source": "/class/:path*", "destination": "/app.html" }

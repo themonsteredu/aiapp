@@ -51,7 +51,7 @@ export function createPlazaStudent({root,data,request,esc,onDirty,onFatal}) {
       <form data-flow="actual"><fieldset data-fields="actual"><label>만들어 보니 어땠나요?<select name="result">${option([{id:'same',text:'구상대로 만들었어요'},{id:'changed',text:'만들면서 바꾼 것이 있어요'},{id:'not_made',text:'오늘 제작하지 않았어요'}],a.actual?.result)}</select></label>
       <label>시작 문장 도움<select data-flow="actual-help"><option value="">직접 적기</option><option>고른 구상대로 작품을 만들었어요.</option><option>만들면서 소개 문구를 바꿨어요.</option><option>작품 제작 대신 설명 활동을 했어요.</option></select></label><label>실제로 한 일을 짧게 적어 주세요<textarea name="note" rows="2" maxlength="200" required>${esc(a.actual?.note||'')}</textarea></label><button class="btn btn-primary">제작 결과 확인하기</button></fieldset></form><p data-flow="actual-saved"></p></section>
     <section class="plaza-step" data-flow="board-section"><div class="plaza-controls"><h2>우리 반 광장</h2><button type="button" class="btn btn-ghost" data-flow="my-store">내 가게</button><button type="button" class="btn btn-ghost" data-flow="visit-store">방문할 가게</button></div><p>간판을 누르면 가게 소개를 크게 볼 수 있어요. 작품 사진이 없어도 방문할 수 있어요.</p><div class="plaza-village" data-flow="village" aria-label="우리 반 가게 목록"></div><label>가게 이름으로 찾기<select data-flow="store-list"><option value="">가게 선택</option></select></label><article class="plaza-store-detail" data-flow="store-detail" hidden></article></section>
-    <section class="plaza-step" data-flow="exchange-section"><h2>3. 한 가게를 방문하고 손님을 맞아요</h2><p data-flow="assignment"></p>
+    <section class="plaza-step" data-flow="exchange-section"><h2>3. 한 가게를 방문하고 손님을 맞아요</h2><p data-flow="assignment"></p>${data.room.stage3?'<label class="plaza-help"><input type="checkbox" data-flow="paper-confirm">종이로 한 교류 내용을 내가 확인해 입력합니다.</label>':''}
       <form data-flow="request"><fieldset data-fields="request"><label>방문할 가게에 보낼 요청<select name="request_id">${option(card.requests||[])}</select></label><button class="btn btn-primary">요청 보내기</button></fieldset></form><p data-flow="sent-request"></p>
       <h3>내 가게에 도착한 요청</h3><p data-flow="incoming-request"></p><button type="button" class="btn btn-ghost" data-flow="reply-ai">답장 초안 한 번 확인하기</button><blockquote data-flow="reply-draft"></blockquote>
       <form data-flow="reply"><fieldset data-fields="reply"><label>도움이 필요하면 시작 문장을 골라 보세요<select data-flow="reply-help"><option value="">직접 적기</option>${option(card.reply_options||[])}</select></label><label>초안을 바꾼 내 답장<textarea name="text" maxlength="300" rows="3" required>${esc(data.exchange.incoming?.reply?.text||'')}</textarea></label><p class="plaza-help">향의 효능을 약속하지 말고, 키트에서 확인한 안내로 설명해 주세요.</p><button class="btn btn-primary">내 답장 보내기</button></fieldset></form><p data-flow="reply-saved"></p>
@@ -67,10 +67,11 @@ export function createPlazaStudent({root,data,request,esc,onDirty,onFatal}) {
   $('ideas').onsubmit=e=>{e.preventDefault();const form=new FormData(e.target);void action('ideas','POST','/ai',{kind:'ideas',customer_id:form.get('customer_id'),material_ids:form.getAll('material_ids')});};
   $('plan').onsubmit=e=>{e.preventDefault();void action('plan','PUT','/draft',{...values('plan'),version:state.draft.version});};
   $('actual').onsubmit=e=>{e.preventDefault();void action('actual','PUT','/activity',{...values('actual'),kind:'actual',version:state.activity.version});};
-  $('request').onsubmit=e=>{e.preventDefault();void action('request','POST','/message',{...values('request'),kind:'request'});};
-  $('reply-ai').onclick=()=>void action('reply-ai','POST','/ai',{kind:'reply'});
-  $('reply').onsubmit=e=>{e.preventDefault();void action('reply','POST','/message',{...values('reply'),kind:'reply'});};
-  $('reaction').onsubmit=e=>{e.preventDefault();void action('reaction','POST','/message',{...values('reaction'),kind:'reaction'});};
+  const medium=()=>state.room.stage3?{medium:$('paper-confirm').checked?'paper-confirmed':'online',confirm:$('paper-confirm').checked}:{};
+  $('request').onsubmit=e=>{e.preventDefault();void action('request','POST','/message',{...values('request'),kind:'request',visit_id:state.exchange.outgoing?.id,...medium()});};
+  $('reply-ai').onclick=()=>void action('reply-ai','POST','/ai',{kind:'reply',visit_id:state.exchange.incoming?.id});
+  $('reply').onsubmit=e=>{e.preventDefault();void action('reply','POST','/message',{...values('reply'),kind:'reply',visit_id:state.exchange.incoming?.id,...medium()});};
+  $('reaction').onsubmit=e=>{e.preventDefault();void action('reaction','POST','/message',{...values('reaction'),kind:'reaction',visit_id:state.exchange.outgoing?.id,...medium()});};
   $('reflection').onsubmit=e=>{e.preventDefault();const v=values('reflection');void action('reflection','PUT','/activity',{kind:'reflection',version:state.activity.version,answers:questions.map((_,i)=>v[`answer${i}`])});};
   $('preview').onclick=()=>{if(dirty.size||pending.size){status('message','수정 중인 내용을 먼저 저장하고 확인해 주세요.');return;}void action('preview','POST','/record-preview',{});};
   $('final').onclick=()=>void action('final','POST','/record',{attempt_id:state.receipt.attempt_id,digest:state.receipt.digest});
@@ -131,7 +132,7 @@ export function createPlazaStudent({root,data,request,esc,onDirty,onFatal}) {
     const own=$('own-photo'),url=state.photo_url||'';
     if(own.dataset.url!==url){own.dataset.url=url;own.innerHTML=url?`<img src="${esc(url)}" alt="내 작품 사진"><p>작품 사진 · 서버 저장 완료</p>`:'<div class="plaza-concept"><span>구상 전시</span><strong>작품 사진 준비 중</strong></div>';}
     const ex=state.exchange,requestText=m=>card.requests?.find(r=>r.id===m?.request_id)?.text;
-    status('assignment',ex.outgoing?ex.outgoing.substitute?'예시 가게·예시 손님과 대체 진행합니다. 또래 교류로 기록되지 않습니다.':'방문할 가게가 배정됐어요. 위에서 방문할 가게를 열어 소개를 읽어 보세요.':'선생님이 실제 참여자를 확인하고 광장을 열면 방문할 가게가 정해져요.');
+    status('assignment',ex.outgoing?(ex.outgoing.substitute||ex.incoming?.substitute)?`일부 교류를 예시로 대체합니다. 또래 교류 완료로 기록되지 않습니다.${ex.outgoing.reason||ex.incoming?.reason?' 사유: '+(ex.outgoing.reason||ex.incoming.reason):''}`:'방문할 가게가 배정됐어요. 위에서 방문할 가게를 열어 소개를 읽어 보세요.':'선생님이 실제 참여자를 확인하고 광장을 열면 방문할 가게가 정해져요.');
     status('sent-request',ex.outgoing?.request?`보낸 요청 · ${requestText(ex.outgoing.request)}`:'');
     status('incoming-request',ex.incoming?.request?`${ex.incoming.request.source==='example'?'예시 손님 · ':''}${requestText(ex.incoming.request)}`:'아직 도착한 요청이 없습니다.');
     const reply=state.ai.reply;if(reply?.status==='ready')status('reply-draft',`${sourceLabel(reply)} 답장 초안 · ${card.reply_options.find(r=>r.id===reply.output.reply_id)?.text}`);

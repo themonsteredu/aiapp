@@ -1,12 +1,14 @@
 /* Native MoaLab screens. No uploaded HTML, localStorage, or student identity in URLs. */
 import {createPlazaStudent} from './plaza-student.js';
+import {createPlazaRecovery} from './plaza-recovery.js';
 export async function mountPlaza({ roomId, teacher, api, shell, esc }) {
   let disposed = false, terminated = false, busy = false, dirty = false, uncertain = null, timer, stream;
-  let state, participants = [], selected = 0, studentFlow;
+  let state, participants = [], selected = 0, studentFlow, recovery;
   const queue = [];
+  const moveBytes = new Map();
   const base = `/api/plaza/rooms/${roomId}`;
   const request = (method, suffix, body) => api(method, base + suffix, body);
-  shell(teacher ? '광장 수업 진행' : '조향사 광장', '<p class="plaza" id="plaza-connection" role="status" hidden>접속을 확인하고 있습니다. 연결이 돌아오면 쓰던 화면으로 돌아갑니다.</p><main class="plaza" id="plaza-root">접속을 확인하고 있습니다.</main>');
+  shell(teacher ? '광장 수업 진행' : '조향사 광장', '<p class="plaza" id="plaza-connection" role="status" hidden>접속을 확인하고 있습니다. 연결이 돌아오면 쓰던 화면으로 돌아갑니다. 인터넷이 끊기면 선생님과 종이 활동을 이어가세요. 아직 확인하지 못한 내용은 서버 저장 전입니다. 이 화면을 닫으면 전송하지 못한 글과 사진이 사라질 수 있습니다.</p><main class="plaza" id="plaza-root">접속을 확인하고 있습니다.</main>');
   const root = document.getElementById('plaza-root');
   const connection = document.getElementById('plaza-connection');
   const $ = name => root.querySelector(`[data-plaza="${name}"]`);
@@ -16,7 +18,7 @@ export async function mountPlaza({ roomId, teacher, api, shell, esc }) {
   function stopPresenting() { if(document.fullscreenElement&&root.contains(document.fullscreenElement))void document.exitFullscreen?.().catch(()=>{}); }
   function fatal(error) {
     if (disposed) return;
-    terminated = true; studentFlow?.destroy(); studentFlow=null; stopPresenting();stopCamera(); queue.length = 0; uncertain = null; state = null; participants = []; dirty = false; clearInterval(timer);
+    terminated = true; recovery?.destroy(); recovery=null; studentFlow?.destroy(); studentFlow=null; stopPresenting();stopCamera(); queue.length = 0; moveBytes.clear(); uncertain = null; state = null; participants = []; dirty = false; clearInterval(timer);
     root.hidden = false; connection.hidden = true;
     root.innerHTML = `<h1>접속을 다시 확인해 주세요</h1><p>${esc(error.message)}</p><a class="btn btn-primary" href="#/decks">수업 자료로 돌아가기</a>`;
   }
@@ -98,13 +100,17 @@ export async function mountPlaza({ roomId, teacher, api, shell, esc }) {
       ${data.can_resume ? '<button class="btn btn-primary" data-plaza="resume">내 구상 이어가기</button>' : ''}
       <form data-plaza="entry"><label>자리 번호<input type="number" name="seat_order" min="1" max="${data.room.seat_count}" required inputmode="numeric"></label>
       <button class="btn ${data.can_resume ? 'btn-ghost' : 'btn-primary'}" ${data.room.state !== 'planning' ? 'disabled' : ''}>${data.can_resume ? '새 학생으로 입장' : '처음 입장하기'}</button></form>
-      <p data-plaza="message" role="status"></p></div>`;
-    async function enter(body) {
+      ${data.room.stage3?'<form data-plaza="claim"><label>새 기기 연결값<input name="code" autocomplete="off" spellcheck="false" maxlength="40" required placeholder="강사가 보여 준 연결값"></label><button class="btn btn-ghost">이 기기에서 이어가기</button></form>':''}<p data-plaza="message" role="status"></p></div>`;
+    let entryPending;
+    async function enter(body,suffix='/enter') {
       if (busy) return; busy = true;
-      try { const result = await request('POST', '/enter', body); if (!disposed && !terminated) renderStudent(result); }
-      catch (error) { message(error.message); }
+      entryPending||={body:{...body,attempt_id:crypto.randomUUID()},suffix};
+      root.querySelectorAll('input').forEach(el=>el.disabled=true);
+      try { const result = await request('POST', entryPending.suffix, entryPending.body); entryPending=null;if (!disposed && !terminated) renderStudent(result); }
+      catch (error) { if(error.status&&error.status<500)entryPending=null;message(error.status&&error.status<500?error.message:'입장 확인 필요 · 같은 버튼으로 다시 확인해 주세요.');if(!entryPending)root.querySelectorAll('input').forEach(el=>el.disabled=false); }
       finally { busy = false; if (state?.room && $('form')) updateStudent(state); }
     }
+    if($('claim'))$('claim').onsubmit=e=>{e.preventDefault();void enter({code:new FormData(e.target).get('code')},'/claim');};
     if ($('resume')) $('resume').onclick = () => enter({ mode: 'resume' });
     $('entry').onsubmit = event => {
       event.preventDefault();
@@ -113,6 +119,7 @@ export async function mountPlaza({ roomId, teacher, api, shell, esc }) {
     };
   }
   function currentTarget() { return participants[selected] ? { ...participants[selected] } : null; }
+  function pendingPhotos(){return new Set([...(state?.photos||[]).filter(p=>p.status!=='stored'&&!p.invalidated_at).map(p=>p.id),...queue.filter(q=>q.data).map(q=>q.id)]).size;}
   function selectTarget(index) {
     if (!participants.length || !$('target')) return;
     selected = Math.max(0, Math.min(participants.length - 1, index));
@@ -121,9 +128,10 @@ export async function mountPlaza({ roomId, teacher, api, shell, esc }) {
   }
   function renderQueue(serverPhotos = []) {
     if (!$('queue')) return;
+    for(const item of queue){const known=serverPhotos.find(p=>p.id===item.id);if(known?.invalidated_at){item.status='사진 대상 변경됨';item.failed=false;item.data=null;}else if(known?.status==='stored'){item.status='서버 저장 완료';item.failed=false;item.data=null;}}
     const rows = queue.map(item => `<li>${esc(item.target.seat_order)}번 · ${esc(item.target.store_name || '가게')} <span>${esc(item.status)}</span>${item.failed ? `<button type="button" class="btn btn-ghost" data-retry="${item.id}">다시 보내기</button>` : ''}</li>`);
     const localIds = new Set(queue.map(q => q.id));
-    for (const p of serverPhotos.filter(p => p.status !== 'stored' && !localIds.has(p.id))) {
+    for (const p of serverPhotos.filter(p => p.status !== 'stored' && !p.invalidated_at && !localIds.has(p.id))) {
       const target = participants.find(t => t.id === p.participant_id);
       rows.push(`<li>${esc(target?.seat_order || '')}번 · 재촬영 필요 <span>기기에 남은 사진이 없습니다.</span></li>`);
     }
@@ -135,7 +143,7 @@ export async function mountPlaza({ roomId, teacher, api, shell, esc }) {
     item.sending = true; item.failed = false; item.status = '전송 중'; renderQueue(state.photos);
     try {
       await request('POST','/photos', { capture_id: item.id, participant_id: item.target.id, target_version: item.target.target_version });
-      await request('PUT', `/photos/${item.id}`, { data_url: item.data });
+      await request('PUT', `/photos/${item.id}`, { data_url: item.data,target_version:item.target.target_version });
       item.status = '서버 저장 완료'; item.data = null;
     } catch (error) { item.failed = true; item.status = error.status && error.status < 500 ? '다시 보내기 전 확인 필요' : '저장 확인 필요'; message(error.message); }
     finally { item.sending = false; if (!disposed) { renderQueue(state.photos); await revalidate(); } }
@@ -165,10 +173,10 @@ export async function mountPlaza({ roomId, teacher, api, shell, esc }) {
     const previous = currentTarget()?.id;
     state = data; participants = data.participants;
     $('phase').textContent = stateLabel(data.room.state);
-    $('incomplete').textContent = data.counts ? `참여 ${participants.length}명 · 구상 미완료 ${data.counts.plan_missing}명 · 제작 확인 전 ${data.counts.actual_missing}명 · 교류 미완료 ${data.counts.exchange_missing}명 · 기록 저장 ${data.counts.record_saved}명 / 미완료 ${data.counts.record_missing}명 · 또래 교류 완료 ${data.counts.peer_complete}명 / 대체 완료 ${data.counts.substitute_complete}명` : `구상 미완료 ${data.incomplete}명 / 참여 ${participants.length}명`;
+    $('incomplete').textContent = data.counts ? `참여 ${data.counts.present??participants.length}명 · 결석 ${data.counts.absent??0}명 · 구상 미완료 ${data.counts.plan_missing}명 · 제작 확인 전 ${data.counts.actual_missing}명 · 교류 미완료 ${data.counts.exchange_missing}명 · 기록 저장 ${data.counts.record_saved}명 / 미완료 ${data.counts.record_missing}명 · 또래 교류 완료 ${data.counts.peer_complete}명 / 대체 완료 ${data.counts.substitute_complete}명` : `구상 미완료 ${data.incomplete}명 / 참여 ${participants.length}명`;
     $('target').innerHTML = participants.map(p => `<option value="${p.id}">${esc(p.seat_order)}번 · ${esc(p.store_name || '가게 이름 준비 중')}</option>`).join('');
     const idx = participants.findIndex(p => p.id === previous); selectTarget(idx >= 0 ? idx : selected);
-    $('roster').innerHTML = participants.map(p => {const progress=data.progress?.find(r=>r.id===p.id);return `<tr><td>${esc(p.seat_order)}번</td><td>${esc(p.store_name || '이름 준비 중')}</td><td>${p.saved_at ? '구상 저장됨' : '구상 미완료'}${progress?`<br>제작 확인 ${progress.actual?'완료':'전'} · 요청 ${progress.request?'완료':'전'} · 답장 ${progress.reply?'완료':'전'} · 반응 ${progress.reaction?'완료':'전'} · 돌아보기 ${progress.reflection?'완료':'전'} · 기록 ${progress.saved?'저장됨':'미완료'}`:''}</td><td>${p.current_photo_id ? '서버 저장 완료' : '작품 사진 준비 중'}</td></tr>`;}).join('');
+    $('roster').innerHTML = participants.map(p => {const progress=data.progress?.find(r=>r.id===p.id);return `<tr><td>${esc(p.seat_order)}번${p.attendance==='absent'?' · 결석':''}</td><td>${esc(p.store_name || '이름 준비 중')}</td><td>${p.saved_at ? '구상 저장됨' : '구상 미완료'}${progress?`<br>제작 확인 ${progress.actual?'완료':'전'} · 요청 ${progress.request?'완료':'전'} · 답장 ${progress.reply?'완료':'전'} · 반응 ${progress.reaction?'완료':'전'} · 돌아보기 ${progress.reflection?'완료':'전'} · 기록 ${progress.saved?'저장됨':'미완료'}`:''}</td><td>${p.current_photo_id ? '서버 저장 완료' : '작품 사진 준비 중'}</td></tr>`;}).join('');
     const closed = data.room.state === 'closed';
     $('pause').disabled = closed; $('pause').textContent = data.room.state === 'paused' ? '구상 다시 열기' : '제작하러 가기';
     if(data.room.stage2) {
@@ -177,6 +185,7 @@ export async function mountPlaza({ roomId, teacher, api, shell, esc }) {
     }
     $('close').disabled = closed; $('camera').disabled = closed || !participants.length; $('file').disabled = closed || !participants.length; $('capture').disabled = closed || !stream || !participants.length;
     if (closed) stopCamera();
+    recovery?.update(data);
     renderQueue(data.photos);
   }
   async function teacherScreen() {
@@ -192,7 +201,13 @@ export async function mountPlaza({ roomId, teacher, api, shell, esc }) {
       <label class="plaza-file">사진 선택 또는 기기 카메라<input type="file" accept="image/*" capture="environment" data-plaza="file"></label>
       <p class="plaza-help">촬영 후 다음 자리로 넘어갑니다. 서버 저장 완료를 꼭 확인해 주세요.</p><p data-plaza="message" role="status"></p></section>
       <section><h2>사진 저장 상태</h2><ul class="plaza-queue" data-plaza="queue"></ul><p class="plaza-help">전송하지 못한 사진은 이 화면을 닫으면 사라집니다. 먼저 다시 보내 주세요.</p></section></div>
-      <div class="plaza-table-wrap"><table><thead><tr><th>자리</th><th>가게</th><th>구상</th><th>사진</th></tr></thead><tbody data-plaza="roster"></tbody></table></div>`;
+      ${data.room.stage3?'<section class="plaza-step" data-plaza="recovery"></section>':''}<div class="plaza-table-wrap"><table><thead><tr><th>자리</th><th>가게</th><th>구상</th><th>사진</th></tr></thead><tbody data-plaza="roster"></tbody></table></div>`;
+    if(data.room.stage3)recovery=createPlazaRecovery({root:$('recovery'),request,esc,onChanged:revalidate,onFatal:fatal,
+      onMoveStart:body=>{const bytes=queue.find(q=>q.id===body.capture_id)?.data;if(bytes)moveBytes.set(body.capture_id,bytes);},onMoveCancelled:body=>moveBytes.delete(body.capture_id),onMove:async(result,body)=>{
+      const bytes=moveBytes.get(body.capture_id);moveBytes.delete(body.capture_id);
+      if(!result.needs_upload)return;const old=queue.find(q=>q.id===body.capture_id),target=participants.find(p=>p.id===result.participant_id);
+      if(!bytes||!target)return;const item={id:result.id,target:{...target,target_version:result.target_version},data:bytes,status:'촬영됨',failed:false};if(old){old.data=null;old.failed=false;old.status='사진 대상 변경됨';}queue.push(item);void upload(item);
+    }});
     $('target').onchange = () => selectTarget(participants.findIndex(p => p.id === $('target').value));
     $('skip').onclick = () => selectTarget(selected + 1); $('back').onclick = () => selectTarget(selected - 1);
     $('camera').onclick = async () => {
@@ -207,15 +222,15 @@ export async function mountPlaza({ roomId, teacher, api, shell, esc }) {
     $('pause').onclick = async () => {
       if(state.room.stage2) {
         const next=$('pause').dataset.next;
-        if(!confirm(`구상 미완료 ${state.counts.plan_missing}명, 제작 확인 전 ${state.counts.actual_missing}명, 교류 미완료 ${state.counts.exchange_missing}명입니다. ${next==='exchange'?`현재 참여 ${participants.length}명의 방문을 한 번만 배정하여 광장을 열까요?`:'다음 수업 단계로 갈까요? 미완료 활동은 그대로 남습니다.'}`))return;
-        try{await request('POST','/state',{state:next,version:state.room.version,participant_ids:participants.map(p=>p.id)});await revalidate();}catch(error){message(error.message);}return;
+        if(!confirm(`구상 미완료 ${state.counts.plan_missing}명, 제작 확인 전 ${state.counts.actual_missing}명, 교류 미완료 ${state.counts.exchange_missing}명입니다. ${next==='exchange'?`현재 참여 ${participants.filter(p=>p.attendance!=='absent').length}명의 방문을 한 번만 배정하여 광장을 열까요?`:'다음 수업 단계로 갈까요? 미완료 활동은 그대로 남습니다.'}`))return;
+        try{await request('POST','/state',{state:next,version:state.room.version,participant_ids:participants.filter(p=>p.attendance!=='absent').map(p=>p.id)});await revalidate();}catch(error){message(error.message);}return;
       }
       if (!confirm(`구상 미완료 ${state.incomplete}명입니다. ${state.room.state === 'paused' ? '구상을 다시 열까요?' : '제작하러 갈까요? 미완료 구상은 그대로 남습니다.'}`)) return;
       try { await request('POST','/state',{ state: state.room.state === 'paused' ? 'planning' : 'paused', version: state.room.version }); await revalidate(); }
       catch (error) { message(error.message); }
     };
     $('close').onclick = async () => {
-      if (!confirm(`구상 미완료 ${state.incomplete}명${state.counts?`, 기록 미완료 ${state.counts.record_missing}명`:''}, 사진 저장 확인 필요 ${queue.filter(q => q.data).length}건입니다. 학생 접속을 끝낼까요? 종료 후 다시 열 수 없습니다.`)) return;
+      if (!confirm(`구상 미완료 ${state.incomplete}명${state.counts?`, 기록 미완료 ${state.counts.record_missing}명`:''}, 사진 저장 확인 필요 ${pendingPhotos()}건입니다. 학생 접속을 끝낼까요? 종료 후 다시 열 수 없습니다.`)) return;
       const reason=state.counts?.record_missing?prompt('기록 미완료 상태로 종료하는 사유를 적어 주세요.'):undefined;
       if(state.counts?.record_missing&&!reason)return;
       try { await request('POST','/state',{ state: 'closed', version: state.room.version,reason }); await revalidate(); }
@@ -235,30 +250,34 @@ export async function mountPlaza({ roomId, teacher, api, shell, esc }) {
     };
     updateTeacher(data);
   }
-  let validating = false;
+  let validating = false, visibilityEpoch = 0;
   async function revalidate() {
-    if (disposed || terminated || validating || document.hidden) return;
+    if (disposed || terminated || validating || document.hidden || navigator.onLine===false) return;
     validating = true;
+    const epoch=visibilityEpoch;
     try {
-      if (teacher) updateTeacher(await request('GET','/teacher'));
-      else if(studentFlow){studentFlow.update(await request('GET','/mine'));await studentFlow.poll();}
-      else if ($('form')) updateStudent(await request('GET','/mine'));
+      if (teacher) {const next=await request('GET','/teacher');if(epoch!==visibilityEpoch)return;updateTeacher(next);}
+      else if(studentFlow){const next=await request('GET','/mine');if(epoch!==visibilityEpoch)return;studentFlow.update(next);await studentFlow.poll();}
+      else if ($('form')) {const next=await request('GET','/mine');if(epoch!==visibilityEpoch)return;updateStudent(next);}
       else await request('GET','/entry');
-      if (!disposed) { root.hidden = false; connection.hidden = true; }
+      if (!disposed&&!terminated&&!document.hidden&&epoch===visibilityEpoch&&navigator.onLine!==false) { root.hidden = false; connection.hidden = true; }
     } catch (error) {
       if (error.status === 401 || error.status === 403 || error.status === 404 || !document.contains(root)) fatal(error);
       else { root.hidden = true; connection.hidden = false; }
-    } finally { validating = false; }
+    } finally { validating = false;if(epoch!==visibilityEpoch&&!disposed&&!terminated&&!document.hidden&&navigator.onLine!==false)void revalidate(); }
   }
-  function visibility() { stopPresenting();root.hidden = true; connection.hidden = false; if (document.hidden) stopCamera(); else void revalidate(); }
-  function beforeUnload(event) { if (dirty || uncertain || queue.some(q => q.data)) { event.preventDefault(); event.returnValue = ''; } }
+  function visibility() { visibilityEpoch++;recovery?.hideSecrets();stopPresenting();root.hidden = true; connection.hidden = false; if (document.hidden) stopCamera(); else void revalidate(); }
+  function beforeUnload(event) { if (dirty || uncertain || recovery?.hasPending() || moveBytes.size || queue.some(q => q.data)) { event.preventDefault(); event.returnValue = ''; } }
   function destroy() {
-    disposed = true; studentFlow?.destroy();studentFlow=null;clearInterval(timer);stopPresenting();stopCamera(); queue.length = 0; uncertain = null; state = null; participants = [];
-    root.replaceChildren(); connection.remove(); document.removeEventListener('visibilitychange',visibility); window.removeEventListener('beforeunload',beforeUnload); window.removeEventListener('pagehide',destroy);
+    disposed = true; recovery?.destroy();recovery=null;studentFlow?.destroy();studentFlow=null;clearInterval(timer);stopPresenting();stopCamera(); queue.length = 0;moveBytes.clear(); uncertain = null; state = null; participants = [];
+    root.replaceChildren(); connection.remove(); document.removeEventListener('visibilitychange',visibility); window.removeEventListener('beforeunload',beforeUnload); window.removeEventListener('pagehide',destroy);window.removeEventListener('offline',offline);window.removeEventListener('online',revalidate);
   }
+  function offline(){visibilityEpoch++;recovery?.hideSecrets();stopPresenting();stopCamera();root.hidden=true;connection.hidden=false;}
+  window.addEventListener('offline',offline);window.addEventListener('online',revalidate);
   document.addEventListener('visibilitychange',visibility); window.addEventListener('beforeunload',beforeUnload); window.addEventListener('pagehide',destroy);
   try { if (teacher) await teacherScreen(); else await entry(); }
   catch (error) { fatal(error); }
+  if(document.hidden)visibility();
   if (!terminated) timer = setInterval(revalidate,3000);
   return { revalidate, destroy, hash: location.hash };
 }
