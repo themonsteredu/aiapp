@@ -1,6 +1,7 @@
 'use strict';
 // Vercel 서버리스 함수 진입점 — 모든 /api/* 요청이 여기로 라우팅된다 (vercel.json rewrites 참고)
-const { handleApi } = require('../lib/api');
+const { handleApi } = process.env.MOALAB_DEPLOY_ONLY === '1'
+  ? require('../lib/deploy-preview') : require('../lib/api');
 
 module.exports = async (req, res) => {
   try {

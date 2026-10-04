@@ -2,7 +2,9 @@
 const http = require('node:http');
 const path = require('node:path');
 const fs = require('node:fs');
-const { handleApi } = require('./lib/api');
+// Deploy-only previews must not import the DB-backed API (its ready() runs migrations).
+const { handleApi } = process.env.MOALAB_DEPLOY_ONLY === '1'
+  ? require('./lib/deploy-preview') : require('./lib/api');
 
 const PORT = Number(process.env.PORT || 3000);
 const PUBLIC_DIR = path.join(__dirname, 'public');

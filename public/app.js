@@ -3609,7 +3609,13 @@ route(/^#\/settlement$/, async () => {
     state.classSession = data.classSession || null;
     state.mustAgree = !!data.mustAgree;
     Live.start(); // 게스트일 때만 내부에서 동작
-  } catch { state.me = null; }
+  } catch (err) {
+    state.me = null;
+    if (err.data?.code === 'deployment_preview') {
+      location.replace('/plaza-preview.html');
+      return;
+    }
+  }
   try {
     const { registerCareerLogUI } = await import('/career-log-ui.js');
     registerCareerLogUI({ route, api, shell, state, esc, toast, navigate, isStaff });
@@ -3631,4 +3637,3 @@ route(/^#\/settlement$/, async () => {
   // 시간제 접근 상태 주기 갱신 (5분)
   setInterval(refreshMe, 5 * 60 * 1000);
 })();
-
