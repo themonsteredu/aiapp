@@ -6,7 +6,7 @@ CREATE TABLE career_log.students (id uuid PRIMARY KEY);
 CREATE TABLE career_log.records (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), student_id uuid REFERENCES career_log.students(id),
   session_ref text,program_ref text,occurred_at timestamptz,process text,artifact text,reflection text,source text,
   verification_status text,verified_by text,verified_at timestamptz,raw_data jsonb,source_event_id text UNIQUE,supersedes_id uuid);
-CREATE FUNCTION career_log.records_append_only() RETURNS trigger LANGUAGE plpgsql AS $$
+CREATE FUNCTION career_log.records_append_only() RETURNS trigger LANGUAGE plpgsql SET search_path = '' AS $$
 BEGIN RAISE EXCEPTION 'career_log.records is append-only'; END $$;
 CREATE TRIGGER records_append_only BEFORE UPDATE OR DELETE ON career_log.records
   FOR EACH ROW EXECUTE FUNCTION career_log.records_append_only();

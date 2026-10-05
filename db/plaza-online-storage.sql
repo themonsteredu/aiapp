@@ -28,7 +28,7 @@ CREATE TABLE plaza_photo_blobs (
   CHECK (digest = encode(sha256(data), 'hex') AND bytes = octet_length(data))
 );
 ALTER TABLE plaza_photo_blobs ALTER COLUMN data SET STORAGE EXTERNAL;
-CREATE FUNCTION plaza_photo_blobs_immutable() RETURNS trigger LANGUAGE plpgsql AS $$
+CREATE FUNCTION plaza_photo_blobs_immutable() RETURNS trigger LANGUAGE plpgsql SET search_path = '' AS $$
 BEGIN RAISE EXCEPTION 'plaza photo objects are immutable'; END $$;
 CREATE TRIGGER plaza_photo_blobs_no_update BEFORE UPDATE ON plaza_photo_blobs
   FOR EACH ROW EXECUTE FUNCTION plaza_photo_blobs_immutable();
@@ -43,7 +43,7 @@ CREATE TABLE plaza_purge_ledger (
   updated_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (kind, id)
 );
-CREATE FUNCTION plaza_purge_ledger_grows() RETURNS trigger LANGUAGE plpgsql AS $$
+CREATE FUNCTION plaza_purge_ledger_grows() RETURNS trigger LANGUAGE plpgsql SET search_path = '' AS $$
 BEGIN
   IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'plaza purge ledger rows are never deleted'; END IF;
   IF NEW.created_at <> OLD.created_at OR NOT (NEW.scopes @> OLD.scopes) OR NOT (NEW.keys @> OLD.keys) THEN
