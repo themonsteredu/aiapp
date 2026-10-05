@@ -3,6 +3,7 @@ import {createPlazaStudent} from './plaza-student.js';
 import {createPlazaRecovery} from './plaza-recovery.js';
 export async function mountPlaza({ roomId, teacher, api, shell, esc }) {
   let disposed = false, terminated = false, busy = false, dirty = false, uncertain = null, timer, stream;
+  let cameraStarting = false, cameraReady = false, cameraEpoch = 0, cancelCameraWait, capturing = false;
   let state, participants = [], selected = 0, studentFlow, recovery;
   const queue = [];
   const moveBytes = new Map();
@@ -14,7 +15,85 @@ export async function mountPlaza({ roomId, teacher, api, shell, esc }) {
   const $ = name => root.querySelector(`[data-plaza="${name}"]`);
   const stateLabel = value => ({ planning: '구상하기', paused: '제작 중 · 잠시 멈춤', returning:'개장 준비',exchange:'광장 교류',reflection:'돌아보기와 저장 확인',closed: '수업 종료' }[value]);
   function message(text) { if ($('message')) $('message').textContent = text; }
-  function stopCamera() { stream?.getTracks().forEach(t => t.stop()); stream = null; }
+  function cameraMessage(text) { if ($('camera-status')) $('camera-status').textContent = text; }
+  function stopCamera(note = '') {
+    cameraEpoch++; cancelCameraWait?.(); cancelCameraWait = null;
+    const previous = stream; stream = null; cameraStarting = false; cameraReady = false;
+    previous?.getTracks().forEach(t => { t.onended = null; t.stop(); });
+    const video = $('video'); if (video) { video.pause(); video.srcObject = null; }
+    if (note) cameraMessage(note);
+    cameraControls();
+  }
+  function hasCameraFrame() {
+    const video = $('video');
+    return !!stream && stream.getVideoTracks().some(t => t.readyState === 'live')
+      && !!video && !video.paused && video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0;
+  }
+  function cameraControls() {
+    if (!$('camera')) return;
+    const closed = disposed || terminated || !state || state.room.state === 'closed', target = currentTarget();
+    const allowed = !closed && !!target && target.photo_allowed !== false && !capturing;
+    // Teachers can check their camera before any student joins. Saving still requires an eligible target.
+    $('camera').disabled = closed || cameraStarting || capturing;
+    $('camera').textContent = cameraStarting ? '카메라 연결 중' : cameraReady ? '카메라 다시 켜기' : '카메라 켜기';
+    $('camera-stop').hidden = !stream && !cameraStarting;
+    $('capture').disabled = !allowed || !cameraReady || !hasCameraFrame();
+    for (const name of ['file', 'album-file', 'device-camera', 'choose-photo']) $(name).disabled = !allowed;
+    $('target').disabled = closed || !participants.length || capturing;
+    $('skip').disabled = closed || !participants.length || capturing || selected >= participants.length - 1;
+    $('back').disabled = closed || !participants.length || capturing || selected === 0;
+    $('capture-help').textContent = closed ? '수업이 종료되어 촬영을 마쳤습니다.'
+      : !target ? '학생이 아직 입장하지 않았습니다. 미리보기는 먼저 켤 수 있고, 학생이 자기 자리에 입장하면 작품을 촬영할 수 있습니다.'
+      : target.photo_allowed === false ? '이 학생은 사진 없이 참여합니다. 촬영할 다른 가게를 선택해 주세요.'
+      : capturing ? '사진을 준비하고 있습니다.' : '선택한 자리의 작품을 촬영합니다. 촬영 후 다음 자리로 넘어가며, 서버 저장 완료를 꼭 확인해 주세요.';
+  }
+  function waitForCameraFrame(video) {
+    return new Promise((resolve, reject) => {
+      let done = false;
+      const events = ['loadeddata', 'canplay', 'playing', 'resize'];
+      const finish = error => {
+        if (done) return; done = true; clearTimeout(timeout);
+        events.forEach(name => video.removeEventListener(name, check)); video.removeEventListener('error', failed);
+        if (cancelCameraWait === cancel) cancelCameraWait = null;
+        if (error) reject(error); else resolve();
+      };
+      const check = () => { if (hasCameraFrame()) finish(); };
+      const failed = () => finish(new Error('영상 미리보기를 시작하지 못했습니다. 기기 카메라로 촬영해 주세요.'));
+      const cancel = () => finish(new DOMException('촬영 화면을 닫았습니다.', 'AbortError'));
+      const timeout = setTimeout(() => finish(new Error('미리보기 영상이 도착하지 않았습니다. 기기 카메라로 촬영하거나 Safari에서 다시 열어 주세요.')), 10000);
+      cancelCameraWait = cancel; events.forEach(name => video.addEventListener(name, check)); video.addEventListener('error', failed); check();
+    });
+  }
+  async function startCamera() {
+    if (disposed || terminated || cameraStarting || state?.room.state === 'closed') return;
+    stopCamera();
+    if (window.isSecureContext === false || !navigator.mediaDevices?.getUserMedia) {
+      cameraMessage('이 브라우저에서는 실시간 미리보기를 사용할 수 없습니다. 기기 카메라로 촬영하거나 Safari에서 열어 주세요.'); return;
+    }
+    const epoch = cameraEpoch; cameraStarting = true; cameraControls();
+    cameraMessage('카메라 권한을 확인하고 있습니다. 허용 요청이 나타나면 허용해 주세요.');
+    try {
+      const acquired = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } }, audio: false });
+      if (epoch !== cameraEpoch || disposed || terminated || document.hidden || state?.room.state === 'closed') { acquired.getTracks().forEach(t => t.stop()); if (epoch === cameraEpoch) stopCamera(); return; }
+      stream = acquired;
+      const video = $('video'); video.muted = true; video.defaultMuted = true; video.playsInline = true; video.srcObject = acquired;
+      acquired.getVideoTracks().forEach(t => { t.onended = () => { if (epoch === cameraEpoch) stopCamera('카메라 연결이 끝났습니다. 카메라를 다시 켜거나 기기 카메라로 촬영해 주세요.'); }; });
+      // Wait for both playback permission and real pixels; a granted stream alone can still be blank on iOS.
+      await Promise.all([waitForCameraFrame(video), Promise.resolve().then(() => video.play())]);
+      if (epoch !== cameraEpoch || disposed || terminated) return;
+      cameraStarting = false; cameraReady = true; cameraControls();
+      cameraMessage('카메라 미리보기가 켜졌습니다. 작품이 화면에 보이면 촬영해 주세요.');
+    } catch (error) {
+      if (epoch !== cameraEpoch || disposed || terminated) return;
+      stopCamera();
+      const help = ['NotAllowedError', 'SecurityError'].includes(error.name)
+        ? '카메라 사용이 허용되지 않았습니다. 브라우저의 카메라 권한을 허용하거나 기기 카메라로 촬영해 주세요. 앱 안에서 열었다면 Safari에서 다시 열어 주세요.'
+        : error.name === 'NotFoundError' ? '사용할 카메라를 찾지 못했습니다. 사진 앨범에서 작품 사진을 선택해 주세요.'
+        : error.name === 'NotReadableError' ? '카메라를 다른 앱에서 사용 중일 수 있습니다. 해당 앱을 닫고 다시 켜거나 기기 카메라로 촬영해 주세요.'
+        : error.message || '카메라를 열지 못했습니다. 기기 카메라로 촬영해 주세요.';
+      cameraMessage(help);
+    }
+  }
   function stopPresenting() { if(document.fullscreenElement&&root.contains(document.fullscreenElement))void document.exitFullscreen?.().catch(()=>{}); }
   function fatal(error) {
     if (disposed) return;
@@ -123,11 +202,12 @@ export async function mountPlaza({ roomId, teacher, api, shell, esc }) {
   function currentTarget() { return participants[selected] ? { ...participants[selected] } : null; }
   function pendingPhotos(){return new Set([...(state?.photos||[]).filter(p=>p.status!=='stored'&&!p.invalidated_at).map(p=>p.id),...queue.filter(q=>q.data).map(q=>q.id)]).size;}
   function selectTarget(index) {
-    if (!participants.length || !$('target')) return;
+    if (!$('target')) return;
+    if (!participants.length) { selected = 0; $('target-title').textContent = '학생 입장 대기'; cameraControls(); return; }
     selected = Math.max(0, Math.min(participants.length - 1, index));
     const p = currentTarget(); $('target').value = p.id;
     $('target-title').textContent = `${p.seat_order}번 · ${p.store_name || '가게 이름 준비 중'}${p.photo_allowed===false?' · 사진 없이 참여':''}`;
-    for(const k of ['file','capture'])if($(k))$(k).disabled=p.photo_allowed===false||state?.room.state==='closed'||(k==='capture'&&!stream);
+    cameraControls();
   }
   function renderQueue(serverPhotos = []) {
     if (!$('queue')) return;
@@ -153,12 +233,24 @@ export async function mountPlaza({ roomId, teacher, api, shell, esc }) {
     finally { item.sending = false; if (!disposed) { renderQueue(state.photos); await revalidate(); } }
   }
   async function capture(source, target) {
-    if (!target || disposed) return;
+    if (!target || disposed || terminated || capturing || state?.room.state === 'closed') return;
     if(target.photo_allowed===false){message('이 학생은 사진 없이 참여합니다. 다음 가게를 선택해 주세요.');return;}
-    let bitmap;
+    if(source === $('video') && (!cameraReady || !hasCameraFrame())) { cameraMessage('미리보기에 영상이 나타난 뒤 찍어 주세요. 기기 카메라로 촬영할 수도 있습니다.'); return; }
+    let bitmap, objectUrl;
+    capturing = true; cameraControls();
     try {
-      bitmap = source instanceof Blob ? await createImageBitmap(source) : source;
-      const width = bitmap.width || bitmap.videoWidth, height = bitmap.height || bitmap.videoHeight;
+      bitmap = source;
+      if (source instanceof Blob) {
+        // Some mobile browsers cannot decode a picked photo with createImageBitmap; use their image decoder.
+        bitmap = typeof createImageBitmap === 'function' ? await createImageBitmap(source).catch(() => null) : null;
+        if (!bitmap) {
+          objectUrl = URL.createObjectURL(source); bitmap = new Image();
+          await new Promise((resolve, reject) => { bitmap.onload = resolve; bitmap.onerror = () => reject(new Error('사진을 읽지 못했습니다. 기기 카메라로 다시 찍거나 JPG·PNG 사진을 선택해 주세요.')); bitmap.src = objectUrl; });
+        }
+      }
+      if (disposed || terminated || state?.room.state === 'closed') return;
+      if (!participants.some(p => p.id === target.id && p.target_version === target.target_version && p.photo_allowed !== false)) { message('촬영할 자리의 상태가 바뀌었습니다. 가게를 다시 선택해 주세요.'); return; }
+      const width = bitmap.videoWidth || bitmap.naturalWidth || bitmap.width, height = bitmap.videoHeight || bitmap.naturalHeight || bitmap.height;
       if (!width || !height) throw new Error('카메라가 준비된 뒤 다시 찍어 주세요.');
       const canvas = document.createElement('canvas');
       const ratio = Math.min(1,1280 / Math.max(width,height));
@@ -168,10 +260,10 @@ export async function mountPlaza({ roomId, teacher, api, shell, esc }) {
       if (data.length > 900023) data = canvas.toDataURL('image/jpeg',0.45);
       if (data.length > 900023) throw new Error('사진이 너무 큽니다. 조금 더 단순한 배경에서 찍어 주세요.');
       const item = { id: crypto.randomUUID(), target, data, status: '촬영됨', failed: false };
-      queue.push(item); renderQueue(state.photos); selectTarget(selected + 1);
+      queue.push(item); renderQueue(state.photos); selectTarget(participants.findIndex(p => p.id === target.id) + 1);
       void upload(item);
     } catch (error) { message(error.message); }
-    finally { if (bitmap && bitmap !== source) bitmap.close?.(); }
+    finally { if (bitmap && bitmap !== source) bitmap.close?.(); if (objectUrl) URL.revokeObjectURL(objectUrl); capturing = false; if (!disposed) cameraControls(); }
   }
   function updateTeacher(data) {
     if (disposed || !$('target')) return;
@@ -188,8 +280,9 @@ export async function mountPlaza({ roomId, teacher, api, shell, esc }) {
       const next={planning:['paused','제작하러 가기'],paused:['returning','작품 확인 열기'],returning:['exchange','광장 열기'],exchange:['reflection','돌아보기 열기']}[data.room.state];
       $('pause').disabled=!next;$('pause').textContent=next?.[1]||'돌아보기와 저장 확인 중';$('pause').dataset.next=next?.[0]||'';
     }
-    $('close').disabled = closed; $('camera').disabled = closed || !participants.length; $('file').disabled = closed || !participants.length||currentTarget()?.photo_allowed===false; $('capture').disabled = closed || !stream || !participants.length||currentTarget()?.photo_allowed===false;
-    if (closed) stopCamera();
+    $('close').disabled = closed;
+    if (closed) stopCamera('수업이 종료되어 카메라를 껐습니다.');
+    cameraControls();
     recovery?.update(data);
     renderQueue(data.photos);
   }
@@ -202,9 +295,11 @@ export async function mountPlaza({ roomId, teacher, api, shell, esc }) {
       ${data.room.stage2?'<p class="plaza-help">1교시: 직업 소개 10분 → 기존 활동·작품 구상 20분 → 제작 안내 15분 / 2교시: 제작 / 3교시: 마무리·촬영 20분 → 광장 활동 25분</p><section class="plaza-presenter" data-plaza="slides-panel" hidden></section>':''}
       <div class="plaza-layout"><section class="plaza-camera"><h2 data-plaza="target-title">촬영할 가게</h2><label>가게 선택<select data-plaza="target"></select></label>
       <video data-plaza="video" autoplay muted playsinline aria-label="작품 촬영 미리보기"></video>
-      <div class="plaza-controls"><button class="btn btn-ghost" data-plaza="camera">카메라 켜기</button><button class="btn btn-primary" data-plaza="capture" disabled>찍고 다음 자리</button><button class="btn btn-ghost" data-plaza="skip">건너뛰기</button><button class="btn btn-ghost" data-plaza="back">이전 자리 · 다시 찍기</button></div>
-      <label class="plaza-file">사진 선택 또는 기기 카메라<input type="file" accept="image/*" capture="environment" data-plaza="file"></label>
-      <p class="plaza-help">촬영 후 다음 자리로 넘어갑니다. 서버 저장 완료를 꼭 확인해 주세요.</p><p data-plaza="message" role="status"></p></section>
+      <p data-plaza="camera-status" role="status">카메라를 켜서 미리보기를 확인하거나 기기 카메라로 작품을 촬영해 주세요.</p>
+      <div class="plaza-controls"><button type="button" class="btn btn-ghost" data-plaza="camera">카메라 켜기</button><button type="button" class="btn btn-ghost" data-plaza="camera-stop" hidden>카메라 끄기</button><button type="button" class="btn btn-primary" data-plaza="capture" disabled>찍고 다음 자리</button><button type="button" class="btn btn-ghost" data-plaza="skip">건너뛰기</button><button type="button" class="btn btn-ghost" data-plaza="back">이전 자리 · 다시 찍기</button></div>
+      <div class="plaza-controls"><button type="button" class="btn btn-ghost" data-plaza="device-camera">기기 카메라로 촬영</button><button type="button" class="btn btn-ghost" data-plaza="choose-photo">사진 앨범에서 선택</button></div>
+      <input class="plaza-file-input" type="file" accept="image/*" capture="environment" data-plaza="file" aria-label="기기 카메라로 작품 촬영" hidden><input class="plaza-file-input" type="file" accept="image/*" data-plaza="album-file" aria-label="작품 사진 선택" hidden>
+      <p class="plaza-help" data-plaza="capture-help"></p><p class="plaza-help">앱 안의 브라우저에서 미리보기가 열리지 않으면 Safari에서 같은 수업을 열어 주세요.</p><p data-plaza="message" role="status"></p></section>
       <section><h2>사진 저장 상태</h2><ul class="plaza-queue" data-plaza="queue"></ul><p class="plaza-help">전송하지 못한 사진은 이 화면을 닫으면 사라집니다. 먼저 다시 보내 주세요.</p></section></div>
       ${data.room.stage3?'<section class="plaza-step" data-plaza="recovery"></section>':''}<div class="plaza-table-wrap"><table><thead><tr><th>자리</th><th>가게</th><th>구상</th><th>사진</th></tr></thead><tbody data-plaza="roster"></tbody></table></div>`;
     if(data.room.stage3)recovery=createPlazaRecovery({root:$('recovery'),request,esc,onChanged:revalidate,onFatal:fatal,
@@ -215,15 +310,20 @@ export async function mountPlaza({ roomId, teacher, api, shell, esc }) {
     }});
     $('target').onchange = () => selectTarget(participants.findIndex(p => p.id === $('target').value));
     $('skip').onclick = () => selectTarget(selected + 1); $('back').onclick = () => selectTarget(selected - 1);
-    $('camera').onclick = async () => {
-      try { stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
-        if (disposed) { stopCamera(); return; } $('video').srcObject = stream; $('capture').disabled = !participants.length||currentTarget()?.photo_allowed===false;
-      } catch { message('카메라를 열지 못했습니다. 아래 사진 선택을 이용하거나 기기 권한을 확인해 주세요.'); }
-    };
+    $('camera').onclick = startCamera;
+    $('camera-stop').onclick = () => stopCamera('카메라를 껐습니다. 다시 켜거나 기기 카메라로 촬영할 수 있습니다.');
+    $('video').onpause = () => { cameraReady = !cameraStarting && hasCameraFrame(); cameraControls(); };
+    $('video').onplaying = () => { if (stream && !cameraStarting) { cameraReady = hasCameraFrame(); cameraControls(); } };
     $('capture').onclick = () => { const target = currentTarget(); void capture($('video'), target); };
-    let fileTarget;
-    $('file').onclick = () => { fileTarget = currentTarget(); };
-    $('file').onchange = e => { const file = e.target.files[0]; const target = fileTarget || currentTarget(); e.target.value = ''; if (file) void capture(file,target); };
+    for (const [buttonName, inputName] of [['device-camera', 'file'], ['choose-photo', 'album-file']]) {
+      const input = $(inputName); let fileTarget;
+      $(buttonName).onclick = () => {
+        if ($(buttonName).disabled) return;
+        fileTarget = currentTarget(); stopCamera('촬영하거나 사진을 선택한 뒤 이 화면에서 서버 저장 완료를 확인해 주세요.');
+        input.value = ''; input.click();
+      };
+      input.onchange = e => { const file = e.target.files[0], target = fileTarget; fileTarget = null; e.target.value = ''; if (file && target) void capture(file, target); };
+    }
     $('pause').onclick = async () => {
       if(state.room.stage2) {
         const next=$('pause').dataset.next;
