@@ -896,7 +896,7 @@ route(/^#\/plaza-retention$/, async()=>{
 route(/^#\/plaza-teacher$/, async () => {
   if (!isStaff() || !state.settings?.plaza_stage1) { location.hash = '#/decks'; return; }
   const data = await api('GET', '/api/plaza/rooms');
-  shell('광장 수업 진행', `<main class="plaza"><h1>진행할 수업을 선택해 주세요</h1>${state.settings?.plaza_stage5?'<p><a class="btn btn-primary" href="#/plaza-programs">프로그램 카드와 수업 준비</a></p>':''}${data.rooms.map(room => `<p><a class="btn btn-ghost" href="#/plaza-teacher/${room.id}">${esc(room.title)} · 입장 코드 ${esc(room.code)}</a></p>`).join('') || '<p>준비된 광장이 없습니다.</p>'}</main>`);
+  shell('광장 수업 진행', `<main class="plaza"><h1>진행할 수업을 선택해 주세요</h1>${state.settings?.plaza_stage5?'<p><a class="btn btn-primary" href="#/plaza-programs">수업 프로그램 준비</a></p>':''}${data.rooms.map(room => `<p><a class="btn btn-ghost" href="#/plaza-teacher/${room.id}">${esc(room.title)} · 입장 코드 ${esc(room.code)}</a></p>`).join('') || '<p>준비된 광장이 없습니다.</p>'}</main>`);
 });
 window.addEventListener('pageshow', event => { if (event.persisted && /^#\/plaza/.test(location.hash)) navigate(); });
 
