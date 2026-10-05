@@ -47,7 +47,7 @@ test('online gate refuses every setting that could reach production or another d
     file_storage: [{ PLAZA_TEST_STORAGE_DIR: '/tmp/plaza' }],
     media_storage: [{ SUPABASE_URL: `https://${online.PRODUCTION_REF}.supabase.co` }, { SUPABASE_SERVICE_KEY: 'x' }],
     pg_override: [{ PGHOST: 'db.example' }, { PGSSLMODE: 'disable' }, { PGUSER: 'postgres' }],
-    superadmin_password: [{ SUPERADMIN_PASSWORD: undefined }, { SUPERADMIN_PASSWORD: 'ChangeMe123!' }],
+    superadmin_password: [{ SUPERADMIN_PASSWORD: undefined }, { SUPERADMIN_PASSWORD: 'short12' }, { SUPERADMIN_PASSWORD: 'ChangeMe123!' }],
     database_url_missing: [{ PLAZA_ONLINE_DATABASE_URL: undefined }],
     database_url_production: [
       { PLAZA_ONLINE_DATABASE_URL: url(`postgres.${online.PRODUCTION_REF}:x@aws-1-ap-northeast-2.pooler.supabase.com:6543/postgres`) },

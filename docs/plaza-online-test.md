@@ -14,7 +14,7 @@
 |---|---|
 | 배포 | Vercel Preview(`VERCEL_ENV=preview`)이고 브랜치가 정확히 이 브랜치. 운영 배포에서는 이 설정을 무시하고 평소대로 돈다 |
 | DB 주소 | `DATABASE_URL`은 읽지 않는다(지금 Preview가 운영과 같은 값을 물려받기 때문). `PLAZA_ONLINE_DATABASE_URL`만 쓰고, Supabase 서울 풀러(포트 6543, DB `postgres`)이면서 사용자 이름 끝이 시험 프로젝트 번호여야 한다. 운영 프로젝트 번호가 어디든 들어 있으면 거절한다. `?host=` 같은 덧붙임 값과 `PGHOST` 등 다른 연결 변수도 거절한다 |
-| 기타 | 광장 1~5단계 설정, 가짜 키트(`PLAZA_SYNTHETIC_KIT=1`), 시험 번호(`PLAZA_TEST_ID`), 12자 이상이고 기본값이 아닌 `SUPERADMIN_PASSWORD`. 파일 사진 폴더·기존 동영상 저장소 설정이 있으면 거절 |
+| 기타 | 광장 1~5단계 설정, 가짜 키트(`PLAZA_SYNTHETIC_KIT=1`), 시험 번호(`PLAZA_TEST_ID`), 8자 이상이고 기본값이 아닌 `SUPERADMIN_PASSWORD`. 파일 사진 폴더·기존 동영상 저장소 설정이 있으면 거절 |
 
 통과해도 시험 DB가 준비됐는지(공개 키 역할의 public 스키마 사용 차단, 광장 표와 시험 표식)를 먼저 확인한다. 준비 전에는 앱 초기화를 포함해 DB에 아무것도 만들지 않고 503을 낸다. 상태 응답의 `schema`가 `data_api_open`·`missing`·`marker_mismatch` 중 무엇인지 알려 준다.
 
