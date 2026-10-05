@@ -63,7 +63,7 @@ Vercel `aiapp`에는 **Preview, 이 브랜치 전용**으로 아래 값이 들�
 |---|---|
 | `PLAZA_ONLINE_TEST`, `PLAZA_STAGE1_TEST`~`PLAZA_STAGE5_TEST`, `PLAZA_SYNTHETIC_KIT` | `1` |
 | `PLAZA_TEST_ID` | 시험 DB 표식과 같은 번호 |
-| `PLAZA_ONLINE_DATABASE_URL` | `postgresql://plaza_app.yxnenjtmuvdlfxnwxecp:<비밀번호>@aws-?-ap-northeast-2.pooler.supabase.com:6543/postgres` |
+| `PLAZA_ONLINE_DATABASE_URL` | `postgresql://plaza_app.yxnenjtmuvdlfxnwxecp:<비밀번호>@aws-0-ap-northeast-2.pooler.supabase.com:6543/postgres` (aws-1 은 이 프로젝트를 찾지 못한다, XX000) |
 | `SUPERADMIN_PASSWORD` | 시험 관리자 첫 비밀번호. 첫 로그인에서 바꾸라고 나온다 |
 
 값을 바꾸면 다시 배포해야 적용된다.
