@@ -94,6 +94,16 @@ test('production deployments ignore leaked online settings instead of switching 
   assert.equal(online.onlineGate({}).reason, 'not_requested');
 });
 
+test('a Vercel run of this branch that is not production stops when the online flag is missing', () => {
+  for (const extra of [{ PLAZA_ONLINE_TEST: undefined }, { PLAZA_ONLINE_TEST: 'yes' }, { PLAZA_ONLINE_TEST: undefined, VERCEL_ENV: undefined, VERCEL_TARGET_ENV: undefined }]) {
+    assert.equal(online.requested(env(extra)), true);
+    assert.ok(online.entryBlocked(env({ ...extra, PLAZA_ONLINE_DATABASE_URL: undefined })));
+    assert.throws(() => plazaConfig(env({ ...extra, PLAZA_ONLINE_DATABASE_URL: undefined })));
+  }
+  assert.equal(online.requested({ VERCEL: '1', VERCEL_ENV: 'production', DATABASE_URL: 'x' }), false);
+  assert.equal(online.requested({ DATABASE_URL: 'postgres://u@127.0.0.1/plaza_test_x' }), false);
+});
+
 test('online plaza config always uses the database photo store and the synthetic kit', () => {
   const config = plazaConfig(env());
   assert.equal(config.online, true);
@@ -132,10 +142,10 @@ test('blocked online deployment answers 503 for every API and reports only the r
 });
 
 test('a blocked online entry point never loads the API or opens the database module', () => {
-  for (const entry of ['server.js', 'api/index.js']) {
+  for (const [entry, extra] of [['server.js', {}], ['api/index.js', {}], ['api/index.js', { PLAZA_ONLINE_TEST: undefined }]]) {
     const script = `const Module=require('node:module'),load=Module._load;Module._load=function(r,...a){if(/lib[\\\\/](api|db)(\\.js)?$/.test(r))throw new Error('loaded '+r);return load.call(this,r,...a)};
       require(${JSON.stringify(path.join(root, entry))});process.stdout.write('not loaded');process.exit(0);`;
-    const childEnv = { ...env({ PLAZA_ONLINE_DATABASE_URL: undefined }), PORT: '0', PATH: process.env.PATH };
+    const childEnv = Object.fromEntries(Object.entries({ ...env({ PLAZA_ONLINE_DATABASE_URL: undefined, ...extra }), PORT: '0', PATH: process.env.PATH }).filter(([, v]) => v !== undefined));
     assert.equal(execFileSync(process.execPath, ['-e', script], { env: childEnv, cwd: root, encoding: 'utf8' }), 'not loaded', entry);
   }
 });
@@ -144,4 +154,13 @@ test('lib/db.js in online mode refuses to start with a bad test URL and never fa
   const script = `try{require(${JSON.stringify(path.join(root, 'lib/db.js'))});process.stdout.write('loaded')}catch(e){process.stdout.write(e.message)}`;
   const bad = { ...env({ PLAZA_ONLINE_DATABASE_URL: undefined }), PATH: process.env.PATH };
   assert.match(execFileSync(process.execPath, ['-e', script], { env: bad, cwd: root, encoding: 'utf8' }), /database_url_missing/);
+});
+
+test('a JPEG that is too small once its metadata is removed is refused the same way by both stores', () => {
+  const { jpegInput } = require('../lib/plaza-storage');
+  const segment = (marker, body) => Buffer.concat([Buffer.from([0xff, marker]), Buffer.from([0, body.length + 2]), Buffer.from(body)]);
+  const jpeg = Buffer.concat([Buffer.from([0xff, 0xd8]), segment(0xe0, new Array(14).fill(0)),
+    segment(0xc0, [8, 0, 16, 0, 16, 1, 1, 0x11, 0]), segment(0xda, [1, 1, 0, 0, 63, 0]), Buffer.from([0, 0, 0xff, 0xd9])]);
+  assert.equal(jpeg.length, 47);
+  assert.throws(() => jpegInput(`data:image/jpeg;base64,${jpeg.toString('base64')}`), e => e.status === 400);
 });

@@ -32,22 +32,36 @@ async function main() {
   const read = name => fs.readFileSync(path.join(__dirname, '..', 'db', name), 'utf8');
   // Session-level settings: the guards in db/plaza-*.sql read them in every following statement.
   const marked = sql => `SELECT set_config('plaza.test_id', '${testId}', false), set_config('plaza.online_ref', '${TEST_REF}', false);\n${sql}`;
+  // Every file refuses the production project. Before the plaza marker exists (01-03), the test
+  // project is recognised by what it lacks: the central schemas and career_log that production has.
+  const fresh = sql => `DO $$ BEGIN
+  IF current_database() <> 'postgres' OR to_regnamespace('moakit_accounts') IS NOT NULL OR to_regnamespace('moalab') IS NOT NULL
+     OR to_regnamespace('career_log') IS NOT NULL THEN
+    RAISE EXCEPTION 'Only the new online plaza test project';
+  END IF;
+END $$;\n${sql}`;
+  const installed = sql => marked(`DO $$ BEGIN
+  IF to_regnamespace('moakit_accounts') IS NOT NULL OR to_regnamespace('moalab') IS NOT NULL OR NOT EXISTS (
+    SELECT 1 FROM plaza_environment WHERE purpose = 'online-test' AND project_ref = current_setting('plaza.online_ref', true)
+      AND test_id = current_setting('plaza.test_id', true)::uuid
+  ) THEN RAISE EXCEPTION 'Only the marked online plaza test project'; END IF;
+END $$;\n${sql}`);
   const files = [
-    ['01-lock-data-api.sql', `-- The app connects as the table owner through the pooler. The Data API never needs these tables.
+    ['01-lock-data-api.sql', fresh(`-- The app connects as the table owner through the pooler. The Data API never needs these tables.
 -- PUBLIC too: anon and authenticated inherit its default USAGE on the public schema.
 REVOKE ALL ON SCHEMA public FROM PUBLIC, anon, authenticated;
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public REVOKE ALL ON TABLES FROM anon, authenticated;
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public REVOKE ALL ON SEQUENCES FROM anon, authenticated;
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public REVOKE ALL ON FUNCTIONS FROM anon, authenticated;
-`],
-    ['02-app-schema.sql', (await appSchema()).join(';\n') + ';\n'],
-    ['03-career-log.sql', read('plaza-test-career-log.sql') + read('job-career-log.sql')],
+`)],
+    ['02-app-schema.sql', fresh((await appSchema()).join(';\n') + ';\n')],
+    ['03-career-log.sql', fresh(read('plaza-test-career-log.sql') + read('job-career-log.sql'))],
     ['04-plaza-stage1.sql', marked(read('plaza-stage1.sql'))],
     ['05-plaza-stage2.sql', marked(read('plaza-stage2.sql'))],
     ['06-plaza-stage3.sql', marked(read('plaza-stage3.sql'))],
     ['07-plaza-stage4.sql', marked(read('plaza-stage4.sql'))],
     ['08-plaza-storage.sql', marked(read('plaza-online-storage.sql'))],
-    ['09-lock-tables.sql', `-- Every table, including the app's own, stays closed to the Data API roles.
+    ['09-lock-tables.sql', installed(`-- Every table, including the app's own, stays closed to the Data API roles.
 REVOKE ALL ON ALL TABLES IN SCHEMA public FROM anon, authenticated;
 REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM anon, authenticated;
 REVOKE ALL ON ALL FUNCTIONS IN SCHEMA public FROM anon, authenticated;
@@ -56,7 +70,7 @@ DO $$ DECLARE t record; BEGIN
     EXECUTE format('ALTER TABLE %I.%I ENABLE ROW LEVEL SECURITY', t.schemaname, t.tablename);
   END LOOP;
 END $$;
-`],
+`)],
   ];
   fs.mkdirSync(out, { recursive: true, mode: 0o700 });
   for (const [name, sql] of files) fs.writeFileSync(path.join(out, name), sql, { mode: 0o600 });

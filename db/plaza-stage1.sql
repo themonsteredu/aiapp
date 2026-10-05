@@ -5,11 +5,12 @@
 -- disposable project is named by plaza.online_ref instead, and the central MoaKit/MoaLab schemas
 -- of the production project must be absent.
 DO $$ BEGIN
-  IF current_setting('plaza.test_id', true) IS NULL OR NOT (
+  -- COALESCE: an unset setting is NULL, and IF NULL would not raise.
+  IF NOT COALESCE(current_setting('plaza.test_id', true) IS NOT NULL AND (
     current_database() ~ '^plaza_test_[a-z0-9_]+$'
-    OR (current_database() = 'postgres' AND current_setting('plaza.online_ref', true) = 'yxnenjtmuvdlfxnwxecp'
+    OR (current_database() = 'postgres' AND current_setting('plaza.online_ref', true) IS NOT DISTINCT FROM 'yxnenjtmuvdlfxnwxecp'
         AND to_regnamespace('moakit_accounts') IS NULL AND to_regnamespace('moalab') IS NULL)
-  ) THEN
+  ), false) THEN
     RAISE EXCEPTION 'A separate plaza_test_ database and test marker are required';
   END IF;
 END $$;

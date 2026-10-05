@@ -8,7 +8,7 @@
 
 ## 어떻게 켜지고 어떻게 멈추나
 
-`PLAZA_ONLINE_TEST=1`이면 `lib/plaza-online.js`가 서버 입구(`server.js`, `api/index.js`)에서 `lib/api.js`·`lib/db.js`를 읽기 **전에** 아래를 모두 확인한다. 하나라도 어긋나면 DB에 연결하지 않고, 모든 API가 503을 낸다. `GET /api/deployment-status`만 어긋난 항목의 코드(예: `database_url_missing`)를 알려 준다.
+`PLAZA_ONLINE_TEST=1`이거나 이 코드가 운영이 아닌 Vercel 배포에서 돌면(이 브랜치는 합치지 않으므로 스위치가 빠진 Preview도 여기에 해당), `lib/plaza-online.js`가 서버 입구(`server.js`, `api/index.js`)에서 `lib/api.js`·`lib/db.js`를 읽기 **전에** 아래를 모두 확인한다. 하나라도 어긋나면 DB에 연결하지 않고, 모든 API가 503을 낸다. `GET /api/deployment-status`만 어긋난 항목의 코드(예: `database_url_missing`)를 알려 준다.
 
 | 확인 | 내용 |
 |---|---|
@@ -16,7 +16,9 @@
 | DB 주소 | `DATABASE_URL`은 읽지 않는다(지금 Preview가 운영과 같은 값을 물려받기 때문). `PLAZA_ONLINE_DATABASE_URL`만 쓰고, Supabase 서울 풀러(포트 6543, DB `postgres`)이면서 사용자 이름 끝이 시험 프로젝트 번호여야 한다. 운영 프로젝트 번호가 어디든 들어 있으면 거절한다. `?host=` 같은 덧붙임 값과 `PGHOST` 등 다른 연결 변수도 거절한다 |
 | 기타 | 광장 1~5단계 설정, 가짜 키트(`PLAZA_SYNTHETIC_KIT=1`), 시험 번호(`PLAZA_TEST_ID`), 12자 이상이고 기본값이 아닌 `SUPERADMIN_PASSWORD`. 파일 사진 폴더·기존 동영상 저장소 설정이 있으면 거절 |
 
-통과하면 DB 안의 시험 표식(`plaza_environment`: 목적 `online-test`, 시험 프로젝트 번호, 시험 번호)을 광장 요청마다 다시 확인한다. 운영 DB에는 이 표식이 없으므로 광장이 열리지 않는다. 설치 SQL(`db/plaza-stage*.sql`, `db/plaza-online-storage.sql`)도 Supabase에서는 시험 프로젝트 번호를 요구하고, 운영 DB에만 있는 `moakit_accounts`·`moalab` 스키마가 보이면 설치를 거부한다.
+통과해도 시험 DB가 준비됐는지(공개 키 역할의 public 스키마 사용 차단, 광장 표와 시험 표식)를 먼저 확인한다. 준비 전에는 앱 초기화를 포함해 DB에 아무것도 만들지 않고 503을 낸다. 상태 응답의 `schema`가 `data_api_open`·`missing`·`marker_mismatch` 중 무엇인지 알려 준다.
+
+그다음 DB 안의 시험 표식(`plaza_environment`: 목적 `online-test`, 시험 프로젝트 번호, 시험 번호)을 광장 요청마다 다시 확인한다. 운영 DB에는 이 표식이 없으므로 광장이 열리지 않는다. 설치 SQL 9개는 모두 운영 DB에만 있는 `moakit_accounts`·`moalab` 스키마가 보이면 거부한다. 앞의 세 개는 `career_log`가 이미 있어도 거부하고, 광장 SQL과 마지막 파일은 시험 프로젝트 번호와 시험 표식을 요구한다. 운영처럼 꾸민 DB에 9개를 차례로 적용해 보았고, 모두 거부되었으며 아무것도 바뀌지 않았다.
 
 ## 사진과 삭제 목록
 
@@ -58,7 +60,7 @@ Vercel에는 계속 남는 디스크가 없어서 사진을 시험 DB의 비공�
 
 ## 검증
 
-- `npm run check`, `npm test` (온라인 판정 시험 `test/plaza-online.test.js` 포함 174개)
+- `npm run check`, `npm test` (온라인 판정 시험 `test/plaza-online.test.js` 10개 포함 176개)
 - 로컬 PostgreSQL 16, 단계마다 새 DB에서 1~5단계 검증을 **파일 저장소와 DB 저장소 모두** 실행: 1단계 54 / 2단계 215 / 3단계 90 / 4단계 85·86 / 5단계 62개 통과. DB 저장소는 Vercel과 같은 연결 1개(`PG_POOL_MAX=1`)로도 모두 통과
 - 온라인 흉내 시험. Supabase처럼 SSL만 받는 6543 포트와 `postgres.<시험 프로젝트 번호>` 사용자를 두고, 슈퍼유저가 아닌 표 주인 역할로 설치 SQL 9개를 적용한다. Vercel Preview와 같은 환경값과 운영처럼 보이는 가짜 `DATABASE_URL`을 둔 채 `scripts/plaza-online-verify.js` 18개와 5단계 검증 62개를 통과했다. 사진 저장·열람·철회 파기·진로기록·QR 주소·공개 키 차단을 포함한다
 - 실제 시험 배포 주소에서는 상태 응답과 화면 접속만 확인한다. 실제 iPad 카메라·인쇄·QR 스캔은 운영자가 직접 해 본다
