@@ -22,8 +22,10 @@ async function prepare({base,fixture,count=5,choices=[]}) {
     const person=client(base);await ok(person.request('POST','/api/join',{code:fixture.code,name:`리허설 가짜 참여자 ${i}`}));
     const joined=await ok(person.request('POST',room+'/enter',{mode:'new',seat_order:i,attempt_id:crypto.randomUUID(),...(plazaConfig().stage4?{record_choice:choices[i-1]?.record_choice||'record',photo_allowed:choices[i-1]?.photo_allowed??true,notice_version:'stage4-test-1'}:{})}));
     if(joined.card.materials_status!=='test-approved')throw new Error('가짜 키트 선택지에서만 자동 리허설합니다.');
+    let draftVersion=joined.draft.version;
+    if(joined.source_activity){const source=joined.source_activity;const saved=await ok(person.request('PUT',room+'/source-activity',{attempt_id:crypto.randomUUID(),version:draftVersion,adapter_id:source.id,adapter_version:source.version,mode:'without-app',inspiration_id:source.choices[0].id,confirm:true}));draftVersion=saved.version;}
     const ideas=await ok(person.request('POST',room+'/ai',{kind:'ideas',customer_id:joined.card.customers[0].id,material_ids:joined.card.materials.map(m=>m.id),attempt_id:crypto.randomUUID()}));
-    const draft={version:0,attempt_id:crypto.randomUUID(),idea_id:ideas.output.ideas[0].id,combination_id:ideas.output.ideas[0].combination_id,introduction_id:joined.card.introductions.find(v=>v.id!==ideas.output.ideas[0].introduction_id).id,artwork_seed_id:joined.card.names.artwork[0].id,artwork_name:`리허설 작품 ${i}`,store_seed_id:joined.card.names.store[0].id,store_name:`리허설 가게 ${i}`};
+    const draft={version:draftVersion,attempt_id:crypto.randomUUID(),idea_id:ideas.output.ideas[0].id,combination_id:ideas.output.ideas[0].combination_id,introduction_id:joined.card.introductions.find(v=>v.id!==ideas.output.ideas[0].introduction_id).id,artwork_seed_id:joined.card.names.artwork[0].id,artwork_name:`리허설 작품 ${i}`,store_seed_id:joined.card.names.store[0].id,store_name:`리허설 가게 ${i}`};
     await ok(person.request('PUT',room+'/draft',draft));people.push({seat:i,client:person,joined,draft});
   }
   return {teacher,people,room};

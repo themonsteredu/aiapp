@@ -1,7 +1,8 @@
 /* Stage 2 native student flow. Polling updates status nodes, never rebuilds an input form. */
+import {mountActivitySource} from './plaza-activity-source.js';
 export function createPlazaStudent({root,data,request,esc,onDirty,onFatal}) {
   let state=data,disposed=false,boardVersion=-1,stores=[],pending=new Map(),dirty=new Set(),busy=false,displayPhase='';
-  const card=data.card,$=key=>root.querySelector(`[data-flow="${key}"]`);
+  const card=data.card,source=data.source_activity,$=key=>root.querySelector(`[data-flow="${key}"]`);
   const questions=['오늘 한 일 중 가장 기억에 남는 것','막혔을 때 나는 어떻게 했나','이 일에 대해 더 알고 싶은 것'];
   const option=(items,selected)=>items.map(v=>`<option value="${esc(v.id)}" ${v.id===selected?'selected':''}>${esc(v.title||v.text)}</option>`).join('');
   const sourceLabel=run=>run?.source==='ai'?'AI 제안':'준비된 예시';
@@ -20,7 +21,7 @@ export function createPlazaStudent({root,data,request,esc,onDirty,onFatal}) {
       if(result.status==='running'){status('message','제안을 준비하고 있습니다. 잠시 뒤 같은 버튼을 눌러 주세요.');return result;}
       pending.delete(key);dirty.delete(key);changed();
       status('message',result.saved?'서버 저장 완료 · 확인했습니다.':'내용을 확인했습니다.');
-      const fresh=await request('GET','/mine');if(!disposed)update(fresh);
+      const fresh=await request('GET','/mine');if(!disposed){update(fresh);if(key==='source'&&result.saved&&fresh.draft.content.source_activity)setSection('plan-section');}
       return result;
     }catch(error){
       if(disposed)return;
@@ -34,9 +35,10 @@ export function createPlazaStudent({root,data,request,esc,onDirty,onFatal}) {
     <p class="plaza-seat">내 자리 ${esc(data.participant.seat_order)}번</p><p>${esc(card.problem||'서로 다른 손님을 배려하는 제품과 설명을 생각해요.')}</p>
     <p class="plaza-pause-note" data-flow="kit">${card.materials_status==='test-approved'?'시험용 재료로 진행하는 개발 화면입니다. 실제 키트 목록은 확인 대기입니다.':esc(card.materials_status)}</p>
     ${data.room.stage4?`<section aria-label="내 기록과 사진 선택"><p data-flow="privacy-status"></p><button type="button" class="btn btn-ghost" data-flow="withdraw-photo">작품 사진 사용 중지·삭제 요청</button><p data-flow="photo-purge" role="status"></p></section>`:''}
-    <nav class="plaza-controls" aria-label="활동 이동">${[['plan-section','구상'],['actual-section','제작 확인'],['exchange-section','방문과 답장'],['reflection-section','돌아보기']].map(([id,title])=>`<button type="button" class="btn btn-ghost" data-jump="${id}">${title}</button>`).join('')}</nav>
+    <nav class="plaza-controls" aria-label="활동 이동">${[...(source?[['source-section','기존 활동']]:[]),['plan-section','구상과 가게'],['actual-section','제작 확인'],['exchange-section','방문과 답장'],['reflection-section','돌아보기']].map(([id,title])=>`<button type="button" class="btn btn-ghost" data-jump="${id}">${title}</button>`).join('')}</nav>
     <p role="status" aria-live="polite" data-flow="message">쓴 내용은 저장 버튼을 눌러 서버 확인을 받아 주세요.</p>
-    <section data-flow="plan-section"><h2>1. 손님을 생각하며 구상해요</h2>
+    <section class="plaza-step" data-flow="source-section"></section>
+    <section data-flow="plan-section"><p class="plaza-source-inspiration" data-flow="source-inspiration" hidden></p><h2>1. 손님을 생각하며 구상해요</h2>
       <form data-flow="ideas"><fieldset data-fields="ideas"><label>내 손님<select name="customer_id">${option(card.customers,d.customer_id||state.ai.ideas?.selection?.customer_id)}</select></label>
       <p>${esc(card.display?.material_prompt||'책상의 시향지를 맡고, 사용할 재료를 골라 주세요.')}</p><div class="plaza-materials">${(card.materials||[]).map(m=>`<label><input type="checkbox" name="material_ids" value="${esc(m.id)}" ${(d.material_ids||state.ai.ideas?.selection?.material_ids||[]).includes(m.id)?'checked':''}><span class="plaza-material-mark" aria-hidden="true">${esc(card.display?.material_label||'시향지')}</span><strong>${esc(m.title)}</strong><span>${esc(m.description)}</span></label>`).join('')}</div>
       <button class="btn btn-primary">두 구상 확인하기</button></fieldset></form>
@@ -59,12 +61,13 @@ export function createPlazaStudent({root,data,request,esc,onDirty,onFatal}) {
       <h3>내 요청에 온 답장</h3><blockquote data-flow="received-reply"></blockquote><form data-flow="reaction"><fieldset data-fields="reaction"><label>답장을 읽고 고른 반응<select name="reaction_id">${option(card.reactions||[])}</select></label><button class="btn btn-primary">반응 보내기</button></fieldset></form><p data-flow="reaction-saved"></p></section>
     <section class="plaza-step" data-flow="reflection-section"><h2>4. 오늘의 경험을 돌아봐요</h2><form data-flow="reflection"><fieldset data-fields="reflection">${questions.map((q,i)=>`<label>${q}<select data-answer-help="${i}"><option value="">직접 적기</option>${(card.reflection_options?.[i]||[]).map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join('')}</select><textarea aria-label="${q}" name="answer${i}" rows="2" maxlength="220" required>${esc(a.reflection?.answers[i]||'')}</textarea></label>`).join('')}<button class="btn btn-primary">돌아보기 저장하기</button></fieldset></form><p data-flow="reflection-saved"></p>
       <button type="button" class="btn btn-ghost" data-flow="preview">최종 기록 확인하기</button><p class="plaza-help" data-flow="finish-help">확인할 기록을 만들면 활동 내용이 고정됩니다. 저장할 내용을 먼저 살펴보세요.</p><div data-flow="record-preview"></div><button type="button" class="btn btn-primary" data-flow="final" hidden>확인한 진로기록 저장하기</button><p data-flow="receipt" role="status"></p><a class="btn btn-ghost" data-flow="career-card" hidden>내 QR 진로 카드 확인·인쇄</a></section>`;
+  const sourceFlow=mountActivitySource({root:$('source-section'),source,confirmed:d.source_activity,esc,onSave:body=>action('source','PUT','/source-activity',{...body,version:state.draft.version})});
   function setSection(key) {
-    for(const id of ['plan-section','actual-section','exchange-section','reflection-section'])$(id).hidden=id!==key;
+    for(const id of ['source-section','plan-section','actual-section','exchange-section','reflection-section'])$(id).hidden=id!==key;
     root.querySelectorAll('[data-jump]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.jump===key)));
   }
   root.querySelectorAll('[data-jump]').forEach(b=>b.onclick=()=>{setSection(b.dataset.jump);$(b.dataset.jump).scrollIntoView({behavior:'smooth',block:'start'});});
-  root.querySelectorAll('form').forEach(form=>form.addEventListener('input',()=>{dirty.add(form.dataset.flow);changed();status('message','수정한 내용은 아직 저장되지 않았습니다. 해당 활동의 저장 버튼을 눌러 주세요.');}));
+  root.querySelectorAll('form').forEach(form=>form.addEventListener('input',()=>{dirty.add(form.dataset.flow);changed();if(form.dataset.flow==='source')lock();status('message','수정한 내용은 아직 저장되지 않았습니다. 해당 활동의 저장 버튼을 눌러 주세요.');}));
   $('ideas').onsubmit=e=>{e.preventDefault();const form=new FormData(e.target);void action('ideas','POST','/ai',{kind:'ideas',customer_id:form.get('customer_id'),material_ids:form.getAll('material_ids')});};
   $('plan').onsubmit=e=>{e.preventDefault();void action('plan','PUT','/draft',{...values('plan'),version:state.draft.version});};
   $('actual').onsubmit=e=>{e.preventDefault();void action('actual','PUT','/activity',{...values('actual'),kind:'actual',version:state.activity.version});};
@@ -82,7 +85,8 @@ export function createPlazaStudent({root,data,request,esc,onDirty,onFatal}) {
   root.querySelectorAll('[data-answer-help]').forEach(select=>select.onchange=()=>{if(select.value){$('reflection').elements[`answer${select.dataset.answerHelp}`].value=select.value;dirty.add('reflection');changed();}});
   function lock() {
     const phase=state.room.state,frozen=!!state.receipt||!!state.privacy?.activity_completed_at,ex=state.exchange;
-    const allowed={ideas:phase==='planning'&&state.ai.ideas?.status!=='ready',plan:phase==='planning'&&state.ai.ideas?.status==='ready',actual:['returning','exchange','reflection'].includes(phase),
+    const sourceReady=!source||(!!state.draft.content.source_activity&&!pending.has('source')&&!dirty.has('source'));
+    const allowed={source:phase==='planning'&&!state.ai.ideas,ideas:sourceReady&&phase==='planning'&&state.ai.ideas?.status!=='ready',plan:sourceReady&&phase==='planning'&&state.ai.ideas?.status==='ready',actual:['returning','exchange','reflection'].includes(phase),
       request:['exchange','reflection'].includes(phase)&&ex.outgoing&&!ex.outgoing.request,reply:['exchange','reflection'].includes(phase)&&state.ai.reply?.status==='ready'&&!ex.incoming?.reply,
       reaction:['exchange','reflection'].includes(phase)&&ex.outgoing?.reply&&!ex.outgoing.reaction,reflection:phase==='reflection'};
     root.querySelectorAll('[data-fields]').forEach(field=>field.disabled=busy||frozen||!allowed[field.dataset.fields]);
@@ -90,6 +94,7 @@ export function createPlazaStudent({root,data,request,esc,onDirty,onFatal}) {
     if(state.ai.ideas)$('ideas').querySelectorAll('input,select').forEach(el=>el.disabled=true);
     // Uncertain writes must be retried with the same frozen payload, not overwritten by new edits.
     for(const [key] of pending){const form=$(key);if(form?.tagName==='FORM'){form.querySelectorAll('input,textarea,select').forEach(el=>el.disabled=true);}}
+    sourceFlow.update(state,{busy,pending:pending.has('source')});
     $('reply-ai').disabled=busy||frozen||!['exchange','reflection'].includes(phase)||!ex.incoming?.request||state.ai.reply?.status==='ready';
     $('preview').disabled=busy||phase!=='reflection'||frozen;
     $('final').disabled=busy||!state.receipt||state.receipt.saved;
@@ -118,7 +123,11 @@ export function createPlazaStudent({root,data,request,esc,onDirty,onFatal}) {
   }
   function update(next) {
     if(disposed||next.room.version<state.room.version)return;
-    state=next;status('phase',label(state.room.state));
+    state=next;
+    const inspiration=state.draft.content.source_activity;
+    $('source-inspiration').hidden=!inspiration;
+    if(inspiration)status('source-inspiration',`작품에 가져온 영감 · ${inspiration.inspiration}`);
+    status('phase',label(state.room.state));
     if(state.privacy){
       const p=state.privacy,noRecord=p.record_choice==='no-record';
       status('privacy-status',`${noRecord?'진로기록 없이 참여':'마지막에 확인한 진로기록 남기기'} · ${p.photo_allowed?'작품 사진 전시 허용':'사진 없이 참여'}`);
@@ -127,7 +136,7 @@ export function createPlazaStudent({root,data,request,esc,onDirty,onFatal}) {
       status('finish-help',noRecord?'활동을 완료하면 내용을 고정합니다. 진로기록용 학생 번호와 최종 기록은 만들지 않습니다.':'확인할 기록을 만들면 활동 내용이 고정됩니다. 저장할 내용을 먼저 살펴보세요.');
       if(p.activity_completed_at)status('receipt','활동 완료 · 진로기록을 남기지 않았습니다.');
     }
-    if(displayPhase!==state.room.state){displayPhase=state.room.state;setSection(({planning:'plan-section',paused:'plan-section',returning:'actual-section',exchange:'exchange-section',reflection:'reflection-section'})[displayPhase]||'reflection-section');}
+    if(displayPhase!==state.room.state){displayPhase=state.room.state;setSection(({planning:source&&!inspiration?'source-section':'plan-section',paused:'plan-section',returning:'actual-section',exchange:'exchange-section',reflection:'reflection-section'})[displayPhase]||'reflection-section');}
     $('pause-note').hidden=state.room.state!=='paused';
     status('plan-saved',dirty.has('plan')?'수정한 구상은 저장 전입니다.':state.draft.saved_at?'구상 저장됨 · 서버에서 확인했습니다.':'구상 저장 전');
     status('actual-saved',dirty.has('actual')?'수정한 제작 결과는 저장 전입니다.':state.activity.actual?'제작 결과 저장됨':'제작 결과 확인 전');
@@ -158,5 +167,5 @@ export function createPlazaStudent({root,data,request,esc,onDirty,onFatal}) {
     lock();
   }
   update(data);
-  return {update,async poll(){await board();},destroy(){disposed=true;state=null;stores=[];pending.clear();dirty.clear();}};
+  return {update,async poll(){await board();},destroy(){disposed=true;sourceFlow.destroy();state=null;stores=[];pending.clear();dirty.clear();}};
 }

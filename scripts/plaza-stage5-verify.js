@@ -111,7 +111,7 @@ async function verify({base='http://127.0.0.1:3999',fixture}={}){
   const perfumeRoom=await ok(teacher.request('POST','/api/plaza/rooms',{class_session_id:perfumeSession.id,program_version_id:perfumeProgram.id,seat_count:1}));
   await ok(admin.request('POST',`/api/plaza/rooms/${perfumeRoom.id}/retention/policy`,policy));
   const perfume=await prepare({base,fixture:{...fixture,roomId:perfumeRoom.id,code:perfumeSession.code},count:1});
-  check(perfume.people[0].joined.card.display.profession==='조향사'&&perfume.people[0].joined.card.version===3,'조향사 3번 카드도 공통 준비·구상 흐름 사용');
+  check(perfume.people[0].joined.card.display.profession==='조향사'&&perfume.people[0].joined.card.version===4,'조향사 4번 카드도 공통 준비·구상 흐름 사용');
   for(const phase of ['paused','returning','exchange','reflection']){const v=await ok(teacher.request('GET',perfume.room+'/teacher'));await ok(teacher.request('POST',perfume.room+'/state',{state:phase,version:v.room.version,participant_ids:v.participants.map(p=>p.id)}));await advance(perfume);}
   const perfumeResult=await ok(perfume.people[0].client.request('GET',perfume.room+'/mine'));
   check(perfumeResult.receipt.saved&&perfumeResult.receipt.snapshot.plaza.exchange.mode==='example-substitution','조향사 공통 흐름 완주·1명 대체 교류 구분');
