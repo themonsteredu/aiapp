@@ -44,15 +44,29 @@ Vercel에는 계속 남는 디스크가 없어서 사진을 시험 DB의 비공�
 
 앱은 표 주인으로 접속하므로 RLS 정책 없이도 읽고 쓴다. Supabase 공개 키로는 어떤 표도 열리지 않는다.
 
-## 운영자가 하는 일
+## 앱 접속 계정과 Vercel 설정 (2026-10-05 적용)
 
-비밀값은 대화나 저장소에 남기지 않도록 운영자가 직접 넣는다.
+앱은 프로젝트 기본 계정(`postgres`)이 아니라 시험 DB 전용 계정 `plaza_app`으로 접속한다. 슈퍼유저 권한도 RLS 우회 권한도 없고, 표 57개와 시퀀스만 소유한다. RLS 규칙이 없는 표는 소유자만 읽을 수 있기 때문이다. 설치 SQL 9개를 적용한 뒤 시험 프로젝트에서 한 번 실행했다. 비밀번호는 SCRAM 값으로만 넣어서 SQL에 원문이 남지 않는다.
 
-1. Supabase 시험 프로젝트에서 DB 비밀번호를 새로 만들고, **Connect → Transaction pooler** 주소에 넣는다
-2. Vercel `aiapp` → Settings → Environment Variables에 **Preview, 이 브랜치 전용**으로 두 값을 넣는다(Sensitive)
-   - `PLAZA_ONLINE_DATABASE_URL` — 위 주소
-   - `SUPERADMIN_PASSWORD` — 시험 관리자 첫 비밀번호(12자 이상). 첫 로그인에서 바꾸라고 나온다
-3. 다시 배포한다. 나머지 비밀이 아닌 설정(`PLAZA_ONLINE_TEST`, 단계 설정, 가짜 키트, 시험 번호)은 같은 범위에 이미 넣어 두었다
+```sql
+CREATE ROLE plaza_app LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB PASSWORD '<SCRAM-SHA-256 값>';
+GRANT plaza_app TO postgres;                       -- 대시보드·MCP에서 계속 관리할 수 있게
+GRANT USAGE, CREATE ON SCHEMA public, career_log TO plaza_app;
+-- public·career_log 의 모든 표와 함수: ALTER ... OWNER TO plaza_app
+ALTER ROLE plaza_app SET idle_in_transaction_session_timeout = '30s';
+ALTER ROLE plaza_app SET statement_timeout = '30s';
+```
+
+Vercel `aiapp`에는 **Preview, 이 브랜치 전용**으로 아래 값이 들어 있다. 비밀값 두 개는 Sensitive라 다시 볼 수 없다.
+
+| 이름 | 값 |
+|---|---|
+| `PLAZA_ONLINE_TEST`, `PLAZA_STAGE1_TEST`~`PLAZA_STAGE5_TEST`, `PLAZA_SYNTHETIC_KIT` | `1` |
+| `PLAZA_TEST_ID` | 시험 DB 표식과 같은 번호 |
+| `PLAZA_ONLINE_DATABASE_URL` | `postgresql://plaza_app.yxnenjtmuvdlfxnwxecp:<비밀번호>@aws-?-ap-northeast-2.pooler.supabase.com:6543/postgres` |
+| `SUPERADMIN_PASSWORD` | 시험 관리자 첫 비밀번호. 첫 로그인에서 바꾸라고 나온다 |
+
+값을 바꾸면 다시 배포해야 적용된다.
 
 ## 시험 진행 (5단계 runbook과 같은 화면)
 
