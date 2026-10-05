@@ -20,20 +20,13 @@ async function setup() {
   const db = require('../lib/db');
   await db.ready();
   // Minimal fake Career Log schema. No central school accounts are created or copied.
-  await db.q(`CREATE SCHEMA career_log;
-    CREATE TABLE career_log.students (id uuid PRIMARY KEY);
-    CREATE TABLE career_log.records (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), student_id uuid REFERENCES career_log.students(id),
-      session_ref text,program_ref text,occurred_at timestamptz,process text,artifact text,reflection text,source text,
-      verification_status text,verified_by text,verified_at timestamptz,raw_data jsonb,source_event_id text UNIQUE,supersedes_id uuid);
-    DO $$ BEGIN
-      IF NOT EXISTS(SELECT 1 FROM pg_roles WHERE rolname='anon') THEN CREATE ROLE anon NOLOGIN; END IF;
-      IF NOT EXISTS(SELECT 1 FROM pg_roles WHERE rolname='authenticated') THEN CREATE ROLE authenticated NOLOGIN; END IF;
-      IF NOT EXISTS(SELECT 1 FROM pg_roles WHERE rolname='service_role') THEN CREATE ROLE service_role NOLOGIN; END IF;
-    END $$;`);
+  await db.q(await fs.readFile(path.join(__dirname,'../db/plaza-test-career-log.sql'),'utf8'));
   await db.q(await fs.readFile(path.join(__dirname,'../db/job-career-log.sql'),'utf8'));
   await db.withTransaction(async tx => {
     await tx.q("SELECT set_config('plaza.test_id',$1,true)",[config.testId]);
     await tx.q(await fs.readFile(path.join(__dirname,'../db/plaza-stage1.sql'),'utf8'));
+    // Same DB-backed photo store as the online test, exercised locally first.
+    if (config.photoStore === 'pg') await tx.q(await fs.readFile(path.join(__dirname,'../db/plaza-online-storage.sql'),'utf8'));
   });
   const { hashPassword } = require('../lib/password');
   const staffPassword = crypto.randomBytes(18).toString('base64url');

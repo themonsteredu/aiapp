@@ -5,17 +5,22 @@ const {client,ok,prepare,advance}=require('./plaza-rehearsal');
 const uuid=()=>crypto.randomUUID();
 function installFaults(){
   const faults={remove:null,photo:null,started:null,resume:null};
-  const mod=require('../lib/plaza-storage'),original=mod.localTestStorage;
-  mod.localTestStorage=config=>{const store=original(config);return {...store,
+  const mod=require('../lib/plaza-storage');
+  for(const name of ['localTestStorage','pgTestStorage']){const original=mod[name];mod[name]=(...args)=>{const store=original(...args);return {...store,
     async removeVerified(key){if(faults.remove==='fail')throw new Error('synthetic delete failure');if(faults.remove==='lie')return {verified:true};return store.removeVerified(key);},
     async put(key,image){await store.put(key,image);if(faults.photo==='pause'){faults.started?.();await new Promise(r=>{faults.resume=r;});}}
-  };};
+  };};}
   return faults;
 }
 async function verify({base='http://127.0.0.1:3999',fixture,faults}={}) {
   const config=plazaConfig();if(!config?.stage4||!faults)throw new Error('별도 4단계 시험 환경이 필요합니다.');
   const db=require('../lib/db');assert.equal((await db.one('SELECT test_id FROM plaza_environment WHERE database_name=current_database()')).test_id,config.testId);
   let checks=0;const check=(v,label)=>{assert.ok(v,label);checks++;console.log('PASS',label);};
+  // Photo objects are files locally, or rows in plaza_photo_blobs with PLAZA_PHOTO_STORE=pg / online.
+  // A DB store has no temporary names and rejects foreign names, so those two cases differ by store.
+  const pgStore=config.photoStore==='pg',{digest}=require('../lib/career-log');
+  const plant=async(name,buffer)=>pgStore?(/\.tmp$|\.txt$/.test(name)?null:db.q('INSERT INTO plaza_photo_blobs(object_key,data,digest,bytes) VALUES($1,$2,$3,$4)',[name,buffer,digest(buffer),buffer.length])):fs.writeFile(path.join(config.storageRoot,name),buffer);
+  const present=async name=>pgStore?!!await db.one('SELECT 1 FROM plaza_photo_blobs WHERE object_key=$1',[name]):!!await fs.stat(path.join(config.storageRoot,name)).catch(()=>null);
   const admin=client(base),teacher=client(base),outsider=client(base),room=`/api/plaza/rooms/${fixture.roomId}`,maint=room+'/retention';
   await ok(admin.request('POST','/api/login',fixture.admin));await ok(teacher.request('POST','/api/login',fixture.teacher));
   const student=client(base);await ok(student.request('POST','/api/join',{code:fixture.code,name:'시험 안내 확인'}));
@@ -55,7 +60,7 @@ async function verify({base='http://127.0.0.1:3999',fixture,faults}={}) {
   const buffer=require('../lib/plaza-storage').jpegInput(dataUrl).buffer;
   async function capture(seat,upload=true){const p=await row(seat),id=uuid();await ok(teacher.request('POST',room+'/photos',{capture_id:id,participant_id:p.id,target_version:p.target_version}));if(upload)await ok(teacher.request('PUT',room+'/photos/'+id,{data_url:dataUrl,target_version:p.target_version}));const o=await db.one('SELECT object_key FROM plaza_photo_objects WHERE photo_id=$1',[id]);return {id,key:o.object_key,target_version:p.target_version};}
   const old=await capture(2),fresh=await capture(2),pending=await capture(2,false);
-  const temp=path.join(config.storageRoot,`${pending.key}.${uuid()}.tmp`);await fs.writeFile(temp,buffer);
+  const temp=`${pending.key}.${uuid()}.tmp`;await plant(temp,buffer);
   check((await people[1].client.request('GET',room+'/photos/'+fresh.id)).status===200,'비기록 학생도 별도 사진 허용 시 전시 가능');
   const p2=await row(2);
   check((await teacher.request('POST',room+'/photo-move',{capture_id:fresh.id,participant_id:p1.id,source_version:p2.target_version,target_version:p1.target_version,confirm:true,attempt_id:uuid()})).data.code==='photo_declined','사진 미동의 대상으로 옮기기 차단');
@@ -63,18 +68,18 @@ async function verify({base='http://127.0.0.1:3999',fixture,faults}={}) {
   faults.remove='fail';const failed=await ok(people[1].client.request('POST',room+'/photo-choice',withdrawal));
   check(failed.purge.status==='retry'&&!failed.photo_allowed,'실파일 삭제 실패는 재시도 상태');
   check((await people[1].client.request('GET',room+'/photos/'+fresh.id)).status!==200,'삭제 실패 중에도 사진 조회 즉시 차단');
-  check(!!await fs.stat(path.join(config.storageRoot,old.key)),'실패 파일은 성공으로 표시하지 않음');
+  check(await present(old.key),'실패 파일은 성공으로 표시하지 않음');
   faults.remove='lie';const lie=await ok(people[1].client.request('POST',room+'/photo-choice',withdrawal));
   check(lie.purge.status==='retry','삭제 성공 응답만으로 완료하지 않고 실제 부재 재확인');
   faults.remove=null;const removed=await ok(people[1].client.request('POST',room+'/photo-choice',withdrawal));
   check(removed.purge.status==='verified'&&removed.purge.items.length===3,'현재본·재촬영 이전본·예약 임시본 파기 검증');
-  for(const file of [old.key,fresh.key,path.basename(temp)])check(!await fs.stat(path.join(config.storageRoot,file)).catch(()=>null),'파일 실제 부재 '+file.slice(-4));
+  for(const file of [old.key,fresh.key,temp])check(!await present(file),'파일 실제 부재 '+file.slice(-4));
   check(removed.purge.whole_system_complete===false,'백업·원본 미확인 상태에서 전체 파기 완료 금지');
   await db.q('UPDATE plaza_participants SET photo_allowed=true WHERE id=$1',[p2.id]);
   check(!(await mine(people[1])).privacy.photo_allowed,'선택 전 DB 복원에도 사진 철회 유지');
   check((await teacher.request('POST',room+'/photos',{capture_id:uuid(),participant_id:p2.id,target_version:(await row(2)).target_version})).status===409,'DB 복원 뒤 새 촬영 우회 차단');
-  await fs.writeFile(path.join(config.storageRoot,old.key),buffer);
-  const storage=require('../lib/plaza-storage').localTestStorage(config);
+  await plant(old.key,buffer);
+  const stores=require('../lib/plaza-storage'),storage=pgStore?stores.pgTestStorage(config,db):stores.localTestStorage(config);
   await assert.rejects(storage.read(old.key),e=>e.status===410);checks++;
   await ok(people[1].client.request('POST',room+'/photo-choice',withdrawal));
   check(await storage.absent(old.key),'이미 검증한 삭제도 복원된 파일을 재삭제');
@@ -114,7 +119,7 @@ async function verify({base='http://127.0.0.1:3999',fixture,faults}={}) {
   const snapshot={};for(const table of ['plaza_participants','plaza_photos','plaza_photo_objects','plaza_drafts','plaza_activities','plaza_record_receipts'])snapshot[table]=await db.q(`SELECT * FROM ${table}`);
   const purgeBody={attempt_id:uuid(),digest:plan.digest,confirm:true};faults.remove='fail';
   const interrupted=await ok(admin.request('POST',maint+'/purge',purgeBody));
-  check(interrupted.status==='retry'&&!!await fs.stat(path.join(config.storageRoot,retained.key)),'수업 전체 파기에도 파일 실패를 보존하고 재시도 표시');
+  check(interrupted.status==='retry'&&await present(retained.key),'수업 전체 파기에도 파일 실패를 보존하고 재시도 표시');
   check((await teacher.request('GET',room+'/teacher')).status===410,'수업 파기 실패 중 일반 조회 차단');
   faults.remove=null;const purged=await ok(admin.request('POST',maint+`/jobs/${interrupted.id}/retry`,{}));
   check(await storage.absent(retained.key),'관리자 재시도로 수업 사진 실파일 파기');
@@ -125,7 +130,7 @@ async function verify({base='http://127.0.0.1:3999',fixture,faults}={}) {
   check((await ok(admin.request('POST',maint+'/purge',purgeBody))).status==='verified','파기 응답 유실 후 같은 요청 재확인');
   for(const [table,rows] of Object.entries(snapshot))for(const row of rows){const keys=Object.keys(row).filter(k=>k!=='capture_order');await db.q(`INSERT INTO ${table}(${keys.join(',')}) VALUES(${keys.map((_,i)=>'$'+(i+1)).join(',')})`,keys.map(k=>k==='current_photo_id'?null:row[k]));}
   for(const row of snapshot.plaza_participants)if(row.current_photo_id)await db.q('UPDATE plaza_participants SET current_photo_id=$1 WHERE id=$2',[row.current_photo_id,row.id]);
-  await fs.writeFile(path.join(config.storageRoot,retained.key),buffer);
+  await plant(retained.key,buffer);
   await db.q("UPDATE plaza_rooms SET state='planning',closed_at=NULL,photos_purged_at=NULL,activities_purged_at=NULL,audit_purged_at=NULL WHERE id=$1",[fixture.roomId]);
   await db.q("UPDATE class_sessions SET expires_at=now()+interval '12 hours' WHERE id=$1",[fixture.classSessionId]);await db.q('UPDATE decks SET published=true WHERE id=$1',[fixture.deckId]);
   check((await teacher.request('GET',room+'/teacher')).status===410,'종료 전 DB 복원에도 삭제 목록이 수업 조회 차단');
@@ -139,20 +144,21 @@ async function verify({base='http://127.0.0.1:3999',fixture,faults}={}) {
   const otherPid=uuid(),otherPhoto=uuid(),otherObject=uuid(),otherKey=`${otherObject}.jpg`;
   await db.q("INSERT INTO plaza_participants(id,room_id,student_uuid,seat_order,store_public_id,record_choice) VALUES($1,$2,NULL,1,$3,'no-record')",[otherPid,secondId,uuid()]);
   await db.q('INSERT INTO plaza_photos(id,room_id,participant_id,target_version,created_by) VALUES($1,$2,$3,1,$4)',[otherPhoto,secondId,otherPid,fixture.teacher.id]);
-  await db.q('INSERT INTO plaza_photo_objects(id,photo_id,object_key) VALUES($1,$2,$3)',[otherObject,otherPhoto,otherKey]);await fs.writeFile(path.join(config.storageRoot,otherKey),buffer);
+  await db.q('INSERT INTO plaza_photo_objects(id,photo_id,object_key) VALUES($1,$2,$3)',[otherObject,otherPhoto,otherKey]);await plant(otherKey,buffer);
   await db.q('INSERT INTO plaza_drafts(participant_id,content) VALUES($1,$2)',[otherPid,{plan:'가짜 보관 시간 시험'}]);
-  const orphan=`${uuid()}.jpg`,orphanTemp=`${uuid()}.jpg.${uuid()}.tmp`,unrelated='unrelated-keep.txt';
-  for(const key of [orphan,orphanTemp,unrelated])await fs.writeFile(path.join(config.storageRoot,key),buffer);
+  const orphan=`${uuid()}.jpg`,orphanTemp=pgStore?`${uuid()}.jpg`:`${uuid()}.jpg.${uuid()}.tmp`,unrelated='unrelated-keep.txt';
+  for(const key of [orphan,orphanTemp,unrelated])await plant(key,buffer);
   let inventory=await ok(admin.request('GET','/api/plaza/retention/orphans'));
-  check(inventory.keys.length===2&&inventory.unrecognized_count>=1,'무작위 원본·임시 고아 파일만 목록에 포함');
-  const extra=`${uuid()}.jpg`;await fs.writeFile(path.join(config.storageRoot,extra),buffer);
+  check(inventory.keys.length===2&&(pgStore?inventory.unrecognized_count===0:inventory.unrecognized_count>=1),'무작위 원본·임시 고아 파일만 목록에 포함');
+  if(pgStore)await assert.rejects(db.q('INSERT INTO plaza_photo_blobs(object_key,data,digest,bytes) VALUES($1,$2,$3,$4)',[unrelated,buffer,digest(buffer),buffer.length]),/check constraint/),checks++;
+  const extra=`${uuid()}.jpg`;await plant(extra,buffer);
   check((await admin.request('POST','/api/plaza/retention/orphans',{attempt_id:uuid(),digest:inventory.digest,confirm:true})).status===409,'고아 파일 목록 변경 시 재확인');
   inventory=await ok(admin.request('GET','/api/plaza/retention/orphans'));
   const orphanBody={attempt_id:uuid(),digest:inventory.digest,confirm:true};faults.remove='fail';
   check((await ok(admin.request('POST','/api/plaza/retention/orphans',orphanBody))).status==='retry','고아 파일 실패 상태 유지');
   faults.remove=null;check((await ok(admin.request('POST','/api/plaza/retention/orphans',orphanBody))).status==='verified','고아 파일 같은 목록 재시도 삭제');
-  check(!!await fs.stat(path.join(config.storageRoot,unrelated)),'다른 이름의 파일 보존');
-  check(!!await fs.stat(path.join(config.storageRoot,otherKey)),'고아 파일 파기는 다른 수업의 등록된 파일 보존');
+  if(!pgStore)check(await present(unrelated),'다른 이름의 파일 보존');
+  check(await present(otherKey),'고아 파일 파기는 다른 수업의 등록된 파일 보존');
   for(const [hours,scope] of [[1.5,'photos'],[2.5,'activities'],[3.5,'audit']]) {
     await db.q("UPDATE plaza_rooms SET state='closed',closed_at=now()-($1 * interval '1 hour') WHERE id=$2",[hours,secondId]);
     const next=await ok(admin.request('GET',otherMaint+'/preview'));check(next.scopes.join(',')===scope,scope+' 기한만 독립 도래');
@@ -162,8 +168,10 @@ async function verify({base='http://127.0.0.1:3999',fixture,faults}={}) {
     if(scope==='audit')check(await count('plaza_participants')===0,'운영 기한 도래 후 연결 파기');
   }
   check((await ok(admin.request('GET','/api/plaza/retention'))).gate.real_collection_allowed===false,'모든 시험 통과 후에도 실제 수집 차단');
-  const rls=await db.q("SELECT relname,relrowsecurity FROM pg_class WHERE relname IN ('plaza_retention_policies','plaza_purge_jobs','plaza_purge_items')");
-  check(rls.length===3&&rls.every(r=>r.relrowsecurity),'새 관리 표 RLS 활성');
+  const managed=['plaza_retention_policies','plaza_purge_jobs','plaza_purge_items',...(pgStore?['plaza_store_marker','plaza_photo_blobs','plaza_purge_ledger']:[])];
+  const rls=await db.q("SELECT relname,relrowsecurity FROM pg_class WHERE relname = ANY($1)",[managed]);
+  check(rls.length===managed.length&&rls.every(r=>r.relrowsecurity),'새 관리 표 RLS 활성');
+  if(pgStore)check(!(await db.one("SELECT has_table_privilege('anon','plaza_photo_blobs','SELECT') OR has_table_privilege('authenticated','plaza_photo_blobs','SELECT') AS allowed")).allowed,'공개 DB 사진 원본 조회 권한 없음');
   check(!(await db.one("SELECT has_table_privilege('anon','plaza_purge_jobs','SELECT') AS allowed")).allowed,'공개 DB 파기 이력 조회 권한 없음');
   console.log(`4단계 HTTP·DB·실파일 검증 ${checks}개 통과`);return {checks};
 }

@@ -3,7 +3,7 @@ export async function mountPlazaRetention({api,shell,esc}) {
   let disposed=false,busy=false,selected='',pending=null,preview=null,orphans=null;
   const data=await api('GET','/api/plaza/retention');
   shell('광장 보관·파기',`<main class="plaza" id="plaza-retention"><h1>광장 보관·파기</h1>
-    <p class="plaza-pause-note">가짜 데이터의 로컬 시험 전용입니다. 실제 학생 수집과 운영 배포는 차단되어 있습니다.</p>
+    <p class="plaza-pause-note">가짜 데이터로만 하는 시험 전용입니다. 실제 학생 수집과 운영 배포는 차단되어 있습니다.</p>
     <details><summary>실제 학생 수집 전 남은 조건</summary><ul>${data.gate.pending.map(t=>`<li>${esc(t)}</li>`).join('')}</ul></details>
     <p>기한이 지난 대상을 확인하고 직접 파기를 실행합니다. 이 화면은 자동 실행 예약이 아닙니다. 진로기록 원본과 백업·내보내기는 별도 파기 절차가 필요합니다.</p>
     <label>관리할 시험 수업<select data-retention="room"><option value="">수업 선택</option>${data.rooms.map(r=>`<option value="${r.id}">${esc(r.title)} · ${esc(r.state)}</option>`).join('')}</select></label>

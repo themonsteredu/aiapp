@@ -2,7 +2,10 @@
 const http = require('node:http');
 const path = require('node:path');
 const fs = require('node:fs');
-const { handleApi } = require('./lib/api');
+// 광장 온라인 시험 모드는 lib/api(=lib/db)를 읽기 전에 판정한다. 설정이 어긋나면 DB에 연결하지 않는다.
+const plazaOnline = require('./lib/plaza-online');
+const plazaOnlineBlocked = plazaOnline.entryBlocked();
+const { handleApi } = plazaOnlineBlocked ? { handleApi: plazaOnline.blockedApi(plazaOnlineBlocked) } : require('./lib/api');
 
 const PORT = Number(process.env.PORT || 3000);
 const PUBLIC_DIR = path.join(__dirname, 'public');

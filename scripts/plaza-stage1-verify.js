@@ -92,7 +92,8 @@ async function verify({base='http://127.0.0.1:3999',fixture,finalize=true}={}) {
   check((await teacher.request('PUT',r+'/photos/'+captureId,{data_url:'data:image/jpeg;base64,AAAA'})).status===400,'가짜 JPG 업로드 거절');
   // RLS and privileges on all new tables.
   const policies=await db.q("SELECT relname,relrowsecurity FROM pg_class WHERE relname LIKE 'plaza_%' AND relkind='r'");
-  check(policies.length===9&&policies.every(p=>p.relrowsecurity),'신규 9개 표 RLS 적용');
+  // The DB-backed photo store (PLAZA_PHOTO_STORE=pg, online test) adds its marker, object and ledger tables.
+  check(policies.length===(config.photoStore==='pg'?12:9)&&policies.every(p=>p.relrowsecurity),'신규 표 전체 RLS 적용');
   const grants=await db.one("SELECT bool_and(NOT has_table_privilege('anon',oid,'SELECT') AND NOT has_table_privilege('authenticated',oid,'SELECT')) AS blocked FROM pg_class WHERE relname LIKE 'plaza_%' AND relkind='r'");
   check(grants.blocked,'공개 역할 직접 조회 권한 없음');
   if(finalize){

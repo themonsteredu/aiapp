@@ -75,7 +75,8 @@ async function verify({base='http://127.0.0.1:3999',fixture}={}){
   const endpoint=`/api/career-log/records/${saved.id}/card`,response=await people[0].client.request('GET',endpoint),qr=await ok(response);
   check(qr.record.process===saved.process&&qr.record.artifact===saved.artifact&&qr.record.reflection===saved.reflection,'QR 카드가 저장된 원본 내용을 정확히 읽음');
   check(response.headers.get('cache-control')==='private, no-store'&&response.headers.get('vary')==='Cookie'&&response.headers.get('referrer-policy')==='no-referrer','QR 카드 비공개·캐시 금지·외부 참조 차단');
-  const url=new URL(qr.url);check(url.origin===base&&url.hash===`#/plaza-record/${saved.id}`&&!url.search,'QR 주소에는 기록 ID만 있고 접속 비밀값 없음');
+  // Online the QR carries the checked Preview address (lib/plaza-online.js), not the test client's base.
+  const url=new URL(qr.url);check(url.origin===(config.online?config.publicOrigin:base)&&url.hash===`#/plaza-record/${saved.id}`&&!url.search,'QR 주소에는 기록 ID만 있고 접속 비밀값 없음');
   const svg=Buffer.from(qr.qr_data_url.split(',')[1],'base64').toString('utf8');
   check(svg.startsWith('<svg')&&svg.includes('<path')&&!svg.includes('script'),'기존 QR 라이브러리로 실제 SVG 코드 생성');
   check(!('student_id' in qr.record)&&!('student_name' in qr.record)&&!('raw_data' in qr.record)&&!JSON.stringify(qr).includes(saved.student_id),'QR API에 학생 UUID·이름·원본 내부 출처 미노출');

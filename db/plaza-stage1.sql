@@ -1,9 +1,15 @@
 -- REVIEWABLE STAGE-1 PROPOSAL. Not part of lib/db.js or automatic migrations.
 -- The dedicated local-test setup script sets these values before applying this file.
 -- Do not run on a shared/production database.
+-- Online test (docs/plaza-online-test.md): Supabase names the database 'postgres', so the
+-- disposable project is named by plaza.online_ref instead, and the central MoaKit/MoaLab schemas
+-- of the production project must be absent.
 DO $$ BEGIN
-  IF current_database() !~ '^plaza_test_[a-z0-9_]+$'
-     OR current_setting('plaza.test_id', true) IS NULL THEN
+  IF current_setting('plaza.test_id', true) IS NULL OR NOT (
+    current_database() ~ '^plaza_test_[a-z0-9_]+$'
+    OR (current_database() = 'postgres' AND current_setting('plaza.online_ref', true) = 'yxnenjtmuvdlfxnwxecp'
+        AND to_regnamespace('moakit_accounts') IS NULL AND to_regnamespace('moalab') IS NULL)
+  ) THEN
     RAISE EXCEPTION 'A separate plaza_test_ database and test marker are required';
   END IF;
 END $$;
@@ -12,9 +18,13 @@ CREATE TABLE plaza_environment (
   singleton boolean PRIMARY KEY DEFAULT true CHECK (singleton),
   test_id uuid NOT NULL,
   database_name text NOT NULL,
-  purpose text NOT NULL CHECK (purpose = 'stage1-local-test')
+  purpose text NOT NULL CHECK (purpose IN ('stage1-local-test','online-test')),
+  project_ref text,
+  CHECK ((purpose = 'online-test') = (project_ref IS NOT NULL))
 );
-INSERT INTO plaza_environment VALUES (true, current_setting('plaza.test_id')::uuid, current_database(), 'stage1-local-test');
+INSERT INTO plaza_environment VALUES (true, current_setting('plaza.test_id')::uuid, current_database(),
+  CASE WHEN current_database() = 'postgres' THEN 'online-test' ELSE 'stage1-local-test' END,
+  CASE WHEN current_database() = 'postgres' THEN current_setting('plaza.online_ref') END);
 CREATE TABLE plaza_program_versions (
   id uuid PRIMARY KEY,
   program_key text NOT NULL,

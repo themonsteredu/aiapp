@@ -1,6 +1,9 @@
 'use strict';
 // Vercel 서버리스 함수 진입점 — 모든 /api/* 요청이 여기로 라우팅된다 (vercel.json rewrites 참고)
-const { handleApi } = require('../lib/api');
+// 광장 온라인 시험 모드는 lib/api(=lib/db)를 읽기 전에 판정한다. 설정이 어긋나면 DB에 연결하지 않는다.
+const plazaOnline = require('../lib/plaza-online');
+const plazaOnlineBlocked = plazaOnline.entryBlocked();
+const { handleApi } = plazaOnlineBlocked ? { handleApi: plazaOnline.blockedApi(plazaOnlineBlocked) } : require('../lib/api');
 
 module.exports = async (req, res) => {
   try {

@@ -1,8 +1,11 @@
 -- Manual stage-3 schema for a disposable, marked local database only.
 DO $$ BEGIN
-  IF current_database() !~ '^plaza_test_[a-z0-9_]+$' OR NOT EXISTS (
+  IF NOT EXISTS (
     SELECT 1 FROM plaza_environment WHERE test_id = current_setting('plaza.test_id', true)::uuid
       AND database_name = current_database()
+      AND ((purpose = 'stage1-local-test' AND current_database() ~ '^plaza_test_[a-z0-9_]+$')
+        OR (purpose = 'online-test' AND project_ref = current_setting('plaza.online_ref', true)
+          AND to_regnamespace('moakit_accounts') IS NULL AND to_regnamespace('moalab') IS NULL))
   ) THEN RAISE EXCEPTION 'Separate marked local test database required'; END IF;
 END $$;
 ALTER TABLE plaza_participants ADD COLUMN attendance text NOT NULL DEFAULT 'present' CHECK (attendance IN ('present','absent'));

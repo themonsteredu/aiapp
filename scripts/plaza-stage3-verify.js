@@ -6,13 +6,13 @@ const uuid=()=>crypto.randomUUID();
 // Faults are installed by this test process before loading server.js. No HTTP switch or runtime flag enables them.
 function installFaults(){
   const faults={ai:'fail',photo:null,aiCalls:[],photoStarted:null,photoResume:null,aiStarted:null,aiResume:null};
-  const mod=require('../lib/plaza-storage'),original=mod.localTestStorage;
-  mod.localTestStorage=config=>{const store=original(config);return {...store,async put(key,image){
+  const mod=require('../lib/plaza-storage');
+  for(const name of ['localTestStorage','pgTestStorage']){const original=mod[name];mod[name]=(...args)=>{const store=original(...args);return {...store,async put(key,image){
     if(faults.photo==='fail')throw new Error('simulated storage interruption');
     await store.put(key,image);
     if(faults.photo==='after-write')throw new Error('simulated acknowledgement loss');
     if(faults.photo==='pause'){faults.photoStarted?.();await new Promise(resolve=>{faults.photoResume=resolve;});}
-  }};};
+  }};};}
   const api=require('../lib/plaza-api'),register=api.registerPlazaRoutes;
   api.registerPlazaRoutes=deps=>register({...deps,aiProvider:async(input,{signal})=>{
     faults.aiCalls.push(structuredClone(input));const mode=faults.ai;

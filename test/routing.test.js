@@ -25,7 +25,8 @@ function runtime() {
         calls.push({ url: req.url, pathname, body });
         res.writeHead(401).end(JSON.stringify({ error: 'login required' }));
       } };
-      return require(name);
+      // server.js 의 다른 상대 경로 모듈은 실제 파일을 읽는다 (광장 온라인 판정 등).
+      return require(name.startsWith('./') ? path.join(root, name) : name);
     },
   });
   return { calls, async request(url, method = 'GET', body) {
