@@ -43,10 +43,15 @@ async function verify({base='http://127.0.0.1:3999',fixture}={}){
   check((await teacher.request('POST','/api/plaza/rooms',{...setup,seat_count:101})).status===400,'자리 수 범위 검사');
   const item=(await ok(teacher.request('GET',`/api/class-sessions/${cs.id}/items`))).items[0];
   const access=body=>ok(teacher.request('PATCH',`/api/class-sessions/${cs.id}/items/${item.id}`,body));
-  await access({unlocked:false});check((await teacher.request('POST','/api/plaza/rooms',setup)).status===403,'잠긴 자료의 광장 준비 차단');
-  await access({unlocked:true,student_visible:false});check((await teacher.request('POST','/api/plaza/rooms',setup)).status===403,'학생 비공개 자료의 광장 준비 차단');await access({student_visible:true});
+  await access({unlocked:false});const locked=await teacher.request('POST','/api/plaza/rooms',setup);check(locked.status===403&&locked.data.code==='deck_blocked','잠긴 자료 차단과 잠금 해제 안내 구분');
+  await access({unlocked:true,student_visible:false});const hidden=await teacher.request('POST','/api/plaza/rooms',setup);check(hidden.status===403&&hidden.data.code==='deck_blocked','학생 비공개 자료 차단과 공개 안내 구분');await access({student_visible:true});
   const unassigned=await ok(teacher.request('POST','/api/class-sessions',{title:'미배정 가짜 수업',duration_minutes:120}));
-  check((await teacher.request('POST','/api/plaza/rooms',{...setup,class_session_id:unassigned.id})).status===403,'일반 공개 자료라도 수업 배정 없으면 준비 차단');
+  const missingDeck=await teacher.request('POST','/api/plaza/rooms',{...setup,class_session_id:unassigned.id});
+  check(missingDeck.status===403&&missingDeck.data.code==='deck_unassigned','일반 공개 자료라도 수업 배정 없으면 차단하고 배정 안내');
+  await ok(teacher.request('PATCH',`/api/class-sessions/${unassigned.id}`,{}));
+  const ended=await teacher.request('POST','/api/plaza/rooms',{...setup,class_session_id:unassigned.id});
+  check(ended.status===403&&ended.data.code==='class_expired','종료한 수업의 차단과 새 코드 발급 안내 구분');
+  check(!(await ok(teacher.request('GET','/api/plaza/programs'))).sessions.some(s=>s.id===unassigned.id),'종료한 수업은 담당 수업 목록에 표시하지 않음');
   const prepared=await ok(teacher.request('POST','/api/plaza/rooms',setup));
   check(prepared.policy_required&&!prepared.duplicate,'새 광장은 보관 정책 없이 입장 불가 상태');
   check((await ok(teacher.request('POST','/api/plaza/rooms',setup))).id===prepared.id,'광장 준비 재시도는 같은 광장');
