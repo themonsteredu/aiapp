@@ -1328,7 +1328,8 @@ const sessionLengthButtons = () => SESSION_LENGTHS
 function openRescheduleModal(s) {
   const back = openModal(`
     <h3>입장 시간 바꾸기</h3>
-    <div class="m-sub">${esc(s.title)} · 코드 ${esc(s.code)} — 이미 들어온 학생은 새 마감 시각까지 이어서 이용합니다.</div>
+    <div class="m-sub">${esc(s.title)} · 코드 ${esc(s.code)} — 이미 들어온 학생은 새 마감 시각까지 이어서 이용합니다.${s.status === 'expired'
+      ? '<br><b>시간이 끝난 뒤 연장하면</b> 학생은 페이지를 새로고침하거나, 같은 코드와 같은 이름으로 다시 입장하면 이어서 씁니다.' : ''}</div>
     <form id="rs-form">
       <div class="form-grid">
         <div><label>입장 시작</label><input type="datetime-local" name="starts_at" required value="${esc(textToInput(s.starts_text))}"></div>
@@ -1485,7 +1486,7 @@ route(/^#\/sessions$/, async () => {
                 <td><div class="row-actions">
                   ${s.status !== 'ended' ? `<button class="btn btn-ghost btn-sm" data-items="${s.id}">${icon('folder')} 자료 관리</button>` : ''}
                   ${s.status !== 'ended' && !s.project_id ? `<button class="btn btn-ghost btn-sm" data-resched="${s.id}">${icon('clock')} 시간 변경</button>` : ''}
-                  ${s.status === 'live' ? `
+                  ${s.status === 'live' || s.status === 'scheduled' ? `
                     <button class="btn btn-primary btn-sm" data-golive="${s.id}">${icon('radio')} 라이브</button>
                     <button class="btn btn-ghost btn-sm" data-end="${s.id}">종료</button>` : ''}
                   <button class="btn btn-danger btn-sm" data-csdel="${s.id}">${icon('trash')}</button>
