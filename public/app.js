@@ -749,6 +749,7 @@ route(/^#\/login$/, () => {
               <input class="input" name="anonymous_no" maxlength="12" placeholder="예: A01" required>
               <div class="small muted" style="margin-top:10px;line-height:1.6">실명 대신 선생님이 안내한 팀코드와 익명번호를 입력하세요.<br>같은 정보로 다시 들어오면 이전 작업이 복구됩니다.</div>
             ` : `
+              ${joinInfo?.opensAt ? `<div class="join-project-note"><b>${esc(joinInfo.title)}</b><span>${esc(joinInfo.opensAt)}부터 입장할 수 있어요.</span></div>` : ''}
               <label>이름</label>
               <input class="input" name="name" placeholder="예: 김학생" maxlength="30" required>
               <div class="small muted" style="margin-top:10px;line-height:1.6">선생님이 화면에 보여주는 6자리 코드를 입력하세요.<br>계정·비밀번호 없이 이번 수업 동안만 이용됩니다.</div>
@@ -1255,7 +1256,82 @@ route(/^#\/security$/, async () => {
 });
 
 /* ---------------- 수업 입장 코드 ---------------- */
-const SESSION_STATUS = { live: ['진행 중', 'green'], expired: ['시간 만료', 'gray'], ended: ['종료됨', 'gray'] };
+const SESSION_STATUS = { scheduled: ['예정', 'blue'], live: ['진행 중', 'green'], expired: ['시간 만료', 'gray'], ended: ['종료됨', 'gray'] };
+
+// 입장 시간 입력(datetime-local)은 한국시간 벽시계 'YYYY-MM-DDTHH:MM'. 서버도 같은 시간대로 읽는다.
+const SESSION_TZ = 'Asia/Seoul';
+function kstInputValue(date = new Date()) {
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-CA', {
+    timeZone: SESSION_TZ, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
+  }).formatToParts(date).map((x) => [x.type, x.value]));
+  return `${p.year}-${p.month}-${p.day}T${String(Number(p.hour) % 24).padStart(2, '0')}:${p.minute}`;
+}
+// 벽시계 값에 분을 더한다 (한국시간은 서머타임이 없어 그대로 더하면 된다)
+function addMinutesToInput(value, minutes) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(value || '');
+  if (!m) return '';
+  const d = new Date(Date.UTC(+m[1], m[2] - 1, +m[3], +m[4], +m[5]) + minutes * 60000);
+  const two = (n) => String(n).padStart(2, '0');
+  return `${d.getUTCFullYear()}-${two(d.getUTCMonth() + 1)}-${two(d.getUTCDate())}T${two(d.getUTCHours())}:${two(d.getUTCMinutes())}`;
+}
+function inputMinutesBetween(a, b) {
+  const t = (v) => { const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(v || ''); return m ? Date.UTC(+m[1], m[2] - 1, +m[3], +m[4], +m[5]) : NaN; };
+  return Math.round((t(b) - t(a)) / 60000);
+}
+// 서버 표시 문자열 'YYYY-MM-DD HH:MM:SS' → 입력값 'YYYY-MM-DDTHH:MM'
+const textToInput = (text) => String(text || '').slice(0, 16).replace(' ', 'T');
+// 시작 칸을 바꾸면 수업 길이를 유지한 채 마감을 함께 옮기고, 빠른 길이 버튼으로 마감을 정한다
+function bindSessionWindow(root) {
+  const start = root.querySelector('[name="starts_at"]');
+  const end = root.querySelector('[name="ends_at"]');
+  let length = inputMinutesBetween(start.value, end.value) || 120;
+  start.addEventListener('change', () => { if (start.value) end.value = addMinutesToInput(start.value, length); });
+  end.addEventListener('change', () => { const m = inputMinutesBetween(start.value, end.value); if (m > 0) length = m; });
+  root.querySelectorAll('[data-len]').forEach((b) => {
+    b.onclick = () => {
+      length = Number(b.dataset.len);
+      if (!start.value) start.value = kstInputValue();
+      end.value = addMinutesToInput(start.value, length);
+    };
+  });
+}
+const SESSION_LENGTHS = [[60, '1시간'], [90, '1시간 30분'], [120, '2시간'], [180, '3시간'], [240, '4시간']];
+const sessionLengthButtons = () => SESSION_LENGTHS
+  .map(([m, label]) => `<button type="button" class="btn btn-ghost btn-sm" data-len="${m}">${label}</button>`).join('');
+
+// 입장 시간 바꾸기 (미리 발급한 코드의 날짜 변경, 수업 연장)
+function openRescheduleModal(s) {
+  const back = openModal(`
+    <h3>입장 시간 바꾸기</h3>
+    <div class="m-sub">${esc(s.title)} · 코드 ${esc(s.code)} — 이미 들어온 학생은 새 마감 시각까지 이어서 이용합니다.</div>
+    <form id="rs-form">
+      <div class="form-grid">
+        <div><label>입장 시작</label><input type="datetime-local" name="starts_at" required value="${esc(textToInput(s.starts_text))}"></div>
+        <div><label>입장 마감</label><input type="datetime-local" name="ends_at" required value="${esc(textToInput(s.expires_text))}"></div>
+      </div>
+      <div class="session-len"><span class="small muted">수업 길이</span>${sessionLengthButtons()}</div>
+      <div class="msg" id="rs-msg"></div>
+      <div class="m-actions">
+        <button type="button" class="btn btn-ghost" id="rs-cancel">취소</button>
+        <button type="submit" class="btn btn-primary">저장</button>
+      </div>
+    </form>`);
+  bindSessionWindow(back);
+  back.querySelector('#rs-cancel').onclick = () => back.remove();
+  back.querySelector('#rs-form').onsubmit = async (e) => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    try {
+      const r = await api('PATCH', `/api/class-sessions/${s.id}/schedule`, { starts_at: f.get('starts_at'), ends_at: f.get('ends_at') });
+      back.remove();
+      toast(`입장 시간을 ${r.window_label}(으)로 바꿨습니다.`);
+      navigate();
+    } catch (err) {
+      const msg = back.querySelector('#rs-msg');
+      msg.textContent = err.message; msg.className = 'msg err';
+    }
+  };
+}
 
 // 수업 자료 관리 모달: 자료 추가/삭제 + 학생 공개 토글 + 잠금/해제
 async function openItemsModal(sessionId, session, allDecks) {
@@ -1332,7 +1408,7 @@ route(/^#\/sessions$/, async () => {
   shell('수업 입장 코드', `
     <div class="page-head">
       <div><div class="ph-t">수업 입장 코드</div>
-        <div class="desc">1회성 수업용 코드입니다. 학생은 계정 없이 <b>코드 + 이름</b>만으로 입장하며, 수업이 끝나면 자동으로 접근이 끊기고 임시 계정은 정리됩니다.</div></div>
+        <div class="desc">1회성 수업용 코드입니다. 학생은 계정 없이 <b>코드 + 이름</b>만으로 입장하며, 정한 <b>입장 시간</b> 안에만 들어올 수 있습니다. 미리 발급해 두면 시작 시각부터 열리고, 마감이 지나면 자동으로 접근이 끊기며 임시 계정은 정리됩니다.</div></div>
     </div>
     <div class="card" style="margin-bottom:18px">
       <h2>새 수업 만들기</h2>
@@ -1344,13 +1420,12 @@ route(/^#\/sessions$/, async () => {
               <option value="">나 (${esc(state.me.name)})</option>
               ${instructors.map((u) => `<option value="${u.id}">${esc(u.name)} (${esc(u.username)}·${esc(u.roleLabel)})</option>`).join('')}
             </select></div>` : ''}
-          <div><label>유효 시간</label>
-            <select name="duration_minutes">
-              <option value="60">1시간</option><option value="120" selected>2시간</option>
-              <option value="240">4시간</option><option value="480">8시간</option>
-            </select></div>
+          <div><label>입장 시작</label><input type="datetime-local" name="starts_at" required value="${esc(kstInputValue())}"></div>
+          <div><label>입장 마감</label><input type="datetime-local" name="ends_at" required value="${esc(addMinutesToInput(kstInputValue(), 120))}"></div>
           <div><button class="btn btn-primary" type="submit" style="width:100%;justify-content:center">${icon('plus')} 코드 발급</button></div>
         </div>
+        <div class="session-len"><span class="small muted">수업 길이</span>${sessionLengthButtons()}
+          <span class="small muted">— 날짜·시각은 한국시간입니다. 내일 수업 코드도 오늘 미리 발급할 수 있습니다.</span></div>
         <div class="mt">
           <label class="field-label">수업에 담을 자료 (선택) — 여러 개를 담고, 학생 공개·잠금은 아래 목록의 "자료 관리"에서 조절합니다</label>
           <div class="pick-grid">
@@ -1368,7 +1443,7 @@ route(/^#\/sessions$/, async () => {
     <div class="card">
       <div class="tbl-scroll">
         <table class="tbl resp">
-          <thead><tr><th>입장 코드</th><th>수업명</th><th>담당 강사</th><th>자료</th><th>참여</th><th>상태</th><th>남은 시간</th><th style="width:300px">관리</th></tr></thead>
+          <thead><tr><th>입장 코드</th><th>수업명</th><th>담당 강사</th><th>자료</th><th>참여</th><th>상태</th><th>입장 시간</th><th style="width:300px">관리</th></tr></thead>
           <tbody>
             ${data.sessions.map((s) => {
               const [label, color] = SESSION_STATUS[s.status];
@@ -1380,9 +1455,11 @@ route(/^#\/sessions$/, async () => {
                 <td data-label="자료">${esc(matText)}</td>
                 <td data-label="참여"><b>${s.joined}</b>명</td>
                 <td data-label="상태"><span class="badge ${color}">${label}</span></td>
-                <td data-label="남은 시간">${s.status === 'live' ? `${Math.floor(s.remainingMinutes / 60)}시간 ${s.remainingMinutes % 60}분` : '-'}</td>
+                <td data-label="입장 시간"><div class="cell-main">${esc(s.window_label)}</div>
+                  <div class="cell-sub">${s.status === 'live' ? `${s.remainingMinutes >= 60 ? `${Math.floor(s.remainingMinutes / 60)}시간 ` : ''}${s.remainingMinutes % 60}분 남음` : s.status === 'scheduled' ? '시작 전 — 시작 시각부터 입장' : ''}</div></td>
                 <td><div class="row-actions">
                   ${s.status !== 'ended' ? `<button class="btn btn-ghost btn-sm" data-items="${s.id}">${icon('folder')} 자료 관리</button>` : ''}
+                  ${s.status !== 'ended' && !s.project_id ? `<button class="btn btn-ghost btn-sm" data-resched="${s.id}">${icon('clock')} 시간 변경</button>` : ''}
                   ${s.status === 'live' ? `
                     <button class="btn btn-primary btn-sm" data-golive="${s.id}">${icon('radio')} 라이브</button>
                     <button class="btn btn-ghost btn-sm" data-end="${s.id}">종료</button>` : ''}
@@ -1402,10 +1479,10 @@ route(/^#\/sessions$/, async () => {
     const deckIds = f.getAll('deck_ids').map(Number);
     try {
       const r = await api('POST', '/api/class-sessions', {
-        title: f.get('title'), deck_ids: deckIds, duration_minutes: f.get('duration_minutes'),
+        title: f.get('title'), deck_ids: deckIds, starts_at: f.get('starts_at'), ends_at: f.get('ends_at'),
         instructor_id: f.get('instructor_id') || null,
       });
-      showBigCode(r.code, f.get('title'));
+      showBigCode(r.code, f.get('title'), r.window_label, r.status);
       navigate();
     } catch (err) { msg.textContent = err.message; msg.className = 'msg err'; }
   };
@@ -1414,16 +1491,21 @@ route(/^#\/sessions$/, async () => {
     b.onclick = () => openItemsModal(Number(b.dataset.items),
       data.sessions.find((s) => s.id === Number(b.dataset.items)), decksData.decks);
   });
-  const showBigCode = (code, title) => {
+  const showBigCode = (code, title, windowLabel, status) => {
     openModal(`
       <h3 style="text-align:center">${esc(title || '수업 입장 코드')}</h3>
       <div class="m-sub" style="text-align:center">학생들에게 이 코드를 보여주세요 — 로그인 화면의 "수업 참여"에서 입력합니다</div>
       <div style="text-align:center;font-size:64px;font-weight:800;letter-spacing:14px;color:var(--brand-800);padding:24px 0">${esc(code)}</div>
+      ${windowLabel ? `<div class="m-sub" style="text-align:center">입장 시간 <b>${esc(windowLabel)}</b>${status === 'scheduled' ? '<br>시작 시각 전에는 코드를 넣어도 들어올 수 없습니다.' : ''}</div>` : ''}
       <div class="m-actions"><button class="btn btn-primary" onclick="this.closest('.modal-back').remove()">닫기</button></div>`);
   };
   document.querySelectorAll('[data-big]').forEach((b) => {
     const row = data.sessions.find((s) => s.code === b.dataset.big);
-    b.onclick = () => showBigCode(b.dataset.big, row ? row.title : '');
+    b.onclick = () => showBigCode(b.dataset.big, row ? row.title : '', row?.window_label, row?.status);
+  });
+  bindSessionWindow(document.getElementById('cs-form'));
+  document.querySelectorAll('[data-resched]').forEach((b) => {
+    b.onclick = () => { const s = data.sessions.find((x) => x.id === Number(b.dataset.resched)); if (s) openRescheduleModal(s); };
   });
   const launchLive = async (sessionId, deckId) => {
     const dd = await api('GET', `/api/decks/${deckId}`);
