@@ -85,6 +85,8 @@ svg.ic { width: 18px; height: 18px; stroke: currentColor; stroke-width: 1.8; fil
 /* 라벨 옆의 "선택 입력" 같은 보조 표시 — 라벨 글자와 구분되게 흐리고 가볍게 */
 .form-grid label .sub, .field-label .sub { font-weight: 500; color: var(--text-3); }
 .msg { margin-top: 10px; font-size: 13px; min-height: 18px; }
+/* 새로고침 때 서버가 잠깐 늦으면 로그인 화면 대신 보여 주는 안내 */
+.boot-wait { max-width: 360px; margin: 18vh auto 0; padding: 0 16px; text-align: center; color: var(--text-2); font-size: 14px; line-height: 1.7; word-break: keep-all; display: grid; gap: 14px; justify-items: center; }
 /* 수업 입장 코드: 입장 시간 아래 빠른 길이 버튼 */
 .session-len { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; word-break: keep-all; }
 .msg.err { color: var(--red-600); }

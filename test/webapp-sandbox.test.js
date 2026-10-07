@@ -155,7 +155,9 @@ test('보조 스크립트는 window 가 이상해도 예외를 밖으로 내지 
 test('/api/webapp 은 CSP 헤더와 보조 스크립트로 내보내고, /api/assets 는 HTML 을 내주지 않는다', () => {
   const webapp = apiSource.slice(apiSource.indexOf("route('GET', /^\\/api\\/webapp\\/(\\d+)$/"), apiSource.indexOf('// ---- 슬라이드 배경 라이브러리'));
   assert.match(webapp, /res\.writeHead\(200, webappHeaders\(\)\)/);
-  assert.match(webapp, /injectSandboxShim\(Buffer\.from\(a\.data, 'base64'\)\.toString\('utf-8'\), deck\.id\)/);
+  // HTML 은 asset 번호로 기억해 두고(webappDocument) 처음 읽을 때 보조 스크립트를 넣는다
+  assert.match(webapp, /const html = await webappDocument\(a\.id, deck\.id\);[\s\S]*res\.end\(html\)/);
+  assert.match(webapp, /injectSandboxShim\(Buffer\.from\(row\.data, 'base64'\)\.toString\('utf-8'\), deckId\)/);
   const assets = apiSource.slice(apiSource.indexOf("route('GET', /^\\/api\\/assets\\/(\\d+)$/"));
   assert.match(assets.slice(0, 400), /text\\\/html.*notFound\(res\)/s);
   assert.equal(assets.slice(0, assets.indexOf('\n});')).match(/'X-Content-Type-Options': 'nosniff'/g).length, 3, '200·206·416 응답 모두');

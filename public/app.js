@@ -375,6 +375,9 @@ const Live = {
   },
   async tick() {
     if (!state.me || !state.me.isGuest) { this.stop(); return; }
+    // 서버가 느려도 학생 한 명이 폴링을 겹겹이 쌓지 않게 한 번에 하나만
+    if (this.busy) return;
+    this.busy = true;
     try {
       const d = await api('GET', `/api/class-sessions/${state.classSession.id}/live`);
       this.last = d.live;
@@ -386,9 +389,9 @@ const Live = {
         return;
       }
       if (d.live && onLive && window.__liveUpdate) window.__liveUpdate(d.live);
-      // 라이브가 아닐 때는 자료 잠금/해제 변화를 감지해 목록 갱신
-      if (!d.live && window.__deckRefresh) window.__deckRefresh();
-    } catch {}
+      // 라이브가 아닐 때는 자료 잠금/해제 변화를 감지해 목록 갱신 (자료 판이 바뀌었을 때만 다시 받음)
+      if (!d.live && window.__deckRefresh) await window.__deckRefresh(d.itemsVersion);
+    } catch {} finally { this.busy = false; }
   },
 };
 
@@ -717,6 +720,8 @@ async function fetchDash(force = false) {
 
 /* ---------------- 로그인 ---------------- */
 route(/^#\/login$/, () => {
+  // 이미 들어와 있는데 뒤로 가기로 여기 왔으면 코드 화면 대신 원래 화면으로 (다시 입장하면 새 임시 계정이 된다)
+  if (state.me) { location.replace(state.me.mustChangePassword ? '#/password' : homeHash(state.me)); return; }
   let tab = new URLSearchParams(location.search).get('mode') === 'account' ? 'account' : 'join';
   let otpMode = null; // null | 'otp' | 'setup'
   let secret = '';
@@ -807,18 +812,22 @@ route(/^#\/login$/, () => {
     state.dash = null;
     Live.stop();
     Live.start(); // 게스트일 때만 내부에서 동작
-    location.hash = data.user.mustChangePassword ? '#/password'
+    // 입장 화면 기록을 바꿔 끼운다 — 아이패드 밀기·뒤로 가기로 코드 화면에 돌아가 '튕긴' 줄 알고 다시 입장하지 않게
+    location.replace(data.user.mustChangePassword ? '#/password'
       : state.mustAgree ? '#/agreement'
       : afterLoginHash ? afterLoginHash
-      : data.user.projectTeamId ? '#/project'
-      : data.user.role === 'partner' ? PARTNER_HOME
-      : (level(data.user.role) >= 1 ? '#/' : '#/decks');
+      : homeHash(data.user));
     afterLoginHash = '';
   };
   async function onSubmit(e) {
     e.preventDefault();
     const f = new FormData(e.target);
     if (tab === 'join') {
+      // 느릴 때 버튼을 또 누르면 임시 계정이 둘 생기고 웹앱 저장 위치가 엇갈린다 — 응답이 올 때까지 한 번만
+      const btn = e.target.querySelector('button[type="submit"]');
+      if (btn.disabled) return;
+      btn.disabled = true;
+      btn.textContent = '입장하는 중…';
       try {
         enter(await api('POST', '/api/join', {
           code: f.get('code'),
@@ -859,15 +868,31 @@ function renderBlocked() {
   setTimeout(refreshMe, 30000);
 }
 
+// 화면을 다시 그릴지 가르는 값: 접근 판정에 쓰이는 것만. 화면을 다시 그리면 강사의 라이브 발표가 끝나고(학생 전원이
+// 목록으로 돌아감) 웹앱·슬라이드·쓰던 글이 처음으로 돌아가므로, 예전처럼 5분마다 무조건 그리지 않는다.
+// 수업 마감 시각은 넣지 않는다 — 수업이 끝나면 서버가 401 로 알려 주고, 연장했다고 학생 화면을 새로 그릴 까닭이 없다.
+function accessKey() {
+  const me = state.me || {};
+  return JSON.stringify([me.id, me.role, !!me.mustChangePassword, !!state.mustAgree,
+    state.access?.allowed, state.access?.allowedDeckIds ?? null, state.classSession?.id ?? null]);
+}
+
+function homeHash(user) {
+  return user.projectTeamId ? '#/project'
+    : user.role === 'partner' ? PARTNER_HOME
+    : (level(user.role) >= 1 ? '#/' : '#/decks');
+}
+
 async function refreshMe() {
   try {
+    const before = accessKey();
     const data = await api('GET', '/api/me');
     state.me = data.user;
     state.access = data.access;
     state.settings = data.settings;
     state.classSession = data.classSession || null;
     state.mustAgree = !!data.mustAgree;
-    navigate();
+    if (accessKey() !== before) navigate();
   } catch {}
 }
 
@@ -1701,11 +1726,16 @@ route(/^#\/decks$/, async () => {
     // 게스트: 강사가 자료를 열거나 잠그면 화면이 몇 초 내로 갱신되도록 폴링 훅 등록
     if (state.me.isGuest) {
       window.__deckState = JSON.stringify(data.decks.map((d) => [d.id, d.accessibleNow]));
-      window.__deckRefresh = async () => {
+      // 3초 폴링(Live.tick)이 받은 자료 판(itemsVersion)이 그대로면 목록을 다시 받지 않는다 — 학생 수십 명의 요청이 절반으로 준다.
+      // 판을 주지 않는 서버(예전 배포)면 예전처럼 매번 받는다.
+      let deckVersion = data.itemsVersion;
+      window.__deckRefresh = async (version) => {
+        if (deckVersion && version && version === deckVersion) return;
         try {
           const fresh = await api('GET', '/api/decks');
           const sig = JSON.stringify(fresh.decks.map((d) => [d.id, d.accessibleNow]));
           if (sig !== window.__deckState && location.hash === '#/decks') navigate();
+          else deckVersion = fresh.itemsVersion; // 학생에게 보이는 것은 그대로 — 새 판을 기억하고 다음부터 건너뛴다
         } catch {}
       };
     }
@@ -3635,9 +3665,37 @@ route(/^#\/settlement$/, async () => {
 });
 
 /* ---------------- 부팅 ---------------- */
+// 새로고침 때 /api/me 가 서버 오류(5xx)나 연결 끊김으로 실패하면 로그아웃이 아니다 — 쿠키는 그대로 살아 있다.
+// 예전엔 어떤 실패든 로그인 화면으로 보내 학생이 코드를 다시 넣고 새 임시 계정으로 들어왔다. 401 만 로그아웃으로 본다.
+async function loadMe() {
+  let wait = 1000;
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await api('GET', '/api/me');
+    } catch (err) {
+      const transient = err instanceof TypeError || Number(err.status) >= 500;
+      if (!transient) throw err;
+      if (attempt >= 5) {
+        $app.innerHTML = `<div class="boot-wait">서버에 연결하지 못했습니다.<br>잠시 뒤 다시 시도해 주세요.
+          <button class="btn btn-primary" type="button" onclick="location.reload()">다시 시도</button></div>`;
+        return new Promise(() => {}); // 사용자가 다시 시도를 누를 때까지
+      }
+      $app.innerHTML = '<div class="boot-wait">연결하는 중… 잠시만 기다려 주세요.</div>';
+      await new Promise((r) => setTimeout(r, wait));
+      wait = Math.min(wait * 2, 8000);
+    }
+  }
+}
+
 (async function boot() {
+  // 화면 모듈은 /api/me 와 함께 받아 빈 화면 시간을 줄인다 (등록은 아래에서 차례로)
+  const modules = Promise.all([
+    import('/career-log-ui.js').catch((err) => { console.error('진로기록 화면을 불러오지 못했습니다.', err); return null; }),
+    import('/school-accounts-ui.js').catch((err) => { console.error('학교 학생 계정 화면을 불러오지 못했습니다.', err); return null; }),
+    import('/project-ui.js').catch((err) => { console.error('AI 프로젝트 화면을 불러오지 못했습니다.', err); return null; }),
+  ]);
   try {
-    const data = await api('GET', '/api/me');
+    const data = await loadMe();
     state.me = data.user;
     state.access = data.access;
     state.settings = data.settings;
@@ -3645,17 +3703,15 @@ route(/^#\/settlement$/, async () => {
     state.mustAgree = !!data.mustAgree;
     Live.start(); // 게스트일 때만 내부에서 동작
   } catch { state.me = null; }
+  const [careerLog, schoolAccounts, projectUi] = await modules;
   try {
-    const { registerCareerLogUI } = await import('/career-log-ui.js');
-    registerCareerLogUI({ route, api, shell, state, esc, toast, navigate, isStaff });
+    careerLog?.registerCareerLogUI({ route, api, shell, state, esc, toast, navigate, isStaff });
   } catch (err) { console.error('진로기록 화면을 불러오지 못했습니다.', err); }
   try {
-    const { registerSchoolAccountsUI } = await import('/school-accounts-ui.js');
-    registerSchoolAccountsUI({ route, api, shell, state, esc, toast, navigate, level, icon });
+    schoolAccounts?.registerSchoolAccountsUI({ route, api, shell, state, esc, toast, navigate, level, icon });
   } catch (err) { console.error('학교 학생 계정 화면을 불러오지 못했습니다.', err); }
   try {
-    const { registerProjectUI } = await import('/project-ui.js');
-    registerProjectUI({
+    projectUi?.registerProjectUI({
       route, api, shell, state, esc, icon, toast, openModal, navigate, level, isStaff, $app,
     });
   } catch (err) {
