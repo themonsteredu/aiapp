@@ -31,7 +31,8 @@
 - 학생 화면은 3초마다 `GET …/live`를 부른다. **이 경로는 가볍게 유지한다**: 디스패처가 읽은 수업을 재사용하고, 자료 목록은 `itemsVersion`이 바뀔 때만 다시 받는다. 디스패처에 학생마다 도는 쿼리를 더하지 않는다(동의 확인은 대상 역할만 설정 표를 읽는다)
 - `refreshMe`(5분)는 **접근 판정이 바뀔 때만** 화면을 다시 그린다. 무조건 `navigate()`하면 강사 라이브 발표가 끝나고 학생 웹앱이 처음으로 돌아간다
 - DB 풀: Vercel + transaction pooler(6543)면 인스턴스당 4개, 그 밖의 주소는 1개(`PG_POOL_MAX`로 덮어씀). 풀 `error` 리스너를 빼지 않는다 — 없으면 끊긴 유휴 연결 하나에 인스턴스가 죽는다
-- 콜드 스타트 DDL 은 스키마 판(`app_schema_state`, `lib/db.js`·`lib/project-schema.js`·`lib/gwangju-pick.js` 해시)이 같으면 건너뛰고, 돌 때는 `pg_advisory_xact_lock`으로 한 인스턴스씩 돈다. 동시 콜드 스타트끼리 교착이 실제로 났었다
+- 콜드 스타트 DDL 은 스키마 판(`app_schema_state`, DDL 글자·init·시드 함수 본문·광주픽 자료의 해시, 여러 판을 기억)이 같으면 건너뛰고, 돌 때는 `pg_advisory_xact_lock`으로 한 인스턴스씩 돈다. 동시 콜드 스타트끼리 교착이 실제로 났었다
+- **Vercel 은 서버를 `server.cjs` 한 파일로 묶어 돌린다.** 서버 코드에서 `require.resolve`·`__filename`·`fs.readFileSync(소스 경로)`로 소스 파일을 찾지 않는다 — 묶인 뒤엔 그 경로가 없어 `handleApi is not a function`으로 모든 API 가 500 이 된 적이 있다(#31, 바로 되돌림). 배포 전 확인: `npx esbuild server.js --bundle --platform=node --format=cjs --external:pg-native --outfile=<빈 폴더>/server.cjs` 후 그 폴더에서 실행
 - 부하 확인: `node scripts/load-test-class.js --base http://127.0.0.1:PORT --students 50 --duration 180 --join-spread 0 --admin-user superadmin --admin-pass … --new-pass …` (로컬 서버 + `PG_POOL_MAX`로 배포와 같은 풀 크기)
 
 ## 업로드형 HTML 웹앱 샌드박스

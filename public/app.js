@@ -376,8 +376,9 @@ const Live = {
   async tick() {
     if (!state.me || !state.me.isGuest) { this.stop(); return; }
     // 서버가 느려도 학생 한 명이 폴링을 겹겹이 쌓지 않게 한 번에 하나만
-    if (this.busy) return;
-    this.busy = true;
+    if (this.busy && Date.now() - this.busy < 15000) return; // 15초 넘게 안 끝난 요청은 버려 두고 다시 묻는다
+    const mine = Date.now();
+    this.busy = mine;
     try {
       const d = await api('GET', `/api/class-sessions/${state.classSession.id}/live`);
       this.last = d.live;
@@ -391,7 +392,7 @@ const Live = {
       if (d.live && onLive && window.__liveUpdate) window.__liveUpdate(d.live);
       // 라이브가 아닐 때는 자료 잠금/해제 변화를 감지해 목록 갱신 (자료 판이 바뀌었을 때만 다시 받음)
       if (!d.live && window.__deckRefresh) await window.__deckRefresh(d.itemsVersion);
-    } catch {} finally { this.busy = false; }
+    } catch {} finally { if (this.busy === mine) this.busy = 0; }
   },
 };
 
@@ -720,8 +721,32 @@ async function fetchDash(force = false) {
 
 /* ---------------- 로그인 ---------------- */
 route(/^#\/login$/, () => {
-  // 이미 들어와 있는데 뒤로 가기로 여기 왔으면 코드 화면 대신 원래 화면으로 (다시 입장하면 새 임시 계정이 된다)
-  if (state.me) { location.replace(state.me.mustChangePassword ? '#/password' : homeHash(state.me)); return; }
+  // 이미 들어와 있는 브라우저: 뒤로 가기로 왔으면 '이어서 하기', 공용 기기의 다음 학생이면 '다른 사람으로 입장'
+  // (말없이 넘기면 다음 학생이 앞 학생으로 쓰고, 말없이 입장 화면을 보이면 같은 학생이 새 임시 계정을 만든다)
+  if (state.me) {
+    const me = state.me;
+    $app.innerHTML = `
+      <div class="login-wrap"><div class="login-card">
+        <div class="lmark"><img src="/brand/moakit-symbol.svg" alt=""></div>
+        <div class="logo">모아랩</div>
+        <div class="sub">AI 수업·진로교육 플랫폼</div>
+        <p style="word-break:keep-all;line-height:1.7;margin:14px 0">지금 <b>${esc(me.name)}</b>(으)로 들어와 있어요.${me.isGuest ? '<br>내가 아니면 \'다른 사람으로 입장\'을 누르세요.' : ''}</p>
+        <button class="btn btn-primary" type="button" id="li-continue" style="width:100%;justify-content:center">이어서 하기</button>
+        <button class="btn btn-ghost" type="button" id="li-switch" style="width:100%;justify-content:center;margin-top:10px">다른 사람으로 입장</button>
+      </div></div>`;
+    document.getElementById('li-continue').onclick = () => location.replace(me.mustChangePassword ? '#/password' : homeHash(me));
+    document.getElementById('li-switch').onclick = async () => {
+      await api('POST', '/api/logout').catch(() => {});
+      WEBAPP_SESSIONS.clear();
+      state.me = null;
+      state.dash = null;
+      state.classSession = null;
+      Live.stop();
+      navigate();
+    };
+    return;
+  }
+  let joining = false; // 입장 요청이 오가는 동안: 코드 안내가 늦게 와도 화면을 다시 그리지 않는다
   let tab = new URLSearchParams(location.search).get('mode') === 'account' ? 'account' : 'join';
   let otpMode = null; // null | 'otp' | 'setup'
   let secret = '';
@@ -791,6 +816,7 @@ route(/^#\/login$/, () => {
         joinInfoTimer = setTimeout(async () => {
           try {
             joinInfo = await api('GET', `/api/join-info/${joinCode}`);
+            if (joining) return; // 입장 중에 다시 그리면 버튼이 다시 눌리고 이름 칸이 비워진다
             render();
           } catch {
             joinInfo = null;
@@ -825,9 +851,10 @@ route(/^#\/login$/, () => {
     if (tab === 'join') {
       // 느릴 때 버튼을 또 누르면 임시 계정이 둘 생기고 웹앱 저장 위치가 엇갈린다 — 응답이 올 때까지 한 번만
       const btn = e.target.querySelector('button[type="submit"]');
-      if (btn.disabled) return;
+      if (btn.disabled || joining) return;
       btn.disabled = true;
       btn.textContent = '입장하는 중…';
+      joining = true;
       try {
         enter(await api('POST', '/api/join', {
           code: f.get('code'),
@@ -835,7 +862,7 @@ route(/^#\/login$/, () => {
           team_code: f.get('team_code'),
           anonymous_no: f.get('anonymous_no'),
         }));
-      } catch (err) { render(err.message); }
+      } catch (err) { joining = false; render(err.message); }
       return;
     }
     loginCreds.username = f.get('username');
@@ -865,16 +892,23 @@ function renderBlocked() {
       <div class="card" style="text-align:left">${scheduleMatrixHtml(acc.windows)}</div>
       <p class="mt small muted">이 화면은 30초마다 자동으로 새로고침됩니다.</p>
     </div>`);
-  setTimeout(refreshMe, 30000);
+  // 30초마다 다시 확인: 열리면 refreshMe 가 화면을 바꾸고, 아직 막혀 있으면 이 화면을 다시 그려 다음 확인을 건다
+  setTimeout(async () => {
+    await refreshMe();
+    if (state.me?.role === 'student' && !state.me.isGuest && state.access && !state.access.allowed && document.querySelector('.blocked-wrap')) renderBlocked();
+  }, 30000);
 }
 
 // 화면을 다시 그릴지 가르는 값: 접근 판정에 쓰이는 것만. 화면을 다시 그리면 강사의 라이브 발표가 끝나고(학생 전원이
 // 목록으로 돌아감) 웹앱·슬라이드·쓰던 글이 처음으로 돌아가므로, 예전처럼 5분마다 무조건 그리지 않는다.
 // 수업 마감 시각은 넣지 않는다 — 수업이 끝나면 서버가 401 로 알려 주고, 연장했다고 학생 화면을 새로 그릴 까닭이 없다.
+// 시간표(허용 시간)는 일반 학생에게만 뜻이 있다. 강사·관리자도 /api/me 에 전체 시간표 판정이 오는데, 이것까지 보면
+// 09:00·18:00 경계마다 강사 화면이 다시 그려져 라이브 발표가 끝난다.
 function accessKey() {
   const me = state.me || {};
+  const timed = me.role === 'student' && !me.isGuest;
   return JSON.stringify([me.id, me.role, !!me.mustChangePassword, !!state.mustAgree,
-    state.access?.allowed, state.access?.allowedDeckIds ?? null, state.classSession?.id ?? null]);
+    timed ? state.access?.allowed : null, timed ? (state.access?.allowedDeckIds ?? null) : null, state.classSession?.id ?? null]);
 }
 
 function homeHash(user) {
@@ -1506,8 +1540,10 @@ route(/^#\/sessions$/, async () => {
     try {
       const r = await api('POST', '/api/class-sessions', {
         title: f.get('title'), deck_ids: deckIds, starts_at: f.get('starts_at'), ends_at: f.get('ends_at'),
+        duration_minutes: inputMinutesBetween(f.get('starts_at'), f.get('ends_at')), // 입장 시간을 모르는 예전 서버용
         instructor_id: f.get('instructor_id') || null,
       });
+      if (!r.window_label) toast('서버가 입장 시간 설정을 아직 모릅니다. 새로고침한 뒤 코드를 다시 발급해 주세요.', true);
       showBigCode(r.code, f.get('title'), r.window_label, r.status);
       navigate();
     } catch (err) { msg.textContent = err.message; msg.className = 'msg err'; }
