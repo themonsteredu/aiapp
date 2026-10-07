@@ -1340,19 +1340,33 @@ function inputMinutesBetween(a, b) {
 // 서버 표시 문자열 'YYYY-MM-DD HH:MM:SS' → 입력값 'YYYY-MM-DDTHH:MM'
 const textToInput = (text) => String(text || '').slice(0, 16).replace(' ', 'T');
 // 시작 칸을 바꾸면 수업 길이를 유지한 채 마감을 함께 옮기고, 빠른 길이 버튼으로 마감을 정한다
-function bindSessionWindow(root) {
+// followNow: 새 코드 폼. 시작 칸을 직접 고치지 않았으면 시작은 늘 '지금'이다 — 화면을 9시에 열어 두고 10시 반에 발급해도
+// 9시~11시(30분 남음)가 아니라 10시 반~12시 반이 되게, 30초마다 칸을 다시 맞추고 발급 직전에도 맞춘다(root.syncNow).
+function bindSessionWindow(root, { followNow = false } = {}) {
   const start = root.querySelector('[name="starts_at"]');
   const end = root.querySelector('[name="ends_at"]');
   let length = inputMinutesBetween(start.value, end.value) || 120;
-  start.addEventListener('change', () => { if (start.value) end.value = addMinutesToInput(start.value, length); });
+  let touched = !followNow;
+  const syncNow = () => {
+    if (touched) return;
+    start.value = kstInputValue();
+    end.value = addMinutesToInput(start.value, length);
+  };
+  start.addEventListener('input', () => { touched = true; });
+  start.addEventListener('change', () => { touched = true; if (start.value) end.value = addMinutesToInput(start.value, length); });
   end.addEventListener('change', () => { const m = inputMinutesBetween(start.value, end.value); if (m > 0) length = m; });
   root.querySelectorAll('[data-len]').forEach((b) => {
     b.onclick = () => {
       length = Number(b.dataset.len);
       if (!start.value) start.value = kstInputValue();
+      if (!touched) start.value = kstInputValue();
       end.value = addMinutesToInput(start.value, length);
     };
   });
+  if (followNow) {
+    const timer = setInterval(() => { if (!document.body.contains(start)) clearInterval(timer); else syncNow(); }, 30000);
+  }
+  root.syncNow = syncNow;
 }
 const SESSION_LENGTHS = [[60, '1시간'], [90, '1시간 30분'], [120, '2시간'], [180, '3시간'], [240, '4시간']];
 const sessionLengthButtons = () => SESSION_LENGTHS
@@ -1362,7 +1376,7 @@ const sessionLengthButtons = () => SESSION_LENGTHS
 function openRescheduleModal(s) {
   const back = openModal(`
     <h3>입장 시간 바꾸기</h3>
-    <div class="m-sub">${esc(s.title)} · 코드 ${esc(s.code)} — 이미 들어온 학생은 새 마감 시각까지 이어서 이용합니다.${s.status === 'expired'
+    <div class="m-sub">${esc(s.title)} · 코드 ${esc(s.code)} — 이미 들어온 학생은 새 마감 시각까지 이어서 이용합니다. 시작을 지금보다 뒤로 옮기면 들어와 있던 학생은 나가게 되고, 새 시작 시각에 다시 입장합니다.${s.status === 'expired'
       ? '<br><b>시간이 끝난 뒤 연장하면</b> 학생은 페이지를 새로고침하거나, 같은 코드와 같은 이름으로 다시 입장하면 이어서 씁니다.' : ''}</div>
     <form id="rs-form">
       <div class="form-grid">
@@ -1534,6 +1548,7 @@ route(/^#\/sessions$/, async () => {
 
   document.getElementById('cs-form').onsubmit = async (e) => {
     e.preventDefault();
+    e.target.syncNow?.(); // 시작을 고치지 않았으면 누른 순간부터
     const f = new FormData(e.target);
     const msg = document.getElementById('cs-msg');
     const deckIds = f.getAll('deck_ids').map(Number);
@@ -1565,7 +1580,7 @@ route(/^#\/sessions$/, async () => {
     const row = data.sessions.find((s) => s.code === b.dataset.big);
     b.onclick = () => showBigCode(b.dataset.big, row ? row.title : '', row?.window_label, row?.status);
   });
-  bindSessionWindow(document.getElementById('cs-form'));
+  bindSessionWindow(document.getElementById('cs-form'), { followNow: true });
   document.querySelectorAll('[data-resched]').forEach((b) => {
     b.onclick = () => { const s = data.sessions.find((x) => x.id === Number(b.dataset.resched)); if (s) openRescheduleModal(s); };
   });
