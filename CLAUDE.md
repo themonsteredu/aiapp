@@ -25,6 +25,15 @@
 - 이 앱은 **해시 라우팅**이다. 루트를 랜딩으로 바꾸면서 예전 `/#/...` 링크가 죽지 않도록, 랜딩 `<head>`에 `#/`로 시작하는 해시만 `/class`로 넘기는 스크립트를 둔다. 페이지 내부 앵커(`#core` 등)는 건드리지 않는다
 - 공유 링크 형태를 바꿀 때는 **서버에서 QR을 만드는 `lib/project-api.js`의 `publicAppUrl()`**, 배포 API 응답의 `url`, `public/project-ui.js`의 주소 표기를 함께 고친다
 
+## 수업 입장 코드와 동시 접속 (한 반 50명 기준)
+
+- 입장 시간은 **시작~마감 일시**(`class_sessions.starts_at`·`expires_at`, 화면 입력은 한국시간 `YYYY-MM-DDTHH:MM`)다. 서버는 UTC 라 `lib/class-window.js`가 시간대로 읽는다 — 서버에서 `new Date('YYYY-MM-DDTHH:MM')`을 쓰지 않는다. 시작 전 입장은 403, 시간 변경(`PATCH …/schedule`)은 들어온 학생의 `sessions.expires_at`도 함께 옮긴다
+- 학생 화면은 3초마다 `GET …/live`를 부른다. **이 경로는 가볍게 유지한다**: 디스패처가 읽은 수업을 재사용하고, 자료 목록은 `itemsVersion`이 바뀔 때만 다시 받는다. 디스패처에 학생마다 도는 쿼리를 더하지 않는다(동의 확인은 대상 역할만 설정 표를 읽는다)
+- `refreshMe`(5분)는 **접근 판정이 바뀔 때만** 화면을 다시 그린다. 무조건 `navigate()`하면 강사 라이브 발표가 끝나고 학생 웹앱이 처음으로 돌아간다
+- DB 풀: Vercel + transaction pooler(6543)면 인스턴스당 4개, 그 밖의 주소는 1개(`PG_POOL_MAX`로 덮어씀). 풀 `error` 리스너를 빼지 않는다 — 없으면 끊긴 유휴 연결 하나에 인스턴스가 죽는다
+- 콜드 스타트 DDL 은 스키마 판(`app_schema_state`, `lib/db.js`·`lib/project-schema.js`·`lib/gwangju-pick.js` 해시)이 같으면 건너뛰고, 돌 때는 `pg_advisory_xact_lock`으로 한 인스턴스씩 돈다. 동시 콜드 스타트끼리 교착이 실제로 났었다
+- 부하 확인: `node scripts/load-test-class.js --base http://127.0.0.1:PORT --students 50 --duration 180 --join-spread 0 --admin-user superadmin --admin-pass … --new-pass …` (로컬 서버 + `PG_POOL_MAX`로 배포와 같은 풀 크기)
+
 ## 업로드형 HTML 웹앱 샌드박스
 
 - 강사가 올린 HTML 웹앱(`decks.kind='html'`)은 플랫폼과 같은 주소(`/api/webapp/<id>`)에서 나간다. **같은 출처로 돌면 보는 사람의 로그인으로 진로기록·학생 기록·관리자 API를 부를 수 있으므로 불투명 출처로 격리한다. `allow-same-origin`을 다시 넣지 않는다**

@@ -15,9 +15,9 @@ const root = path.join(__dirname, '..');
 const db = { users: new Map(), sessions: new Map(), decks: new Map(), writes: [], logs: [] };
 async function q(sql, params = []) {
   const s = sql.replace(/\s+/g, ' ').trim();
-  if (s.startsWith('SELECT * FROM sessions WHERE token')) {
-    const uid = db.sessions.get(params[0]);
-    return uid ? [{ token: params[0], user_id: uid }] : [];
+  if (s.startsWith('SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token')) {
+    const user = db.users.get(db.sessions.get(params[0]));
+    return user && user.active !== false ? [{ ...user }] : [];
   }
   if (s.startsWith('SELECT * FROM users WHERE id')) return db.users.has(params[0]) ? [{ ...db.users.get(params[0]) }] : [];
   if (s.startsWith('SELECT * FROM decks WHERE id')) return db.decks.has(params[0]) ? [{ ...db.decks.get(params[0]) }] : [];
