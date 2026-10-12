@@ -1,6 +1,20 @@
 'use strict';
 
-// 프로그램 소개(/info) — 좁은 화면 메뉴만 연다. 랜딩의 슬라이더 코드는 이 페이지에 없다.
+// 프로그램 소개(/info) — 좁은 화면 메뉴와 분야 필터. 랜딩의 슬라이더 코드는 이 페이지에 없다.
+(function () {
+  var filterButtons = document.querySelectorAll('.pf-btn');
+  var parts = document.querySelectorAll('.part');
+  filterButtons.forEach(function (button) {
+    button.addEventListener('click', function () {
+      var part = button.dataset.part;
+      filterButtons.forEach(function (other) { other.setAttribute('aria-pressed', String(other === button)); });
+      parts.forEach(function (section) { section.hidden = part !== 'all' && section.dataset.part !== part; });
+      var programs = document.getElementById('programs');
+      if (programs && programs.getBoundingClientRect().top < 0) programs.scrollIntoView({ block: 'start' });
+    });
+  });
+}());
+
 (function () {
   var menuToggle = document.getElementById('menu-toggle');
   var menu = document.getElementById('menu');
