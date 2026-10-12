@@ -16,6 +16,7 @@ const MIME = {
   '.jpeg': 'image/jpeg',
   '.png': 'image/png',
   '.ico': 'image/x-icon',
+  '.mp4': 'video/mp4',
 };
 
 function serveStatic(res, pathname) {
