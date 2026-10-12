@@ -137,3 +137,4 @@
   .pc-video .pc-body strong { font-size: .875rem; line-height: 1.4; }
   .vp { width: calc(100% - 16px); }
 }
+.prog-note { margin: -16px 0 4px; color: var(--muted); font-size: .875rem; }
