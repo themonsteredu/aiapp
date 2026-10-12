@@ -40,3 +40,43 @@
     if (event.key === 'Escape') closeMenu();
   });
 }());
+
+// 수업 카드를 누르면 그 수업의 홍보영상을 팝업으로 연다. 닫으면 멈추고 내려받기를 끊는다.
+(function () {
+  var dialog = document.getElementById('video-dialog');
+  if (!dialog) return;
+  var video = dialog.querySelector('video');
+  var title = document.getElementById('vp-title');
+  var opener = null;
+
+  function close() {
+    if (dialog.open) dialog.close();
+  }
+
+  document.querySelectorAll('.pc-open').forEach(function (button) {
+    button.addEventListener('click', function () {
+      var src = button.dataset.video;
+      if (typeof dialog.showModal !== 'function') {
+        window.open(src, '_blank', 'noopener');
+        return;
+      }
+      opener = button;
+      title.textContent = button.dataset.title + ' · 홍보영상';
+      video.src = src;
+      dialog.showModal();
+      var playing = video.play();
+      if (playing && playing.catch) playing.catch(function () {});
+    });
+  });
+
+  dialog.querySelector('.vp-close').addEventListener('click', close);
+  dialog.addEventListener('click', function (event) {
+    if (event.target === dialog) close();
+  });
+  dialog.addEventListener('close', function () {
+    video.pause();
+    video.removeAttribute('src');
+    video.load();
+    if (opener) opener.focus();
+  });
+}());
