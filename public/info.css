@@ -138,3 +138,25 @@
   .vp { width: calc(100% - 16px); }
 }
 .prog-note { margin: -16px 0 4px; color: var(--muted); font-size: .875rem; }
+
+/* 수업 결과물 갤러리 (사진이 없으면 section 이 hidden) */
+.info-gallery[hidden] { display: none; }
+.gallery-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin: 0; padding: 0; list-style: none; }
+.gi-open { display: block; width: 100%; padding: 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: white; color: inherit; font: inherit; text-align: left; cursor: zoom-in; }
+.gi-open:focus-visible { outline: 3px solid var(--teal-500); outline-offset: 2px; }
+.gi-open img { display: block; width: 100%; height: auto; aspect-ratio: 1; object-fit: cover; transition: transform .3s; }
+.gi-open:hover img { transform: scale(1.04); }
+.gi-cap { display: flex; flex-direction: column; gap: 2px; padding: 12px 14px 14px; border-top: 3px solid var(--teal-500); }
+.gi-cap strong { font-size: .9375rem; font-weight: 600; }
+.gi-cap span { color: var(--muted); font-size: .8125rem; }
+.lb { width: min(1000px, calc(100% - 32px)); max-height: calc(100% - 32px); padding: 0; border: 0; border-radius: 10px; background: var(--teal-950); color: white; overflow: hidden; }
+.lb::backdrop { background: rgba(8, 20, 18, .82); }
+.lb-img { display: block; width: 100%; max-height: calc(100vh - 140px); object-fit: contain; background: black; }
+@media (prefers-reduced-motion: reduce) { .gi-open img, .gi-open:hover img { transition: none; transform: none; } }
+@media (max-width: 960px) { .gallery-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 720px) {
+  .gallery-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .gi-cap { padding: 10px 12px 12px; }
+  .gi-cap strong { font-size: .875rem; }
+  .lb { width: calc(100% - 16px); }
+}

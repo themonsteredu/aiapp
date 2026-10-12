@@ -80,3 +80,36 @@
     if (opener) opener.focus();
   });
 }());
+
+// 결과물 갤러리: 사진을 누르면 크게 본다.
+(function () {
+  var dialog = document.getElementById('image-dialog');
+  if (!dialog) return;
+  var img = dialog.querySelector('.lb-img');
+  var caption = document.getElementById('lb-caption');
+  var opener = null;
+
+  document.querySelectorAll('.gi-open').forEach(function (button) {
+    button.addEventListener('click', function () {
+      if (typeof dialog.showModal !== 'function') {
+        window.open(button.dataset.full, '_blank', 'noopener');
+        return;
+      }
+      var thumb = button.querySelector('img');
+      opener = button;
+      caption.textContent = button.dataset.caption || '';
+      img.alt = thumb ? thumb.alt : '';
+      img.src = button.dataset.full;
+      dialog.showModal();
+    });
+  });
+
+  dialog.querySelector('.vp-close').addEventListener('click', function () { dialog.close(); });
+  dialog.addEventListener('click', function (event) {
+    if (event.target === dialog) dialog.close();
+  });
+  dialog.addEventListener('close', function () {
+    img.removeAttribute('src');
+    if (opener) opener.focus();
+  });
+}());

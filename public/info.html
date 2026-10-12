@@ -127,6 +127,20 @@
       </div>
     </section>
 
+    <!--
+      수업 결과물 갤러리 — 사진이 하나도 없으면 hidden 으로 숨겨 둔다(자리표시자를 그리지 않는다).
+      사진을 넣을 때: public/brand/info/gallery/ 에 <이름>.jpg(긴 변 1600px)와 <이름>-thumb.jpg(600px 정사각)를 두고
+      아래 목록에 한 줄씩 추가한 뒤 section 의 hidden 을 지운다. 학생 얼굴·이름이 보이는 사진은 넣지 않는다.
+      <li class="gi"><button type="button" class="gi-open" aria-haspopup="dialog" data-full="/brand/info/gallery/이름.jpg" data-caption="결과물 · 수업 이름"><img src="/brand/info/gallery/이름-thumb.jpg" alt="사진 설명" width="600" height="600" loading="lazy" decoding="async"><span class="gi-cap"><strong>결과물</strong><span>수업 이름</span></span></button></li>
+    -->
+    <section class="section info-gallery" id="gallery" aria-labelledby="gallery-title" hidden>
+      <div class="wrap">
+        <div class="info-head"><span class="eyebrow">TAKE HOME</span><h2 id="gallery-title">수업 후 가져가는 결과물</h2><p>학생들이 수업에서 직접 만들어 가져간 결과물이에요.</p></div>
+        <ul class="gallery-grid">
+        </ul>
+      </div>
+    </section>
+
     <section class="section info-guide" id="guide" aria-labelledby="guide-title">
       <div class="wrap">
         <div class="info-head"><span class="eyebrow">CLASS GUIDE</span><h2 id="guide-title">90분 수업 흐름</h2></div>
@@ -161,6 +175,10 @@
     <dialog class="vp" id="video-dialog" aria-labelledby="vp-title">
       <div class="vp-head"><h3 id="vp-title">홍보영상</h3><button type="button" class="vp-close" aria-label="영상 닫기"><span aria-hidden="true">×</span></button></div>
       <video class="vp-video" controls playsinline preload="none"></video>
+    </dialog>
+    <dialog class="lb" id="image-dialog" aria-labelledby="lb-caption">
+      <div class="vp-head"><h3 id="lb-caption">결과물</h3><button type="button" class="vp-close" aria-label="사진 닫기"><span aria-hidden="true">×</span></button></div>
+      <img class="lb-img" alt="">
     </dialog>
   </main>
 
