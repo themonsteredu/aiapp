@@ -19,10 +19,11 @@ const MIME = {
 };
 
 function serveStatic(res, pathname) {
-  // '/' 는 AI연구소 홈페이지(index.html), '/class' 이하는 플랫폼 SPA(app.html).
+  // '/' 는 AI연구소 홈페이지(index.html), '/info' 는 프로그램 소개(info.html),
+  // '/class' 이하는 플랫폼 SPA(app.html).
   // vercel.json 의 rewrites 와 같은 규칙을 로컬·타 호스팅에서도 그대로 재현한다.
   const isClass = pathname === '/class' || pathname.startsWith('/class/');
-  let file = pathname === '/' ? '/index.html' : isClass ? '/app.html' : pathname;
+  let file = pathname === '/' ? '/index.html' : pathname === '/info' ? '/info.html' : isClass ? '/app.html' : pathname;
   const full = path.join(PUBLIC_DIR, path.normalize(file));
   if (!full.startsWith(PUBLIC_DIR) || !fs.existsSync(full) || !fs.statSync(full).isFile()) {
     // 알 수 없는 경로는 홈페이지로

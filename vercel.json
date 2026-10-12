@@ -3,6 +3,7 @@
   "framework": "node",
   "regions": ["icn1"],
   "rewrites": [
+    { "source": "/info", "destination": "/info.html" },
     { "source": "/class", "destination": "/app.html" },
     { "source": "/class/:path*", "destination": "/app.html" }
   ]
