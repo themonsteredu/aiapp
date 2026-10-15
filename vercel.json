@@ -4,6 +4,8 @@
   "regions": ["icn1"],
   "rewrites": [
     { "source": "/info", "destination": "/info.html" },
+    { "source": "/clickon", "destination": "/clickon.html" },
+    { "source": "/clickon/:path*", "destination": "/clickon.html" },
     { "source": "/class", "destination": "/app.html" },
     { "source": "/class/:path*", "destination": "/app.html" }
   ]

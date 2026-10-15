@@ -70,3 +70,17 @@ test('학생 진입 경로는 API가 아닌 앱 셸을 제공한다', async () =
   }
   assert.equal(app.calls.length, 0);
 });
+
+test('/clickon 이하는 메뉴 아래에 클릭온을 띄우는 페이지를 Vercel·로컬 모두 같은 규칙으로 낸다', async () => {
+  for (const source of ['/clickon', '/clickon/:path*']) {
+    assert.ok(config.rewrites.some(rule => rule.source === source && rule.destination === '/clickon.html'), source);
+  }
+  const app = runtime();
+  for (const url of ['/clickon', '/clickon/', '/clickon/class?code=AB12']) {
+    const res = await app.request(url);
+    assert.equal(res.status, 200);
+    assert.match(res.body, /id="clickon-frame"/);
+    assert.match(res.body, /class="site-header"/);
+  }
+  assert.equal(app.calls.length, 0);
+});

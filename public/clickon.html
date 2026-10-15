@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="클릭온 — 모아랩의 데이터 분석가 진로체험 수업">
+  <title>클릭온 — 모아랩</title>
+  <link rel="stylesheet" href="/landing.css">
+  <link rel="stylesheet" href="/clickon.css">
+</head>
+<body class="clickon-page">
+  <a class="skip-link" href="#clickon-frame">본문으로 바로가기</a>
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="/" aria-label="모아랩 홈"><img src="/brand/moakit-symbol.svg" alt="" width="34" height="34"><span class="brand-name">MoaLab</span><span class="brand-by">by MoaKit</span></a>
+      <nav class="menu" id="menu" aria-label="주요 메뉴">
+        <a href="/#programs">진로 프로그램</a><a href="/#records">진로기록</a><a href="/#inquiry">교육 문의</a>
+        <a class="menu-class" href="/class?mode=account#/login">진로수업 허브 입장 ↗</a>
+      </nav>
+      <a class="header-entry" href="/class#/login">학생 수업 참여 <span aria-hidden="true">↗</span></a>
+      <button class="menu-toggle" id="menu-toggle" type="button" aria-label="메뉴 열기" aria-controls="menu" aria-expanded="false"><span></span></button>
+    </div>
+  </header>
+  <main class="clickon-main">
+    <!-- 클릭온 본체는 Vercel 프로젝트 ai-data(themonsteredu/ai-data)다. 이 페이지는 메뉴만 얹고 그 화면을 아래에 띄운다.
+         /clickon/<경로>?<쿼리> 로 들어오면 같은 경로를 연다(학생 입장 링크·QR 이 그대로 통하게). -->
+    <iframe id="clickon-frame" class="clickon-frame" title="클릭온" allow="fullscreen; clipboard-write" referrerpolicy="no-referrer"></iframe>
+  </main>
+  <script>
+    (function () {
+      var path = location.pathname.replace(/\/+$/, '');
+      if (path.indexOf('/clickon') !== 0) path = '/clickon';
+      document.getElementById('clickon-frame').src = 'https://ai-data-tau.vercel.app' + path + location.search + location.hash;
+    }());
+  </script>
+  <script src="/info.js"></script>
+</body>
+</html>
