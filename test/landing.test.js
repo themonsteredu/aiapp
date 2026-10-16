@@ -27,8 +27,11 @@ test('랜딩의 id는 중복되지 않는다', () => {
 });
 
 test('랜딩에서 참조하는 로컬 정적 자산이 존재한다', () => {
+  // vercel.json 의 rewrite 주소(/info·/clickon·/class …)는 파일이 아니라 서버가 내주는 페이지다
+  const config = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'vercel.json'), 'utf8'));
+  const routes = config.rewrites.map((rule) => rule.source.replace(/\/:path\*$/, ''));
   const references = Array.from(html.matchAll(/(?:src|href)="(\/[^"#?]+)"/g), (match) => match[1]);
-  const assets = references.filter((reference) => reference !== '/' && !reference.startsWith('/class'));
+  const assets = references.filter((reference) => reference !== '/' && !routes.some((route) => reference === route || reference.startsWith(route + '/')));
   const missing = assets.filter((reference) => !fs.existsSync(path.join(publicDir, reference)));
   assert.deepEqual(missing, []);
 });
