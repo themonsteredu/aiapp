@@ -28,6 +28,83 @@ export function recordSession(record, heading) {
   return session && session !== nameOf(heading) ? session : '';
 }
 
+// ---- 인쇄 / PDF: 진로기록 포트폴리오 (A4) ----
+// 학생 화면의 '인쇄 / PDF' 버튼이 만든다. 같은 출처의 숨은 iframe 에 srcdoc 으로 넣고 인쇄하므로
+// 활동 사진(/api/career-photos/<id>)은 보는 사람의 로그인 쿠키로 열린다. 모든 값은 escapeHtml 로 넣는다.
+const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+const koDate = value => { const d = new Date(value); return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul', year: 'numeric', month: 'long', day: 'numeric' }); };
+const koMonth = value => { const d = new Date(value); return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul', year: 'numeric', month: 'long' }); };
+const PORTFOLIO_OBS = [['activity', 'process', '활동'], ['strengths', 'artifact', '강점·흥미'], ['next_step', 'reflection', '다음 활동']];
+
+function portfolioRecord(record) {
+  const heading = recordHeading(record);
+  const session = recordSession(record, heading);
+  const byline = [recordWriter(record), recordDeckLine(record)].filter(Boolean).join(' · ');
+  const photos = (record.photos || []).map(photo => `<figure><img src="/api/career-photos/${encodeURIComponent(photo.id)}" alt="${escapeHtml(photo.caption || '활동 사진')}">${photo.caption ? `<figcaption>${escapeHtml(photo.caption)}</figcaption>` : ''}</figure>`).join('');
+  if (isObservation(record)) {
+    const obs = record.observation || {};
+    const lines = PORTFOLIO_OBS.map(([key, column, label]) => { const value = obs[key] ?? record[column] ?? ''; return value ? `<p><b>${label}</b>${escapeHtml(value)}</p>` : ''; }).join('');
+    return `<section class="obs"><div class="meta"><span>${escapeHtml(koDate(record.occurred_at))}</span><b>진로 강사 관찰</b>${session ? `<span>${escapeHtml(session)}</span>` : ''}${byline ? `<span>${escapeHtml(byline)}</span>` : ''}</div><h3>${escapeHtml(heading)}</h3>${lines}${photos ? `<div class="photos">${photos}</div>` : ''}</section>`;
+  }
+  const kind = record.source === 'hub' ? '수업 활동 기록' : record.supersedes_id ? '담당자 정정' : record.entry_kind === 'staff_record' ? '담당자 기록' : '학생 작성';
+  const fields = [['활동 과정', record.process], ['결과물', record.artifact], ['돌아보기', record.reflection]].filter(([, value]) => value)
+    .map(([label, value]) => `<div><dt>${label}</dt><dd>${escapeHtml(value)}</dd></div>`).join('');
+  return `<section class="record"><div class="meta"><span>${escapeHtml(koDate(record.occurred_at))}</span>${session ? `<b>${escapeHtml(session)}</b>` : ''}<span>${kind}</span>${byline ? `<span>${escapeHtml(byline)}</span>` : ''}</div><h2>${escapeHtml(heading)}</h2><div class="body${photos ? ' with-photos' : ''}"><dl>${fields}</dl>${photos ? `<div class="photos">${photos}</div>` : ''}</div></section>`;
+}
+
+export function portfolioHtml({ records = [], student = {}, issuedAt = new Date() } = {}) {
+  const sorted = [...records].sort((a, b) => new Date(a.occurred_at) - new Date(b.occurred_at));
+  const observations = sorted.filter(isObservation).length;
+  const dates = sorted.map(record => record.occurred_at).filter(Boolean);
+  const span = dates.length ? (koMonth(dates[0]) === koMonth(dates[dates.length - 1]) ? koMonth(dates[0]) : `${koMonth(dates[0])} – ${koMonth(dates[dates.length - 1])}`) : '';
+  const title = `${student.name ? `${student.name} ` : ''}진로기록 포트폴리오`;
+  return `<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${escapeHtml(title)}</title>
+<style>
+  @page { size: A4; margin: 14mm 15mm; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 24px; color: #172e29; font-family: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', sans-serif; font-size: 11.5px; line-height: 1.65; letter-spacing: -.02em; word-break: keep-all; overflow-wrap: anywhere; }
+  .head { display: flex; justify-content: space-between; align-items: flex-end; padding-bottom: 14px; border-bottom: 2px solid #123f36; }
+  .brand { display: flex; align-items: center; gap: 10px; } .brand img { width: 28px; height: 28px; } .brand b { font-size: 15px; } .brand span { font-size: 11px; color: #596b64; }
+  .doc { text-align: right; } .doc .eyebrow { font-size: 10px; letter-spacing: .14em; color: #0a6f61; font-weight: 600; } .doc h1 { margin: 4px 0 0; font-size: 21px; letter-spacing: -.04em; }
+  .student { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0 20px; padding: 12px 0; border-bottom: 1px solid #dce5df; font-size: 10px; color: #596b64; }
+  .student b { display: block; margin-top: 2px; font-size: 13px; color: #172e29; }
+  .record, .obs { break-inside: avoid; page-break-inside: avoid; }
+  .record { padding: 16px 0 14px; border-bottom: 1px solid #dce5df; }
+  .meta { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 10px; color: #596b64; } .meta b { color: #0a6f61; font-weight: 600; }
+  .record h2 { margin: 6px 0 0; font-size: 17px; letter-spacing: -.035em; }
+  .body { margin-top: 10px; } .body.with-photos { display: grid; grid-template-columns: minmax(0,1fr) 212px; gap: 18px; }
+  dl { margin: 0; } dl div { padding: 7px 0; border-top: 1px dashed #dce5df; } dl div:first-child { border-top: 0; padding-top: 0; }
+  dt { font-size: 10px; font-weight: 700; color: #0a6f61; margin-bottom: 2px; } dd { margin: 0; white-space: pre-wrap; }
+  .photos { display: grid; gap: 10px; } .body .photos { grid-template-columns: 1fr; } .obs .photos { grid-template-columns: repeat(3, 1fr); margin-top: 10px; }
+  figure { margin: 0; } figure img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 4px; border: 1px solid #dce5df; }
+  figcaption { margin-top: 4px; font-size: 9.5px; color: #596b64; line-height: 1.5; }
+  .obs { margin: 16px 0; padding: 12px 16px; background: #eef4f0; border-left: 3px solid #0a6f61; border-radius: 0 4px 4px 0; }
+  .obs h3 { margin: 4px 0 6px; font-size: 13px; } .obs p { margin: 0 0 4px; } .obs p b { color: #0a6f61; font-weight: 600; margin-right: 6px; }
+  .empty { padding: 40px 0; text-align: center; color: #596b64; }
+  .foot { margin-top: 18px; padding-top: 10px; border-top: 1px solid #dce5df; font-size: 9.5px; color: #596b64; display: flex; justify-content: space-between; gap: 16px; }
+  .bar { position: sticky; top: 0; margin: -24px -24px 20px; padding: 12px 24px; background: #123f36; color: white; display: flex; gap: 12px; align-items: center; }
+  .bar button { font: inherit; padding: 8px 16px; border: 0; border-radius: 6px; background: #b04a12; color: white; cursor: pointer; }
+  @media print { .bar { display: none; } body { padding: 0; } }
+</style></head>
+<body>
+  <div class="bar"><button type="button" onclick="window.print()">인쇄 / PDF로 저장</button><span>인쇄 대화상자에서 "PDF로 저장"을 고르면 파일로 남습니다.</span></div>
+  <div class="head">
+    <div class="brand"><img src="/brand/moakit-symbol.svg" alt=""><b>모아랩</b><span>by MoaKit · 진로기록</span></div>
+    <div class="doc"><div class="eyebrow">CAREER LOG PORTFOLIO</div><h1>진로기록 포트폴리오</h1></div>
+  </div>
+  <div class="student">
+    <div>학생<b>${escapeHtml(student.name || '학생')}</b></div>
+    <div>소속<b>${escapeHtml(student.className || '—')}</b></div>
+    <div>기간<b>${escapeHtml(span || '—')}</b></div>
+    <div>기록<b>수업 ${sorted.length - observations} · 강사 관찰 ${observations}</b></div>
+  </div>
+  ${sorted.length ? sorted.map(portfolioRecord).join('') : '<p class="empty">아직 남긴 기록이 없어요.</p>'}
+  <div class="foot"><span>발급 ${escapeHtml(koDate(issuedAt))} · 모아킷 모아랩 · 기록 원본은 접수번호로 확인할 수 있습니다</span><span>${escapeHtml(student.name || '')}</span></div>
+</body></html>`;
+}
+
 export function registerCareerLogUI({ route, api, shell, state, esc, toast, navigate, isStaff }) {
   const recordUrl = '#/career-records';
   let currentClass = '';
@@ -111,6 +188,46 @@ export function registerCareerLogUI({ route, api, shell, state, esc, toast, navi
     </article>`;
   }
 
+  // 내 기록 전부(25개씩 끝까지)를 받아 A4 문서로 만들고, 같은 출처의 숨은 iframe 에서 인쇄한다 (app.js printAgreement 와 같은 방식).
+  // 사진이 다 실린 뒤에 인쇄창을 연다 — 먼저 열면 빈 칸으로 찍힌다.
+  async function printPortfolio(button, current) {
+    if (button.disabled) return;
+    button.disabled = true;
+    const label = button.textContent;
+    button.textContent = '준비 중…';
+    try {
+      const records = [];
+      for (let page = 0; page < 40; page += 1) {
+        const data = await api('GET', `/api/career-log/records?page=${page}`);
+        records.push(...data.records);
+        if (!data.hasMore) break;
+      }
+      if (!current()) return;
+      if (!records.length) { toast('아직 남긴 기록이 없어요.'); return; }
+      const iframe = document.createElement('iframe');
+      iframe.setAttribute('title', '진로기록 포트폴리오 인쇄');
+      iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden';
+      iframe.onload = async () => {
+        const w = iframe.contentWindow;
+        let done = false;
+        const cleanup = () => { if (done) return; done = true; setTimeout(() => iframe.remove(), 300); };
+        const images = Array.from(w.document.images);
+        await Promise.all(images.map(img => (img.complete ? null : new Promise(resolve => { img.onload = img.onerror = resolve; }))));
+        w.onafterprint = cleanup;
+        w.focus();
+        w.print();
+        setTimeout(cleanup, 60000);
+      };
+      iframe.srcdoc = portfolioHtml({ records, student: { name: state.me?.name, className: state.me?.className } });
+      document.body.appendChild(iframe);
+    } catch (error) {
+      toast(error.message || '포트폴리오를 만들지 못했습니다.');
+    } finally {
+      button.disabled = false;
+      button.textContent = label;
+    }
+  }
+
   route(/^#\/career-records$/, async () => {
     const current = viewGuard();
     shell(isStaff() ? '수업 진로기록' : '내 진로기록', status('기록을 불러오고 있어요.'));
@@ -122,7 +239,7 @@ export function registerCareerLogUI({ route, api, shell, state, esc, toast, navi
       if (currentClass && !classes.some(item => item.session_ref === currentClass)) currentClass = '';
       shell(staff ? '수업 진로기록' : '내 진로기록', `<section class="career-page">
         <div class="career-heading"><div><span class="career-eyebrow">MOAKIT CAREER LOG</span><h1>${staff ? '수업에서 남긴 배움의 기록' : '경험이 쌓이는 나의 진로기록'}</h1><p>${staff ? '담당 수업에서 학생이 직접 작성한 기록을 확인하세요.' : '내가 한 활동과 결과, 달라진 생각을 모아 보세요.'}</p></div>
-        ${staff ? '' : '<a class="btn btn-primary" href="#/career-records/new">기록 남기기</a>'}</div>
+        ${staff ? '' : '<div class="career-view-actions"><a class="btn btn-primary" href="#/career-records/new">기록 남기기</a><button id="career-print" class="btn btn-ghost" type="button">인쇄 / PDF</button></div>'}</div>
         ${staff ? `<label class="career-filter">수업 선택<select id="career-class"><option value="">전체 담당 수업</option>${classes.map(item => `<option value="${esc(item.session_ref)}"${currentClass === item.session_ref ? ' selected' : ''}>${esc(item.title || '수업')} · ${item.count}개</option>`).join('')}</select></label>` : ''}
         <div id="career-records-list" class="career-records-list" aria-live="polite"></div>
         <div id="career-list-status"></div><button id="career-more" class="btn btn-ghost" hidden>기록 더 보기</button>
@@ -157,6 +274,8 @@ export function registerCareerLogUI({ route, api, shell, state, esc, toast, navi
       const filter = document.getElementById('career-class');
       if (filter) filter.onchange = () => { currentClass = filter.value; navigate(); };
       document.getElementById('career-more').onclick = load;
+      const printButton = document.getElementById('career-print');
+      if (printButton) printButton.onclick = () => printPortfolio(printButton, current);
       await load();
     } catch (error) { if (!current()) return; shell('진로기록', `${status(error.message, true)}<a class="btn btn-ghost" href="#/decks">수업 자료로 돌아가기</a>`); }
   });
