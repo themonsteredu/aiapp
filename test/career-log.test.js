@@ -336,3 +336,48 @@ test('제목 아래 수업 이름 줄은 제목과 같으면 싣지 않는다 (�
   assert.match(ui, /recordSession\(record, heading\)/);
   assert.equal(ui.includes("esc(record.session_title || '')"), false, '수업 이름을 규칙 없이 그대로 싣지 않는다');
 });
+
+// ---- 인쇄 / PDF: 학생이 자기 기록을 A4 포트폴리오로 뽑는다 ----
+test('포트폴리오 문서는 기록·사진·관찰을 싣고 모든 값을 이스케이프한다', async () => {
+  const path = require('node:path');
+  const { pathToFileURL } = require('node:url');
+  process.removeAllListeners('warning');
+  const { portfolioHtml } = await import(pathToFileURL(path.join(__dirname, '..', 'public', 'career-log-ui.js')).href);
+  const records = [
+    { ...observationRow, id: 'r2', occurred_at: '2026-10-02T05:00:00Z', title: '숫자를 근거로 설명하는 힘', author_name: '김진로', deck_title: '증권사 애널리스트', observation: { activity: '매출 추이를 비교했어요.', strengths: '차분하게 설명해요.', next_step: '뉴스 모아 보기' }, photos: [{ id: '0f0e0d0c-0b0a-4000-8000-000000000001', mime: 'image/jpeg', caption: '발표 <모습>' }] },
+    { id: 'r1', occurred_at: '2026-09-18T05:00:00Z', source: 'job', program_ref: 'job-deck:7', entry_kind: 'student_reflection', title: null, deck_title: '디지털 포렌식', session_title: '2학년 3반 진로 수업', process: '사진의 시간을 비교했어요.', artifact: '조사 보고서', reflection: '판단을 <b>바꿨어요</b>.', photos: [] },
+  ];
+  const html = portfolioHtml({ records, student: { name: '김모아', className: '모아중 2-3' }, issuedAt: '2026-10-17T00:00:00Z' });
+  assert.match(html, /@page \{ size: A4/);
+  assert.match(html, /CAREER LOG PORTFOLIO/);
+  assert.match(html, /<b>김모아<\/b>/);
+  assert.match(html, /<b>모아중 2-3<\/b>/);
+  // 오래된 기록이 먼저, 학생 기록 수와 관찰 수를 나눠 센다
+  assert.ok(html.indexOf('디지털 포렌식') < html.indexOf('숫자를 근거로 설명하는 힘'));
+  assert.match(html, /수업 1 · 강사 관찰 1/);
+  assert.match(html, /2026년 9월 – 2026년 10월/);
+  // 학생 기록 세 칸과 수업 이름, 관찰 기록 세 줄과 쓴 사람·웹앱 줄
+  assert.match(html, /<dt>활동 과정<\/dt><dd>사진의 시간을 비교했어요\.<\/dd>/);
+  assert.match(html, /<b>2학년 3반 진로 수업<\/b>/);
+  assert.match(html, /<b>강점·흥미<\/b>차분하게 설명해요\./);
+  assert.match(html, /작성: 김진로 · 웹앱: 증권사 애널리스트/);
+  // 사진은 본인 확인을 거치는 /api/career-photos/<id> 로만 싣고 바이트를 넣지 않는다
+  assert.match(html, /<img src="\/api\/career-photos\/0f0e0d0c-0b0a-4000-8000-000000000001" alt="발표 &lt;모습&gt;">/);
+  assert.equal(html.includes('data:image'), false);
+  // 기록 내용의 HTML 은 글자 그대로 보인다
+  assert.ok(html.includes('판단을 &lt;b&gt;바꿨어요&lt;/b&gt;.'));
+  assert.equal(html.includes('<b>바꿨어요</b>'), false);
+  // 기록이 없으면 빈 안내
+  assert.match(portfolioHtml({ records: [], student: { name: '김모아' } }), /아직 남긴 기록이 없어요\./);
+});
+
+test('학생 화면에만 인쇄 / PDF 버튼이 있고, 기록을 끝까지 받아 숨은 같은 출처 iframe 에서 인쇄한다', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const ui = fs.readFileSync(path.join(__dirname, '..', 'public', 'career-log-ui.js'), 'utf8');
+  assert.match(ui, /staff \? '' : '<div class="career-view-actions"><a class="btn btn-primary" href="#\/career-records\/new">기록 남기기<\/a><button id="career-print" class="btn btn-ghost" type="button">인쇄 \/ PDF<\/button><\/div>'/);
+  assert.match(ui, /if \(!data\.hasMore\) break;/);
+  assert.match(ui, /iframe\.srcdoc = portfolioHtml\(/);
+  assert.equal(/sandbox=/.test(ui), false, '사진이 로그인 쿠키로 열리려면 같은 출처 srcdoc 이어야 한다');
+  assert.match(ui, /img\.complete \? null : new Promise/);
+});
