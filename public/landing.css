@@ -150,9 +150,12 @@ section, [id] { scroll-margin-top: 100px; }
 .records-head > div:first-child { max-width: 40em; }
 .records-head p { margin-top: 14px; color: var(--muted); font-size: 1rem; }
 .records-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 28px; flex: none; }
+/* 화면 사진(2360×1700)과 A4(1588×2246)의 높이가 같아지는 폭 비율 = 1.388 : 0.707 */
+.records-gallery { display: grid; grid-template-columns: 1.963fr 1fr; gap: 24px; align-items: start; }
 .records-shot { margin: 0; }
 .records-shot img { height: auto; border: 1px solid #cfdcd4; border-radius: 8px; background: white; box-shadow: 0 36px 60px -40px rgba(8,45,40,.55); }
 .records-shot figcaption { margin-top: 14px; display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: .8125rem; }
+.records-note { margin-top: 16px; color: var(--muted); font-size: .8125rem; }
 .sample-label { font-size: .75rem; border: 1px solid #cddbd1; padding: 1px 8px; color: var(--muted); background: white; }
 .inquiry-section { padding-block: 72px 56px; }
 .inquiry-inner { display: flex; align-items: center; justify-content: space-between; gap: 32px; flex-wrap: wrap; }
@@ -232,7 +235,11 @@ section, [id] { scroll-margin-top: 100px; }
   .records-head { align-items: flex-start; }
   .records-head p { margin-top: 8px; }
   .records-actions { margin-top: 6px; }
-  .records-shot img { aspect-ratio: 780 / 1520; max-width: 420px; margin-inline: auto; border-radius: 6px; }
+  .records-gallery { grid-template-columns: 1fr; gap: 28px; }
+  .records-shot img { max-width: 420px; margin-inline: auto; border-radius: 6px; }
+  .records-shot:not(.records-paper) img { aspect-ratio: 780 / 1520; }
+  .records-shot figcaption { justify-content: center; }
+  .records-note { text-align: center; }
   .inquiry-inner { flex-direction: column; align-items: flex-start; gap: 20px; }
   .inquiry-section { padding-block: 44px 32px; }
 }
