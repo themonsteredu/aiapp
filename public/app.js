@@ -363,18 +363,27 @@ Protect.init();
 const Live = {
   timer: null,
   last: null,
+  visibilityHandler: null,
   start() {
     if (this.timer || !state.me || !state.me.isGuest || !state.classSession) return;
+    this.visibilityHandler = () => {
+      if (document.visibilityState !== 'hidden') this.tick();
+    };
+    document.addEventListener('visibilitychange', this.visibilityHandler);
     this.timer = setInterval(() => this.tick(), 3000);
     this.tick();
   },
   stop() {
     if (this.timer) clearInterval(this.timer);
+    if (this.visibilityHandler) document.removeEventListener('visibilitychange', this.visibilityHandler);
     this.timer = null;
+    this.visibilityHandler = null;
     this.last = null;
   },
   async tick() {
     if (!state.me || !state.me.isGuest) { this.stop(); return; }
+    // 보이지 않는 탭은 요청을 멈추고 다시 열면 visibilitychange에서 즉시 갱신한다.
+    if (document.visibilityState === 'hidden') return;
     // 서버가 느려도 학생 한 명이 폴링을 겹겹이 쌓지 않게 한 번에 하나만
     if (this.busy && Date.now() - this.busy < 15000) return; // 15초 넘게 안 끝난 요청은 버려 두고 다시 묻는다
     const mine = Date.now();
@@ -3774,4 +3783,5 @@ async function loadMe() {
   // 시간제 접근 상태 주기 갱신 (5분)
   setInterval(refreshMe, 5 * 60 * 1000);
 })();
+
 
