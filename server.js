@@ -34,9 +34,11 @@ function serveStatic(res, pathname) {
     return res.end(fs.readFileSync(index));
   }
   const ext = path.extname(full).toLowerCase();
+  // 공개 홍보 이미지만 짧게 캐시한다. 수업 HTML, 스크립트와 API는 즉시 갱신한다.
+  const isBrandImage = pathname.startsWith('/brand/') && ['.jpg', '.jpeg', '.png', '.svg'].includes(ext);
   res.writeHead(200, {
     'Content-Type': MIME[ext] || 'application/octet-stream',
-    'Cache-Control': 'no-store',
+    'Cache-Control': isBrandImage ? 'public, max-age=60, s-maxage=300' : 'no-store',
     'X-Content-Type-Options': 'nosniff',
     'X-Frame-Options': 'DENY',
   });
@@ -92,3 +94,4 @@ const server = http.createServer(async (req, res) => {
 server.listen(PORT, () => {
   console.log(`진로교육 웹앱 플랫폼 실행 중: http://localhost:${PORT}`);
 });
+
